@@ -8,6 +8,8 @@ interface Organization {
   address: string;
   contact_email: string;
   contact_phone: string;
+  abn?: string;
+  description?: string;
 }
 
 interface UserRole {
@@ -31,16 +33,33 @@ export const useOrganization = () => {
 
   const fetchUserOrganization = async () => {
     try {
-      // For now, create a mock organization until migration is run
-      // This will be replaced with actual data after migration
-      setUserRole('admin');
-      setOrganization({
-        id: 'mock-org-id',
-        name: 'Sample Builder Organization',
-        address: 'Sydney, NSW',
-        contact_email: 'admin@entitleguard.com',
-        contact_phone: '02 1234 5678'
-      });
+      // Fetch user role and organization
+      const { data: userRoleData, error: roleError } = await supabase
+        .from('user_roles')
+        .select('role, organization_id')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (roleError) {
+        console.error('Error fetching user role:', roleError);
+        return;
+      }
+
+      setUserRole(userRoleData.role);
+
+      // Fetch organization details
+      const { data: orgData, error: orgError } = await supabase
+        .from('builder_organizations')
+        .select('*')
+        .eq('id', userRoleData.organization_id)
+        .single();
+
+      if (orgError) {
+        console.error('Error fetching organization:', orgError);
+        return;
+      }
+
+      setOrganization(orgData);
     } catch (error) {
       console.error('Error fetching user organization:', error);
     } finally {

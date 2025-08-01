@@ -50,15 +50,28 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
   const onSubmit = async (data: OrganizationFormData) => {
     setLoading(true);
     try {
-      // For now, just show success since builder_organizations table doesn't exist yet
-      // This will work once the migration is run
-      console.log("Would update organization:", data);
+      const { error } = await supabase
+        .from('builder_organizations')
+        .update({
+          name: data.name,
+          address: data.address,
+          contact_email: data.contact_email,
+          contact_phone: data.contact_phone,
+          abn: data.abn || null,
+          description: data.description || null,
+        })
+        .eq('id', organization?.id);
+
+      if (error) throw error;
 
       toast({
         title: "Success",
         description: "Organization details updated successfully",
       });
       setIsEditing(false);
+      
+      // Refresh the page to show updated data
+      window.location.reload();
     } catch (error) {
       console.error("Error updating organization:", error);
       toast({

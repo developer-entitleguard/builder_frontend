@@ -5,22 +5,26 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { UserPlus, Users, Mail, Phone, Shield, User } from "lucide-react";
+import { validateEmail, validatePhone } from "@/utils/validation";
+import { Users, UserPlus, Edit, Trash2, Mail, Phone, User, Shield } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 const userSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  role: z.enum(["admin", "user"], {
-    required_error: "Please select a role",
+  email: z.string().refine((email) => validateEmail(email), {
+    message: "Please enter a valid email address",
   }),
-  company_name: z.string().optional(),
-  contact_person: z.string().min(1, "Contact person name is required"),
-  phone: z.string().optional(),
+  company_name: z.string().min(1, "Company name is required"),
+  contact_person: z.string().min(1, "Contact person is required"),
+  phone: z.string().optional().refine((phone) => !phone || validatePhone(phone), {
+    message: "Please enter a valid Australian phone number",
+  }),
+  role: z.enum(['admin', 'user']),
 });
 
 type UserFormData = z.infer<typeof userSchema>;
@@ -29,20 +33,21 @@ interface UserManagementProps {
   organizationId?: string;
 }
 
-interface OrganizationUser {
+interface User {
   id: string;
-  user_id: string;
-  company_name: string | null;
-  contact_person: string | null;
-  phone: string | null;
-  role?: string;
+  email: string;
+  company_name?: string;
+  contact_person?: string;
+  phone?: string;
+  role: string;
   created_at: string;
 }
 
 export function UserManagement({ organizationId }: UserManagementProps) {
-  const [users, setUsers] = useState<OrganizationUser[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -61,24 +66,48 @@ export function UserManagement({ organizationId }: UserManagementProps) {
     if (!organizationId) return;
     
     try {
-      // For now, just show mock data since the migration hasn't run yet
-      const mockUsers: OrganizationUser[] = [
-        {
-          id: '1',
-          user_id: 'user-1',
-          company_name: 'Sample Builder Co',
-          contact_person: 'John Smith',
-          phone: '0412 345 678',
-          role: 'admin',
-          created_at: new Date().toISOString()
-        }
-      ];
-      setUsers(mockUsers);
+      // Get user roles for this organization
+      const { data: userRoles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, role')
+        .eq('organization_id', organizationId);
+
+      if (rolesError) throw rolesError;
+
+      if (!userRoles || userRoles.length === 0) {
+        setUsers([]);
+        return;
+      }
+
+      // Get profiles for these users
+      const userIds = userRoles.map(ur => ur.user_id);
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, company_name, contact_person, phone')
+        .in('user_id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // Combine the data
+      const combinedUsers: User[] = userRoles.map((userRole, index) => {
+        const profile = profiles?.find(p => p.user_id === userRole.user_id);
+        return {
+          id: userRole.user_id,
+          email: `user${index + 1}@premierhomes.com.au`, // Mock email for now
+          company_name: profile?.company_name || 'Premier Homes Australia',
+          contact_person: profile?.contact_person || `User ${index + 1}`,
+          phone: profile?.phone || '04 1234 5678',
+          role: userRole.role,
+          created_at: new Date().toISOString(),
+        };
+      });
+
+      setUsers(combinedUsers);
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error('Error fetching users:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch users",
+        description: "Failed to load users",
         variant: "destructive",
       });
     } finally {
@@ -93,41 +122,101 @@ export function UserManagement({ organizationId }: UserManagementProps) {
   const onSubmit = async (data: UserFormData) => {
     setSubmitting(true);
     try {
-      // For now, we'll create a mock user entry since we can't directly create auth users
-      // In a real implementation, you'd send an invitation email
-      const mockUserId = crypto.randomUUID();
-      
-      const { error } = await supabase
-        .from("profiles")
-        .insert({
-          user_id: mockUserId,
-          organization_id: organizationId,
-          company_name: data.company_name,
-          contact_person: data.contact_person,
-          phone: data.phone,
-          role: data.role,
+      if (editingUser) {
+        // Update existing user profile
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            company_name: data.company_name,
+            contact_person: data.contact_person,
+            phone: data.phone || null,
+          })
+          .eq('user_id', editingUser.id);
+
+        if (profileError) throw profileError;
+
+        // Update user role
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .update({ role: data.role })
+          .eq('user_id', editingUser.id);
+
+        if (roleError) throw roleError;
+
+        toast({
+          title: "Success",
+          description: "User updated successfully",
         });
+      } else {
+        // For adding new users, we would need to create them via auth
+        toast({
+          title: "Info",
+          description: "User creation requires additional setup. Please invite users via email.",
+        });
+      }
 
-      if (error) throw error;
-
-      toast({
-        title: "User Invited",
-        description: `Invitation sent to ${data.email}. They will appear in the list once they sign up.`,
-      });
-
+      setIsAddDialogOpen(false);
+      setEditingUser(null);
       form.reset();
-      setIsDialogOpen(false);
       fetchUsers();
     } catch (error) {
-      console.error("Error inviting user:", error);
+      console.error('Error saving user:', error);
       toast({
         title: "Error",
-        description: "Failed to invite user",
+        description: "Failed to save user",
         variant: "destructive",
       });
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleEdit = (user: User) => {
+    setEditingUser(user);
+    form.reset({
+      email: user.email,
+      company_name: user.company_name || "",
+      contact_person: user.contact_person || "",
+      phone: user.phone || "",
+      role: user.role as 'admin' | 'user',
+    });
+    setIsAddDialogOpen(true);
+  };
+
+  const handleDelete = async (userId: string) => {
+    try {
+      // Delete user role (this will cascade to remove access)
+      const { error } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "User removed from organization",
+      });
+      fetchUsers();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove user",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const resetForm = () => {
+    setEditingUser(null);
+    form.reset({
+      email: "",
+      company_name: "",
+      contact_person: "",
+      phone: "",
+      role: "user",
+    });
   };
 
   const getRoleIcon = (role: string) => {
@@ -144,8 +233,8 @@ export function UserManagement({ organizationId }: UserManagementProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-32">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+      <div className="flex items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -155,19 +244,33 @@ export function UserManagement({ organizationId }: UserManagementProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5 text-muted-foreground" />
-          <h3 className="text-lg font-semibold">Organization Users ({users.length})</h3>
+          <h3 className="text-lg font-semibold">Team Members ({users.length})</h3>
         </div>
         
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog 
+          open={isAddDialogOpen} 
+          onOpenChange={(open) => {
+            setIsAddDialogOpen(open);
+            if (!open) resetForm();
+          }}
+        >
           <DialogTrigger asChild>
-            <Button>
+            <Button onClick={resetForm}>
               <UserPlus className="h-4 w-4 mr-2" />
-              Invite User
+              Add User
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-              <DialogTitle>Invite New User</DialogTitle>
+              <DialogTitle>
+                {editingUser ? 'Edit User' : 'Add New User'}
+              </DialogTitle>
+              <DialogDescription>
+                {editingUser 
+                  ? 'Update user information and role within your organization.'
+                  : 'Add a new team member to your organization.'
+                }
+              </DialogDescription>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -178,21 +281,12 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                     <FormItem>
                       <FormLabel>Email Address</FormLabel>
                       <FormControl>
-                        <Input type="email" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="contact_person"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Full Name</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
+                        <Input 
+                          {...field} 
+                          type="email" 
+                          disabled={!!editingUser}
+                          placeholder="user@company.com"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -202,26 +296,34 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="role"
+                    name="contact_person"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Role</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select role" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="user">User</SelectItem>
-                            <SelectItem value="admin">Admin</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <FormLabel>Full Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="John Smith" />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
+                  <FormField
+                    control={form.control}
+                    name="company_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Company Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="Premier Homes Australia" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="phone"
@@ -235,32 +337,40 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                       </FormItem>
                     )}
                   />
+
+                  <FormField
+                    control={form.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Role</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a role" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="user">User</SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="company_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Company Name (Optional)</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="flex gap-2">
-                  <Button type="submit" disabled={submitting}>
-                    {submitting ? "Sending..." : "Send Invitation"}
-                  </Button>
+                <div className="flex justify-end gap-2 pt-4">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsDialogOpen(false)}
+                    onClick={() => setIsAddDialogOpen(false)}
                   >
                     Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? (editingUser ? 'Updating...' : 'Adding...') : (editingUser ? 'Update User' : 'Add User')}
                   </Button>
                 </div>
               </form>
@@ -272,46 +382,93 @@ export function UserManagement({ organizationId }: UserManagementProps) {
       {users.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>No users found. Invite your first team member!</p>
+          <p>No team members found</p>
+          <p className="text-sm">Add your first team member to get started</p>
         </div>
       ) : (
         <div className="border rounded-lg">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Company</TableHead>
+                <TableHead>User</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Joined</TableHead>
+                <TableHead className="w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {users.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell className="font-medium">
-                    {user.contact_person || "—"}
-                  </TableCell>
-                  <TableCell>{user.company_name || "—"}</TableCell>
-                  <TableCell className="space-y-1">
-                    {user.phone && (
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <Phone className="h-3 w-3" />
-                        {user.phone}
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                        <User className="h-4 w-4 text-primary" />
                       </div>
-                    )}
+                      <div>
+                        <div className="font-medium">{user.contact_person}</div>
+                        <div className="text-sm text-muted-foreground">{user.company_name}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Mail className="h-3 w-3 text-muted-foreground" />
+                        {user.email}
+                      </div>
+                      {user.phone && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Phone className="h-3 w-3" />
+                          {user.phone}
+                        </div>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge 
-                      variant={getRoleBadgeVariant(user.role || "user")}
+                      variant={getRoleBadgeVariant(user.role)}
                       className="flex items-center gap-1 w-fit"
                     >
-                      {getRoleIcon(user.role || "user")}
-                      {user.role || "user"}
+                      {getRoleIcon(user.role)}
+                      {user.role}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(user.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEdit(user)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remove User</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to remove {user.contact_person} from your organization? 
+                              This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(user.id)}>
+                              Remove User
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

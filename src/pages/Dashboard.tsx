@@ -222,7 +222,7 @@ const Dashboard = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/items')}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -252,6 +252,23 @@ const Dashboard = () => {
                 </div>
                 <Button variant="ghost" size="sm">
                   View
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/admin')}>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Settings className="h-8 w-8 text-orange-500" />
+                  <div className="ml-4">
+                    <h3 className="font-semibold text-foreground">Organization Admin</h3>
+                    <p className="text-sm text-muted-foreground">Manage org details and users</p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm">
+                  Manage
                 </Button>
               </div>
             </CardContent>

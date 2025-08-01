@@ -17,41 +17,50 @@ export type Database = {
       builder_items: {
         Row: {
           brand: string | null
-          builder_id: string
+          builder_id: string | null
           category: string
           created_at: string
+          description: string | null
           documentation_url: string | null
           id: string
           make: string | null
           model: string | null
           name: string
           notes: string | null
+          price: number | null
+          status: string | null
           updated_at: string
         }
         Insert: {
           brand?: string | null
-          builder_id: string
+          builder_id?: string | null
           category: string
           created_at?: string
+          description?: string | null
           documentation_url?: string | null
           id?: string
           make?: string | null
           model?: string | null
           name: string
           notes?: string | null
+          price?: number | null
+          status?: string | null
           updated_at?: string
         }
         Update: {
           brand?: string | null
-          builder_id?: string
+          builder_id?: string | null
           category?: string
           created_at?: string
+          description?: string | null
           documentation_url?: string | null
           id?: string
           make?: string | null
           model?: string | null
           name?: string
           notes?: string | null
+          price?: number | null
+          status?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -105,7 +114,7 @@ export type Database = {
       }
       homeowner_registrations: {
         Row: {
-          builder_id: string
+          builder_id: string | null
           created_at: string
           customer_email: string
           customer_name: string
@@ -125,7 +134,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          builder_id: string
+          builder_id?: string | null
           created_at?: string
           customer_email: string
           customer_name: string
@@ -145,7 +154,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          builder_id?: string
+          builder_id?: string | null
           created_at?: string
           customer_email?: string
           customer_name?: string

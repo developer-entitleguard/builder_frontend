@@ -86,3 +86,13 @@ export const validateEmail = (email: string): boolean => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 };
+
+export const validatePhone = (phone: string): boolean => {
+  return validateAustralianPhone(phone);
+};
+
+export const validateABN = (abn: string): boolean => {
+  // Australian Business Number - 11 digits
+  const cleanABN = abn.replace(/\s/g, '');
+  return /^\d{11}$/.test(cleanABN);
+};

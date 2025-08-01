@@ -11,6 +11,7 @@ import Onboarding from "./pages/Onboarding";
 import ItemsManagement from "./pages/ItemsManagement";
 import QueriesManagement from "./pages/QueriesManagement";
 import RegistrationDetail from "./pages/RegistrationDetail";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,11 @@ const App = () => (
             <Route path="/queries" element={
               <ProtectedRoute>
                 <QueriesManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin" element={
+              <ProtectedRoute>
+                <Admin />
               </ProtectedRoute>
             } />
             <Route path="/registration/:id" element={

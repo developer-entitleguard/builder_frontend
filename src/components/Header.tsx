@@ -1,10 +1,12 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useOrganization } from "@/hooks/useOrganization";
 import { Building2, LogOut, LayoutDashboard } from "lucide-react";
 
 const Header = () => {
   const { user, signOut } = useAuth();
+  const { isAdmin } = useOrganization();
 
   return (
     <header className="bg-card border-b border-border shadow-soft">
@@ -41,6 +43,11 @@ const Header = () => {
                 <Button variant="ghost" size="sm" asChild>
                   <Link to="/queries">Queries</Link>
                 </Button>
+                {isAdmin && (
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to="/admin">Admin</Link>
+                  </Button>
+                )}
               </nav>
               
               <Button variant="outline" size="sm" onClick={signOut}>

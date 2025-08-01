@@ -3,6 +3,9 @@ import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
 import CustomerDetailsForm from "@/components/CustomerDetailsForm";
 import ItemsSelectionForm from "@/components/ItemsSelectionForm";
+import DocumentUploadForm from "@/components/DocumentUploadForm";
+import ReviewApprovalForm from "@/components/ReviewApprovalForm";
+import SendConfirmationForm from "@/components/SendConfirmationForm";
 
 const Index = () => {
   const [currentStep, setCurrentStep] = useState('customer');
@@ -26,26 +29,11 @@ const Index = () => {
       case 'items':
         return <ItemsSelectionForm onNext={handleNextStep} />;
       case 'documents':
-        return (
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold mb-4">Document Upload</h2>
-            <p className="text-muted-foreground">Coming next: Upload warranties, manuals, and certificates</p>
-          </div>
-        );
+        return <DocumentUploadForm onNext={handleNextStep} />;
       case 'review':
-        return (
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold mb-4">Review & Approve</h2>
-            <p className="text-muted-foreground">Coming next: Review all details before sending</p>
-          </div>
-        );
+        return <ReviewApprovalForm onNext={handleNextStep} />;
       case 'send':
-        return (
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold mb-4">Send to Homeowner</h2>
-            <p className="text-muted-foreground">Coming next: Deliver documentation package</p>
-          </div>
-        );
+        return <SendConfirmationForm />;
       default:
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
     }

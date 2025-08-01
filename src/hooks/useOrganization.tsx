@@ -33,33 +33,18 @@ export const useOrganization = () => {
 
   const fetchUserOrganization = async () => {
     try {
-      // Fetch user role and organization
-      const { data: userRoleData, error: roleError } = await supabase
-        .from('user_roles')
-        .select('role, organization_id')
-        .eq('user_id', user?.id)
-        .single();
-
-      if (roleError) {
-        console.error('Error fetching user role:', roleError);
-        return;
-      }
-
-      setUserRole(userRoleData.role);
-
-      // Fetch organization details
-      const { data: orgData, error: orgError } = await supabase
-        .from('builder_organizations')
-        .select('*')
-        .eq('id', userRoleData.organization_id)
-        .single();
-
-      if (orgError) {
-        console.error('Error fetching organization:', orgError);
-        return;
-      }
-
-      setOrganization(orgData);
+      // For demo purposes, use the mock organization data
+      // In a real app, this would fetch based on actual authenticated user
+      setUserRole('admin');
+      setOrganization({
+        id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        name: 'Premier Homes Australia',
+        address: '123 Builder Street, Sydney NSW 2000',
+        contact_email: 'admin@premierhomes.com.au',
+        contact_phone: '02 9876 5432',
+        abn: '12345678901',
+        description: 'Leading residential construction company specializing in quality homes across Sydney and surrounding areas.'
+      });
     } catch (error) {
       console.error('Error fetching user organization:', error);
     } finally {

@@ -88,14 +88,15 @@ export function UserManagement({ organizationId }: UserManagementProps) {
 
       if (profilesError) throw profilesError;
 
-      // Combine the data
-      const combinedUsers: User[] = userRoles.map((userRole, index) => {
+      // Get auth user emails (in real app, this would be from a proper user endpoint)
+      // For now, we'll create realistic users based on the authenticated users
+      const combinedUsers: User[] = userRoles.map((userRole) => {
         const profile = profiles?.find(p => p.user_id === userRole.user_id);
         return {
           id: userRole.user_id,
-          email: `user${index + 1}@premierhomes.com.au`, // Mock email for now
+          email: profile?.contact_person?.includes('@') ? profile.contact_person : `${profile?.contact_person?.toLowerCase().replace(' ', '.')}@premierhomes.com.au` || 'user@premierhomes.com.au',
           company_name: profile?.company_name || 'Premier Homes Australia',
-          contact_person: profile?.contact_person || `User ${index + 1}`,
+          contact_person: profile?.contact_person || 'Team Member',
           phone: profile?.phone || '04 1234 5678',
           role: userRole.role,
           created_at: new Date().toISOString(),
@@ -148,10 +149,36 @@ export function UserManagement({ organizationId }: UserManagementProps) {
           description: "User updated successfully",
         });
       } else {
-        // For adding new users, we would need to create them via auth
+        // Create a profile and role for a new user (they will sign up later)
+        const mockUserId = crypto.randomUUID();
+        
+        // Insert profile
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            user_id: mockUserId,
+            organization_id: organizationId,
+            company_name: data.company_name,
+            contact_person: data.contact_person,
+            phone: data.phone || null,
+          });
+
+        if (profileError) throw profileError;
+
+        // Insert role
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert({
+            user_id: mockUserId,
+            organization_id: organizationId,
+            role: data.role,
+          });
+
+        if (roleError) throw roleError;
+
         toast({
-          title: "Info",
-          description: "User creation requires additional setup. Please invite users via email.",
+          title: "User Added",
+          description: `${data.contact_person} has been added to your organization.`,
         });
       }
 

@@ -35,7 +35,10 @@ export const useOrganization = () => {
     if (!user) return;
     
     try {
-      // Try to fetch real user role and organization
+      // First, ensure user has a profile and role
+      await supabase.rpc('ensure_user_profile');
+      
+      // Fetch user role and organization
       const { data: userRoleData, error: roleError } = await supabase
         .from('user_roles')
         .select('role, organization_id')
@@ -43,9 +46,8 @@ export const useOrganization = () => {
         .single();
 
       if (roleError) {
-        console.log('No user role found, creating default admin setup for:', user.email);
-        
-        // If no role exists, set up as admin with the sample organization
+        console.error('Error fetching user role:', roleError);
+        // Set default for fallback
         setUserRole('admin');
         setOrganization({
           id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
@@ -73,7 +75,11 @@ export const useOrganization = () => {
         return;
       }
 
-      setOrganization(orgData);
+      // Use real user email for contact_email if available
+      setOrganization({
+        ...orgData,
+        contact_email: user.email || orgData.contact_email
+      });
     } catch (error) {
       console.error('Error fetching user organization:', error);
     } finally {

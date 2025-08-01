@@ -19,7 +19,6 @@ const userSchema = z.object({
   email: z.string().refine((email) => validateEmail(email), {
     message: "Please enter a valid email address",
   }),
-  company_name: z.string().min(1, "Company name is required"),
   contact_person: z.string().min(1, "Contact person is required"),
   phone: z.string().optional().refine((phone) => !phone || validatePhone(phone), {
     message: "Please enter a valid Australian phone number",
@@ -56,7 +55,6 @@ export function UserManagement({ organizationId }: UserManagementProps) {
     defaultValues: {
       email: "",
       role: "user",
-      company_name: "",
       contact_person: "",
       phone: "",
     },
@@ -128,7 +126,6 @@ export function UserManagement({ organizationId }: UserManagementProps) {
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
-            company_name: data.company_name,
             contact_person: data.contact_person,
             phone: data.phone || null,
           })
@@ -153,7 +150,7 @@ export function UserManagement({ organizationId }: UserManagementProps) {
         // In a real app, this would send an invitation email
         toast({
           title: "User Invitation",
-          description: `An invitation would be sent to ${data.email} to join ${data.company_name}. For this demo, users can sign up directly with their email.`,
+          description: `An invitation would be sent to ${data.email} to join your organization. For this demo, users can sign up directly with their email.`,
         });
       }
 
@@ -177,7 +174,6 @@ export function UserManagement({ organizationId }: UserManagementProps) {
     setEditingUser(user);
     form.reset({
       email: user.email,
-      company_name: user.company_name || "",
       contact_person: user.contact_person || "",
       phone: user.phone || "",
       role: user.role as 'admin' | 'user',
@@ -214,7 +210,6 @@ export function UserManagement({ organizationId }: UserManagementProps) {
     setEditingUser(null);
     form.reset({
       email: "",
-      company_name: "",
       contact_person: "",
       phone: "",
       role: "user",
@@ -312,36 +307,6 @@ export function UserManagement({ organizationId }: UserManagementProps) {
 
                   <FormField
                     control={form.control}
-                    name="company_name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Company Name</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="Premier Homes Australia" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone (Optional)</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="04XX XXX XXX" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
                     name="role"
                     render={({ field }) => (
                       <FormItem>
@@ -362,6 +327,20 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                     )}
                   />
                 </div>
+
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone (Optional)</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="04XX XXX XXX" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <div className="flex justify-end gap-2 pt-4">
                   <Button

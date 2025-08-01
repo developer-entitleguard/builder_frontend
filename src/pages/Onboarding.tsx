@@ -116,14 +116,18 @@ const Onboarding = () => {
   };
 
   const handleCustomerNext = async (customerData: any) => {
-    console.log('Onboarding - handleCustomerNext called with:', customerData);
-    console.log('Onboarding - Customer data structure:', JSON.stringify(customerData, null, 2));
-    await saveRegistrationData(customerData, 'customer');
+    if (customerData.registrationId) {
+      setRegistrationId(customerData.registrationId);
+    }
+    setFormData(prev => ({ ...prev, customer: customerData }));
     handleNextStep();
   };
 
   const handleItemsNext = async (itemsData: any) => {
-    await saveRegistrationData(itemsData, 'items');
+    if (itemsData.registrationId) {
+      setRegistrationId(itemsData.registrationId);
+    }
+    setFormData(prev => ({ ...prev, items: itemsData }));
     handleNextStep();
   };
 
@@ -182,7 +186,7 @@ const Onboarding = () => {
       case 'customer':
         return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} />;
       case 'items':
-        return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} />;
+        return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} />;
       case 'documents':
         return <DocumentUploadForm onNext={handleDocumentsNext} initialData={formData.documents} />;
       case 'review':

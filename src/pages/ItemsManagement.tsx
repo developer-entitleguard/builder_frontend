@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -21,24 +22,28 @@ interface BuilderItem {
   make: string | null;
   brand: string | null;
   model: string | null;
+  description: string | null;
+  price: number | null;
   documentation_url: string | null;
   notes: string | null;
 }
 
 const categories = [
+  "Kitchen",
+  "Bathroom", 
   "Appliances",
-  "Fittings", 
-  "Structural",
   "Electrical",
   "Plumbing",
-  "HVAC",
   "Flooring",
+  "Trim",
+  "HVAC",
   "Windows & Doors",
   "Other"
 ];
 
 const ItemsManagement = () => {
   const { user } = useAuth();
+  const { organization, loading: orgLoading } = useOrganization();
   const { toast } = useToast();
   const [items, setItems] = useState<BuilderItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,22 +55,21 @@ const ItemsManagement = () => {
     make: "",
     brand: "",
     model: "",
+    description: "",
+    price: "",
     documentation_url: "",
     notes: ""
   });
 
   useEffect(() => {
-    console.log('ItemsManagement - user:', user);
-    if (user) {
+    if (organization) {
       fetchItems();
-    } else {
-      console.log('ItemsManagement - No user found, setting loading to false');
+    } else if (!orgLoading) {
       setLoading(false);
     }
-  }, [user]);
+  }, [organization, orgLoading]);
 
   const fetchItems = async () => {
-    console.log('ItemsManagement - fetchItems called');
     try {
       const { data, error } = await supabase
         .from('builder_items')
@@ -73,11 +77,9 @@ const ItemsManagement = () => {
         .order('category', { ascending: true })
         .order('name', { ascending: true });
 
-      console.log('ItemsManagement - fetchItems result:', { data, error });
       if (error) throw error;
       setItems(data || []);
     } catch (error: any) {
-      console.error('ItemsManagement - fetchItems error:', error);
       toast({
         title: "Error fetching items",
         description: error.message,
@@ -95,6 +97,8 @@ const ItemsManagement = () => {
       make: "",
       brand: "",
       model: "",
+      description: "",
+      price: "",
       documentation_url: "",
       notes: ""
     });
@@ -103,7 +107,7 @@ const ItemsManagement = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !formData.name || !formData.category) return;
+    if (!formData.name || !formData.category) return;
 
     try {
       const itemData = {
@@ -112,9 +116,10 @@ const ItemsManagement = () => {
         make: formData.make || null,
         brand: formData.brand || null,
         model: formData.model || null,
+        description: formData.description || null,
+        price: formData.price ? parseFloat(formData.price) : null,
         documentation_url: formData.documentation_url || null,
-        notes: formData.notes || null,
-        builder_id: user.id
+        notes: formData.notes || null
       };
 
       if (editingItem) {
@@ -154,6 +159,8 @@ const ItemsManagement = () => {
       make: item.make || "",
       brand: item.brand || "",
       model: item.model || "",
+      description: item.description || "",
+      price: item.price?.toString() || "",
       documentation_url: item.documentation_url || "",
       notes: item.notes || ""
     });
@@ -265,7 +272,16 @@ const ItemsManagement = () => {
                     </Select>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    rows={2}
+                  />
+                </div>
+                <div className="grid grid-cols-4 gap-4">
                   <div>
                     <Label htmlFor="make">Make</Label>
                     <Input
@@ -288,6 +304,18 @@ const ItemsManagement = () => {
                       id="model"
                       value={formData.model}
                       onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="price">Price (AUD)</Label>
+                    <Input
+                      id="price"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.price}
+                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                      placeholder="0.00"
                     />
                   </div>
                 </div>

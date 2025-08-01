@@ -3,12 +3,15 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { OrganizationDetails } from "@/components/admin/OrganizationDetails";
 import { UserManagement } from "@/components/admin/UserManagement";
-import { Shield } from "lucide-react";
+import { Shield, ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function Admin() {
   const { organization, userRole, loading, isAdmin } = useOrganization();
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -35,9 +38,19 @@ export default function Admin() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center gap-2">
-        <Shield className="h-6 w-6 text-primary" />
-        <h1 className="text-3xl font-bold">Organization Administration</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Shield className="h-6 w-6 text-primary" />
+          <h1 className="text-3xl font-bold">Organization Administration</h1>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={() => navigate('/dashboard')}
+          className="flex items-center gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
+        </Button>
       </div>
 
       <Tabs defaultValue="organization" className="space-y-4">

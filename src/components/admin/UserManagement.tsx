@@ -149,36 +149,11 @@ export function UserManagement({ organizationId }: UserManagementProps) {
           description: "User updated successfully",
         });
       } else {
-        // Create a profile and role for a new user (they will sign up later)
-        const mockUserId = crypto.randomUUID();
-        
-        // Insert profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            user_id: mockUserId,
-            organization_id: organizationId,
-            company_name: data.company_name,
-            contact_person: data.contact_person,
-            phone: data.phone || null,
-          });
-
-        if (profileError) throw profileError;
-
-        // Insert role
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .insert({
-            user_id: mockUserId,
-            organization_id: organizationId,
-            role: data.role,
-          });
-
-        if (roleError) throw roleError;
-
+        // For now, just show success message since we can't create actual users
+        // In a real app, this would send an invitation email
         toast({
-          title: "User Added",
-          description: `${data.contact_person} has been added to your organization.`,
+          title: "User Invitation",
+          description: `An invitation would be sent to ${data.email} to join ${data.company_name}. For this demo, users can sign up directly with their email.`,
         });
       }
 

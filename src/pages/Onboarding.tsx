@@ -38,7 +38,9 @@ const Onboarding = () => {
     if (!user) return;
 
     try {
+      console.log('Onboarding - saveRegistrationData called:', { step, stepData });
       const updatedFormData = { ...formData, [step]: stepData };
+      console.log('Onboarding - updatedFormData:', updatedFormData);
       setFormData(updatedFormData);
 
       let registrationData: any = {
@@ -49,6 +51,7 @@ const Onboarding = () => {
       // Add customer data
       if (updatedFormData.customer) {
         const customerData = updatedFormData.customer as any;
+        console.log('Onboarding - Processing customer data:', customerData);
         registrationData = {
           ...registrationData,
           customer_name: customerData.firstName && customerData.lastName 
@@ -64,6 +67,7 @@ const Onboarding = () => {
           settlement_date: customerData.settlementDate || null,
           notes: customerData.notes || ''
         };
+        console.log('Onboarding - Mapped registration data:', registrationData);
       }
 
       // Add items data
@@ -112,6 +116,7 @@ const Onboarding = () => {
   };
 
   const handleCustomerNext = async (customerData: any) => {
+    console.log('Onboarding - handleCustomerNext called with:', customerData);
     await saveRegistrationData(customerData, 'customer');
     handleNextStep();
   };

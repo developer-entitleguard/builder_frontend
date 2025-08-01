@@ -55,12 +55,17 @@ const ItemsManagement = () => {
   });
 
   useEffect(() => {
+    console.log('ItemsManagement - user:', user);
     if (user) {
       fetchItems();
+    } else {
+      console.log('ItemsManagement - No user found, setting loading to false');
+      setLoading(false);
     }
   }, [user]);
 
   const fetchItems = async () => {
+    console.log('ItemsManagement - fetchItems called');
     try {
       const { data, error } = await supabase
         .from('builder_items')
@@ -68,9 +73,11 @@ const ItemsManagement = () => {
         .order('category', { ascending: true })
         .order('name', { ascending: true });
 
+      console.log('ItemsManagement - fetchItems result:', { data, error });
       if (error) throw error;
       setItems(data || []);
     } catch (error: any) {
+      console.error('ItemsManagement - fetchItems error:', error);
       toast({
         title: "Error fetching items",
         description: error.message,
@@ -182,6 +189,8 @@ const ItemsManagement = () => {
     return acc;
   }, {} as Record<string, BuilderItem[]>);
 
+  console.log('ItemsManagement - Render state:', { loading, user, itemsCount: items.length });
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -189,6 +198,19 @@ const ItemsManagement = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-center h-64">
             <div className="text-lg">Loading...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-lg">Please log in to access items management.</div>
           </div>
         </div>
       </div>

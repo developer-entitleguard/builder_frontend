@@ -8,6 +8,8 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
+import ItemsManagement from "./pages/ItemsManagement";
+import QueriesManagement from "./pages/QueriesManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();

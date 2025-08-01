@@ -58,20 +58,20 @@ const ItemsSelectionForm = ({ onNext }: ItemsSelectionFormProps) => {
     }
   ];
 
-  const handleItemToggle = (categoryId: string, item: string) => {
+  const handleItemToggle = (categoryId: string, itemId: string) => {
     setSelectedItems(prev => {
       const categoryItems = prev[categoryId] || [];
-      const isSelected = categoryItems.includes(item);
+      const isSelected = categoryItems.includes(itemId);
       
       if (isSelected) {
         return {
           ...prev,
-          [categoryId]: categoryItems.filter(i => i !== item)
+          [categoryId]: categoryItems.filter(i => i !== itemId)
         };
       } else {
         return {
           ...prev,
-          [categoryId]: [...categoryItems, item]
+          [categoryId]: [...categoryItems, itemId]
         };
       }
     });

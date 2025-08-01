@@ -21,6 +21,7 @@ const CustomerDetailsForm = ({ onNext }: CustomerDetailsFormProps) => {
     state: '',
     zipCode: '',
     projectName: '',
+    settlementDate: '',
     notes: ''
   });
 
@@ -165,14 +166,25 @@ const CustomerDetailsForm = ({ onNext }: CustomerDetailsFormProps) => {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="projectName">Project/Community Name</Label>
-              <Input
-                id="projectName"
-                value={formData.projectName}
-                onChange={(e) => handleInputChange('projectName', e.target.value)}
-                placeholder="e.g., Sunset Ridge Community"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="projectName">Project/Community Name</Label>
+                <Input
+                  id="projectName"
+                  value={formData.projectName}
+                  onChange={(e) => handleInputChange('projectName', e.target.value)}
+                  placeholder="e.g., Sunset Ridge Community"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="settlementDate">Settlement Date</Label>
+                <Input
+                  id="settlementDate"
+                  type="date"
+                  value={formData.settlementDate}
+                  onChange={(e) => handleInputChange('settlementDate', e.target.value)}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="notes">Additional Notes</Label>

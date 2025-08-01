@@ -14,6 +14,95 @@ export type Database = {
   }
   public: {
     Tables: {
+      builder_items: {
+        Row: {
+          brand: string | null
+          builder_id: string
+          category: string
+          created_at: string
+          documentation_url: string | null
+          id: string
+          make: string | null
+          model: string | null
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          brand?: string | null
+          builder_id: string
+          category: string
+          created_at?: string
+          documentation_url?: string | null
+          id?: string
+          make?: string | null
+          model?: string | null
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          brand?: string | null
+          builder_id?: string
+          category?: string
+          created_at?: string
+          documentation_url?: string | null
+          id?: string
+          make?: string | null
+          model?: string | null
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      homeowner_queries: {
+        Row: {
+          builder_id: string
+          created_at: string
+          id: string
+          message: string
+          registration_id: string
+          responded_at: string | null
+          response: string | null
+          status: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          builder_id: string
+          created_at?: string
+          id?: string
+          message: string
+          registration_id: string
+          responded_at?: string | null
+          response?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          builder_id?: string
+          created_at?: string
+          id?: string
+          message?: string
+          registration_id?: string
+          responded_at?: string | null
+          response?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homeowner_queries_registration_id_fkey"
+            columns: ["registration_id"]
+            isOneToOne: false
+            referencedRelation: "homeowner_registrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       homeowner_registrations: {
         Row: {
           builder_id: string
@@ -31,6 +120,7 @@ export type Database = {
           property_state: string
           property_zip: string
           selected_items: Json | null
+          settlement_date: string | null
           status: string
           updated_at: string
         }
@@ -50,6 +140,7 @@ export type Database = {
           property_state: string
           property_zip: string
           selected_items?: Json | null
+          settlement_date?: string | null
           status?: string
           updated_at?: string
         }
@@ -69,6 +160,7 @@ export type Database = {
           property_state?: string
           property_zip?: string
           selected_items?: Json | null
+          settlement_date?: string | null
           status?: string
           updated_at?: string
         }

@@ -55,11 +55,12 @@ const Onboarding = () => {
             : '',
           customer_email: customerData.email || '',
           customer_phone: customerData.phone || '',
-          property_address: customerData.address || '',
+          property_address: customerData.propertyAddress || '',
           property_city: customerData.city || '',
           property_state: customerData.state || '',
-          property_zip: customerData.zip || '',
+          property_zip: customerData.zipCode || '',
           project_name: customerData.projectName || '',
+          settlement_date: customerData.settlementDate || null,
           notes: customerData.notes || ''
         };
       }

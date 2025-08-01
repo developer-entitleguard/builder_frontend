@@ -40,7 +40,7 @@ const Index = () => {
         {currentStep === 'overview' ? <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} /> : <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold text-foreground">Provide Entitle Guard</h1>
+                <h1 className="text-3xl font-bold text-foreground">Buyer Onboarding Form</h1>
                 <p className="text-muted-foreground mt-1">Create comprehensive documentation packages for your homebuyers</p>
               </div>
               <div className="text-sm text-muted-foreground">

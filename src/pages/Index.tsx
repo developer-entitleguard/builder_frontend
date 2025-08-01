@@ -5,25 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, FileText, Users, Shield } from "lucide-react";
 const Index = () => {
-  const { user, loading } = useAuth();
+  const {
+    user,
+    loading
+  } = useAuth();
   const navigate = useNavigate();
-
   useEffect(() => {
     if (!loading && user) {
       navigate('/dashboard');
     }
   }, [user, loading, navigate]);
-
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+    return <div className="min-h-screen bg-background flex items-center justify-center">
         <Building2 className="h-8 w-8 text-primary animate-pulse" />
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <div className="min-h-screen bg-background">
+  return <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -31,8 +28,8 @@ const Index = () => {
             <div className="flex items-center">
               <Building2 className="h-8 w-8 text-primary mr-3" />
               <div>
-                <h1 className="text-xl font-semibold text-foreground">EntitleGuard</h1>
-                <p className="text-sm text-muted-foreground">Builder Portal</p>
+                <h1 className="text-xl font-semibold text-foreground">Entitle Guard for Builders</h1>
+                <p className="text-sm text-muted-foreground">Because Your Homeowners Deserve Clarity.</p>
               </div>
             </div>
             <Button onClick={() => navigate('/auth')}>
@@ -47,7 +44,7 @@ const Index = () => {
         <div className="py-20 text-center">
           <h1 className="text-4xl md:text-6xl font-bold text-foreground mb-6">
             Streamline Your
-            <span className="text-primary block">Warranty Process</span>
+            <span className="text-primary block">Handover Process</span>
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-3xl mx-auto">
             Create comprehensive warranty documentation packages for your homebuyers. 
@@ -124,7 +121,6 @@ const Index = () => {
           </Card>
         </div>
       </main>
-    </div>
-  );
+    </div>;
 };
 export default Index;

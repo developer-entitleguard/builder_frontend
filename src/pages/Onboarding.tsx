@@ -228,6 +228,14 @@ const Onboarding = () => {
     }
   };
 
+  const handlePreviousStep = () => {
+    const steps = ['customer', 'items', 'documents', 'review', 'send'];
+    const currentIndex = steps.indexOf(currentStep);
+    if (currentIndex > 0) {
+      setCurrentStep(steps[currentIndex - 1]);
+    }
+  };
+
   const handleSendEntitlement = async () => {
     if (!registrationId) return;
 
@@ -313,6 +321,30 @@ const Onboarding = () => {
                 </div>
               </div>
             </div>
+            
+            {/* Navigation */}
+            <div className="flex items-center justify-between">
+              <div>
+                {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) > 0 && (
+                  <Button variant="outline" onClick={handlePreviousStep}>
+                    Previous
+                  </Button>
+                )}
+              </div>
+              <div className="flex space-x-2">
+                {['customer', 'items', 'documents', 'review', 'send'].map((step, index) => (
+                  <div
+                    key={step}
+                    className={`w-3 h-3 rounded-full ${
+                      ['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) >= index
+                        ? 'bg-primary'
+                        : 'bg-muted'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+            
             {renderCurrentStep()}
           </div>
         )}

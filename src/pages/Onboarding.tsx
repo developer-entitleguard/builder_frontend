@@ -117,6 +117,7 @@ const Onboarding = () => {
 
   const handleCustomerNext = async (customerData: any) => {
     console.log('Onboarding - handleCustomerNext called with:', customerData);
+    console.log('Onboarding - Customer data structure:', JSON.stringify(customerData, null, 2));
     await saveRegistrationData(customerData, 'customer');
     handleNextStep();
   };

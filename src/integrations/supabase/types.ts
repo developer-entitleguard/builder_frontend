@@ -14,7 +14,104 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      homeowner_registrations: {
+        Row: {
+          builder_id: string
+          created_at: string
+          customer_email: string
+          customer_name: string
+          customer_phone: string | null
+          documents_uploaded: Json | null
+          entitlement_sent_at: string | null
+          id: string
+          notes: string | null
+          project_name: string | null
+          property_address: string
+          property_city: string
+          property_state: string
+          property_zip: string
+          selected_items: Json | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          builder_id: string
+          created_at?: string
+          customer_email: string
+          customer_name: string
+          customer_phone?: string | null
+          documents_uploaded?: Json | null
+          entitlement_sent_at?: string | null
+          id?: string
+          notes?: string | null
+          project_name?: string | null
+          property_address: string
+          property_city: string
+          property_state: string
+          property_zip: string
+          selected_items?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          builder_id?: string
+          created_at?: string
+          customer_email?: string
+          customer_name?: string
+          customer_phone?: string | null
+          documents_uploaded?: Json | null
+          entitlement_sent_at?: string | null
+          id?: string
+          notes?: string | null
+          project_name?: string | null
+          property_address?: string
+          property_city?: string
+          property_state?: string
+          property_zip?: string
+          selected_items?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homeowner_registrations_builder_id_fkey"
+            columns: ["builder_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          company_name: string | null
+          contact_person: string | null
+          created_at: string
+          id: string
+          phone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_name?: string | null
+          contact_person?: string | null
+          created_at?: string
+          id?: string
+          phone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_name?: string | null
+          contact_person?: string | null
+          created_at?: string
+          id?: string
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

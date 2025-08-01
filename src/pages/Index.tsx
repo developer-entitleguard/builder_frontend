@@ -2,6 +2,7 @@ import { useState } from "react";
 import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
 import CustomerDetailsForm from "@/components/CustomerDetailsForm";
+import ItemsSelectionForm from "@/components/ItemsSelectionForm";
 
 const Index = () => {
   const [currentStep, setCurrentStep] = useState('customer');
@@ -23,12 +24,7 @@ const Index = () => {
       case 'customer':
         return <CustomerDetailsForm onNext={handleNextStep} />;
       case 'items':
-        return (
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold mb-4">Items Selection</h2>
-            <p className="text-muted-foreground">Coming next: Select appliances, fittings, and structural components</p>
-          </div>
-        );
+        return <ItemsSelectionForm onNext={handleNextStep} />;
       case 'documents':
         return (
           <div className="text-center py-12">

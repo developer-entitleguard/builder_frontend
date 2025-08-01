@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
 import ItemsManagement from "./pages/ItemsManagement";
 import QueriesManagement from "./pages/QueriesManagement";
+import RegistrationDetail from "./pages/RegistrationDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,21 @@ const App = () => (
             <Route path="/onboarding" element={
               <ProtectedRoute>
                 <Onboarding />
+              </ProtectedRoute>
+            } />
+            <Route path="/items" element={
+              <ProtectedRoute>
+                <ItemsManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/queries" element={
+              <ProtectedRoute>
+                <QueriesManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/registration/:id" element={
+              <ProtectedRoute>
+                <RegistrationDetail />
               </ProtectedRoute>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

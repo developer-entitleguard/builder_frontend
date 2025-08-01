@@ -7,22 +7,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowRight, MapPin, Phone, Mail, User } from "lucide-react";
 
 interface CustomerDetailsFormProps {
-  onNext: () => void;
+  onNext: (data: any) => void;
+  initialData?: any;
 }
 
-const CustomerDetailsForm = ({ onNext }: CustomerDetailsFormProps) => {
+const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) => {
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    propertyAddress: '',
-    city: '',
-    state: '',
-    zipCode: '',
-    projectName: '',
-    settlementDate: '',
-    notes: ''
+    firstName: initialData?.firstName || '',
+    lastName: initialData?.lastName || '',
+    email: initialData?.email || '',
+    phone: initialData?.phone || '',
+    propertyAddress: initialData?.propertyAddress || '',
+    city: initialData?.city || '',
+    state: initialData?.state || '',
+    zipCode: initialData?.zipCode || '',
+    projectName: initialData?.projectName || '',
+    settlementDate: initialData?.settlementDate || '',
+    notes: initialData?.notes || ''
   });
 
   const handleInputChange = (field: string, value: string) => {
@@ -31,8 +32,7 @@ const CustomerDetailsForm = ({ onNext }: CustomerDetailsFormProps) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Save customer details logic here
-    onNext();
+    onNext(formData);
   };
 
   return (

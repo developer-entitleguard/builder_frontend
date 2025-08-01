@@ -17,7 +17,10 @@ import {
   CheckCircle, 
   Send,
   Users,
-  Home
+  Home,
+  Package,
+  MessageSquare,
+  Settings
 } from 'lucide-react';
 
 interface HomeownerRegistration {
@@ -218,6 +221,60 @@ const Dashboard = () => {
           </Card>
         </div>
 
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/items')}>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Package className="h-8 w-8 text-blue-500" />
+                  <div className="ml-4">
+                    <h3 className="font-semibold text-foreground">Manage Items</h3>
+                    <p className="text-sm text-muted-foreground">Add and organize master item list</p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm">
+                  View
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/queries')}>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <MessageSquare className="h-8 w-8 text-green-500" />
+                  <div className="ml-4">
+                    <h3 className="font-semibold text-foreground">Homeowner Queries</h3>
+                    <p className="text-sm text-muted-foreground">Respond to homeowner questions</p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm">
+                  View
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/onboarding')}>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Plus className="h-8 w-8 text-purple-500" />
+                  <div className="ml-4">
+                    <h3 className="font-semibold text-foreground">New Registration</h3>
+                    <p className="text-sm text-muted-foreground">Start homeowner onboarding</p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm">
+                  Start
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="relative flex-1 max-w-md">
@@ -267,14 +324,16 @@ const Dashboard = () => {
                     <div className="flex items-center space-x-4 flex-1">
                       {getStatusIcon(registration.status)}
                       <div className="flex-1">
-                        <h4 className="font-medium text-foreground">{registration.customer_name}</h4>
-                        <p className="text-sm text-muted-foreground">{registration.customer_email}</p>
+                        <div className="flex items-center space-x-2 mb-1">
+                          <h4 className="font-semibold text-lg text-foreground">{registration.customer_name}</h4>
+                          <Badge variant="outline" className="text-xs">
+                            {registration.project_name || 'No Project'}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-1">{registration.customer_email}</p>
                         <p className="text-sm text-muted-foreground">
-                          {registration.property_address}, {registration.property_city}, {registration.property_state}
+                          📍 {registration.property_address}, {registration.property_city}, {registration.property_state}
                         </p>
-                        {registration.project_name && (
-                          <p className="text-sm text-muted-foreground">Project: {registration.project_name}</p>
-                        )}
                       </div>
                     </div>
                     <div className="flex items-center space-x-4">

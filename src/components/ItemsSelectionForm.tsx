@@ -21,11 +21,12 @@ interface ItemCategory {
 }
 
 interface ItemsSelectionFormProps {
-  onNext: () => void;
+  onNext: (data: any) => void;
+  initialData?: any;
 }
 
-const ItemsSelectionForm = ({ onNext }: ItemsSelectionFormProps) => {
-  const [selectedItems, setSelectedItems] = useState<Record<string, string[]>>({});
+const ItemsSelectionForm = ({ onNext, initialData }: ItemsSelectionFormProps) => {
+  const [selectedItems, setSelectedItems] = useState<Record<string, string[]>>(initialData || {});
 
   const categories: ItemCategory[] = [
     {
@@ -82,9 +83,7 @@ const ItemsSelectionForm = ({ onNext }: ItemsSelectionFormProps) => {
   };
 
   const handleNext = () => {
-    if (getTotalSelectedItems() > 0) {
-      onNext();
-    }
+    onNext(selectedItems);
   };
 
   return (

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
 import CustomerDetailsForm from "@/components/CustomerDetailsForm";
@@ -110,23 +111,27 @@ const Onboarding = () => {
     }
   };
 
-  const handleCustomerNext = async () => {
-    // Get form data from localStorage or state as needed
-    const data = {}; // This would be passed from the form component
-    await saveRegistrationData(data, 'customer');
+  const handleCustomerNext = async (customerData: any) => {
+    await saveRegistrationData(customerData, 'customer');
     handleNextStep();
   };
 
-  const handleItemsNext = async () => {
-    const data = {}; // This would be passed from the form component  
-    await saveRegistrationData(data, 'items');
+  const handleItemsNext = async (itemsData: any) => {
+    await saveRegistrationData(itemsData, 'items');
     handleNextStep();
   };
 
-  const handleDocumentsNext = async () => {
-    const data = {}; // This would be passed from the form component
-    await saveRegistrationData(data, 'documents');
+  const handleDocumentsNext = async (documentsData: any) => {
+    await saveRegistrationData(documentsData, 'documents');
     handleNextStep();
+  };
+
+  const handleSaveAndExit = async () => {
+    toast({
+      title: "Registration saved",
+      description: "You can continue this registration later from your dashboard."
+    });
+    navigate('/dashboard');
   };
 
   const handleNextStep = () => {
@@ -169,13 +174,13 @@ const Onboarding = () => {
   const renderCurrentStep = () => {
     switch (currentStep) {
       case 'customer':
-        return <CustomerDetailsForm onNext={handleCustomerNext} />;
+        return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} />;
       case 'items':
-        return <ItemsSelectionForm onNext={handleItemsNext} />;
+        return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} />;
       case 'documents':
-        return <DocumentUploadForm onNext={handleDocumentsNext} />;
+        return <DocumentUploadForm onNext={handleDocumentsNext} initialData={formData.documents} />;
       case 'review':
-        return <ReviewApprovalForm onNext={handleSendEntitlement} />;
+        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} />;
       case 'send':
         return <SendConfirmationForm />;
       default:
@@ -200,8 +205,13 @@ const Onboarding = () => {
                 <h1 className="text-3xl font-bold text-foreground">Buyer Onboarding Form</h1>
                 <p className="text-muted-foreground mt-1">Create comprehensive documentation packages for your homebuyers</p>
               </div>
-              <div className="text-sm text-muted-foreground">
-                Step {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) + 1} of 5
+              <div className="flex items-center space-x-4">
+                <Button variant="outline" onClick={handleSaveAndExit}>
+                  Save & Exit
+                </Button>
+                <div className="text-sm text-muted-foreground">
+                  Step {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) + 1} of 5
+                </div>
               </div>
             </div>
             {renderCurrentStep()}

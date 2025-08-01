@@ -6,12 +6,13 @@ import { Upload, FileText, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface DocumentUploadFormProps {
-  onNext: () => void;
+  onNext: (data: any) => void;
+  initialData?: any;
 }
 
-const DocumentUploadForm = ({ onNext }: DocumentUploadFormProps) => {
+const DocumentUploadForm = ({ onNext, initialData }: DocumentUploadFormProps) => {
   const { toast } = useToast();
-  const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>({});
+  const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>(initialData || {});
 
   // Mock selected items - in real app this would come from state management
   const selectedItems = {
@@ -113,7 +114,7 @@ const DocumentUploadForm = ({ onNext }: DocumentUploadFormProps) => {
           Upload documentation for {getTotalItems()} selected items
         </p>
         <Button 
-          onClick={onNext}
+          onClick={() => onNext(uploadedDocs)}
           disabled={!isComplete}
           className="min-w-[120px]"
         >

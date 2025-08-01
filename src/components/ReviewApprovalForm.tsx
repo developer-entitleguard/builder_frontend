@@ -8,9 +8,10 @@ import { User, Home, FileText, Building, CheckCircle } from "lucide-react";
 
 interface ReviewApprovalFormProps {
   onNext: () => void;
+  formData?: any;
 }
 
-const ReviewApprovalForm = ({ onNext }: ReviewApprovalFormProps) => {
+const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
   const [approved, setApproved] = useState(false);
 
   // Mock data - in real app this would come from state management

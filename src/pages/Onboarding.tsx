@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +16,7 @@ const Onboarding = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
   const [currentStep, setCurrentStep] = useState('customer');
   const [registrationId, setRegistrationId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -23,12 +24,87 @@ const Onboarding = () => {
     items: {},
     documents: {}
   });
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!user) {
       navigate('/auth');
     }
   }, [user, navigate]);
+
+  // Check for existing registration ID in URL params and load data
+  useEffect(() => {
+    const editingId = searchParams.get('id');
+    if (editingId && user) {
+      setRegistrationId(editingId);
+      loadExistingRegistration(editingId);
+    }
+  }, [searchParams, user]);
+
+  const loadExistingRegistration = async (id: string) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('homeowner_registrations')
+        .select('*')
+        .eq('id', id)
+        .eq('builder_id', user?.id)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          toast({
+            title: "Registration not found",
+            description: "This registration doesn't exist or you don't have access to it.",
+            variant: "destructive"
+          });
+          navigate('/dashboard');
+          return;
+        }
+        throw error;
+      }
+
+      // Parse the existing data and populate form
+      const existingFormData = {
+        customer: {
+          firstName: data.customer_name?.split(' ')[0] || '',
+          lastName: data.customer_name?.split(' ').slice(1).join(' ') || '',
+          email: data.customer_email || '',
+          phone: data.customer_phone || '',
+          propertyAddress: data.property_address || '',
+          city: data.property_city || '',
+          state: data.property_state || '',
+          zipCode: data.property_zip || '',
+          projectName: data.project_name || '',
+          settlementDate: data.settlement_date || '',
+          notes: data.notes || ''
+        },
+        items: data.selected_items || {},
+        documents: data.documents_uploaded || {}
+      };
+
+      setFormData(existingFormData);
+
+      // Determine which step to start on based on data completeness
+      if (data.status === 'ready_for_review') {
+        setCurrentStep('review');
+      } else if (data.selected_items && Object.keys(data.selected_items).length > 0) {
+        setCurrentStep('documents');
+      } else if (data.customer_name && data.customer_email) {
+        setCurrentStep('items');
+      }
+
+    } catch (error: any) {
+      toast({
+        title: "Error loading registration",
+        description: error.message,
+        variant: "destructive"
+      });
+      navigate('/dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleStepClick = (stepId: string) => {
     setCurrentStep(stepId);
@@ -200,6 +276,19 @@ const Onboarding = () => {
 
   if (!user) {
     return null;
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-lg">Loading registration...</div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

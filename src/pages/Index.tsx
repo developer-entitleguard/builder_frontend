@@ -67,7 +67,7 @@ const Index = () => {
               Everything you need to manage homeowner warranties
             </h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              From customer onboarding to document delivery, EntitleGuard streamlines your entire warranty process.
+              From customer onboarding to document delivery, Entitle Guard for Builders streamlines your entire warranty process.
             </p>
           </div>
 
@@ -110,7 +110,7 @@ const Index = () => {
             <CardHeader>
               <CardTitle className="text-2xl">Ready to get started?</CardTitle>
               <CardDescription>
-                Join builders who trust EntitleGuard to manage their warranty processes.
+                Join builders who trust Entitle Guard for Builders to manage their warranty processes.
               </CardDescription>
             </CardHeader>
             <CardContent>

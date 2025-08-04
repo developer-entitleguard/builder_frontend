@@ -196,9 +196,9 @@ const Auth = () => {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <Building2 className="h-8 w-8 text-primary mr-2" />
-            <h1 className="text-2xl font-bold text-foreground">EntitleGuard</h1>
+            <h1 className="text-2xl font-bold text-foreground">Entitle Guard for Builders</h1>
           </div>
-          <p className="text-muted-foreground">Builder Portal</p>
+          <p className="text-muted-foreground">Because Your Homeowners Deserve Clarity.</p>
         </div>
 
         <Card>

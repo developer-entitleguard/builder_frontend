@@ -18,7 +18,7 @@ const Auth = () => {
     password: '',
     confirmPassword: ''
   });
-  const { signIn, signUp, resetPassword } = useAuth();
+  const { signIn, signUp, resetPassword, updatePassword } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
@@ -160,14 +160,34 @@ const Auth = () => {
     }
 
     setIsLoading(true);
-    // Implementation would depend on Supabase session handling for password update
-    // For now, redirect to sign in
-    toast({
-      title: "Password updated",
-      description: "Your password has been updated successfully."
-    });
-    setShowResetPassword(false);
-    setIsLoading(false);
+
+    try {
+      const { error } = await updatePassword(resetPasswordData.password);
+      
+      if (error) {
+        toast({
+          title: "Error updating password",
+          description: error.message,
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Password updated",
+          description: "Your password has been updated successfully."
+        });
+        setShowResetPassword(false);
+        setResetPasswordData({ password: '', confirmPassword: '' });
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

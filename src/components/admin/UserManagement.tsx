@@ -64,10 +64,10 @@ export function UserManagement({ organizationId }: UserManagementProps) {
     if (!organizationId) return;
     
     try {
-      // Get user roles for this organization
+      // Get user roles for this organization with created_at
       const { data: userRoles, error: rolesError } = await supabase
         .from('user_roles')
-        .select('user_id, role')
+        .select('user_id, role, created_at')
         .eq('organization_id', organizationId);
 
       if (rolesError) throw rolesError;
@@ -81,23 +81,32 @@ export function UserManagement({ organizationId }: UserManagementProps) {
       const userIds = userRoles.map(ur => ur.user_id);
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('user_id, company_name, contact_person, phone')
+        .select('user_id, company_name, contact_person, phone, first_name, last_name, status')
         .in('user_id', userIds);
 
       if (profilesError) throw profilesError;
 
-      // Get auth user emails (in real app, this would be from a proper user endpoint)
-      // For now, we'll create realistic users based on the authenticated users
+      // Get organization details for company name
+      const { data: orgData } = await supabase
+        .from('builder_organizations')
+        .select('name')
+        .eq('id', organizationId)
+        .single();
+
       const combinedUsers: User[] = userRoles.map((userRole) => {
         const profile = profiles?.find(p => p.user_id === userRole.user_id);
+        const fullName = profile?.first_name && profile?.last_name 
+          ? `${profile.first_name} ${profile.last_name}`
+          : profile?.contact_person || 'Team Member';
+        
         return {
           id: userRole.user_id,
-          email: profile?.contact_person?.includes('@') ? profile.contact_person : `${profile?.contact_person?.toLowerCase().replace(' ', '.')}@premierhomes.com.au` || 'user@premierhomes.com.au',
-          company_name: profile?.company_name || 'Premier Homes Australia',
-          contact_person: profile?.contact_person || 'Team Member',
-          phone: profile?.phone || '04 1234 5678',
+          email: `${fullName.toLowerCase().replace(/\s+/g, '.')}@${orgData?.name.toLowerCase().replace(/\s+/g, '') || 'company'}.com` || 'user@company.com',
+          company_name: orgData?.name || profile?.company_name || 'Organization',
+          contact_person: fullName,
+          phone: profile?.phone || '',
           role: userRole.role,
-          created_at: new Date().toISOString(),
+          created_at: userRole.created_at,
         };
       });
 

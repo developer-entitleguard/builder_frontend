@@ -71,10 +71,13 @@ export type Database = {
           address: string
           contact_email: string
           contact_phone: string
+          contact_user_id: string | null
           created_at: string
+          created_by: string | null
           description: string | null
           id: string
           name: string
+          status: string | null
           updated_at: string
         }
         Insert: {
@@ -82,10 +85,13 @@ export type Database = {
           address: string
           contact_email: string
           contact_phone: string
+          contact_user_id?: string | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           id?: string
           name: string
+          status?: string | null
           updated_at?: string
         }
         Update: {
@@ -93,10 +99,13 @@ export type Database = {
           address?: string
           contact_email?: string
           contact_phone?: string
+          contact_user_id?: string | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           id?: string
           name?: string
+          status?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -224,9 +233,13 @@ export type Database = {
           company_name: string | null
           contact_person: string | null
           created_at: string
+          first_name: string | null
           id: string
-          organization_id: string | null
+          last_login_at: string | null
+          last_name: string | null
+          password_set_at: string | null
           phone: string | null
+          status: string | null
           updated_at: string
           user_id: string
         }
@@ -234,9 +247,13 @@ export type Database = {
           company_name?: string | null
           contact_person?: string | null
           created_at?: string
+          first_name?: string | null
           id?: string
-          organization_id?: string | null
+          last_login_at?: string | null
+          last_name?: string | null
+          password_set_at?: string | null
           phone?: string | null
+          status?: string | null
           updated_at?: string
           user_id: string
         }
@@ -244,21 +261,17 @@ export type Database = {
           company_name?: string | null
           contact_person?: string | null
           created_at?: string
+          first_name?: string | null
           id?: string
-          organization_id?: string | null
+          last_login_at?: string | null
+          last_name?: string | null
+          password_set_at?: string | null
           phone?: string | null
+          status?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "profiles_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "builder_organizations"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_roles: {
         Row: {

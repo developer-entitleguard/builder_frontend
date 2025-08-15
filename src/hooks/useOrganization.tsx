@@ -35,7 +35,7 @@ export const useOrganization = () => {
     if (!user) return;
     
     try {
-      // First, ensure user has a profile and role
+      // First, ensure user has a profile
       await supabase.rpc('ensure_user_profile');
       
       // Fetch user role and organization
@@ -47,17 +47,9 @@ export const useOrganization = () => {
 
       if (roleError) {
         console.error('Error fetching user role:', roleError);
-        // Set default for fallback
-        setUserRole('admin');
-        setOrganization({
-          id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-          name: 'Premier Homes Australia',
-          address: '123 Builder Street, Sydney NSW 2000',
-          contact_email: user.email || 'admin@premierhomes.com.au',
-          contact_phone: '02 9876 5432',
-          abn: '12345678901',
-          description: 'Leading residential construction company specializing in quality homes across Sydney and surrounding areas.'
-        });
+        // User doesn't have a role yet - they might be a new organization contact
+        setUserRole(null);
+        setOrganization(null);
         return;
       }
 
@@ -75,11 +67,7 @@ export const useOrganization = () => {
         return;
       }
 
-      // Use real user email for contact_email if available
-      setOrganization({
-        ...orgData,
-        contact_email: user.email || orgData.contact_email
-      });
+      setOrganization(orgData);
     } catch (error) {
       console.error('Error fetching user organization:', error);
     } finally {

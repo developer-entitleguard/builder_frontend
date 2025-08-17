@@ -24,7 +24,6 @@ const Header = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-foreground">Entitle Guard for Builders</h1>
-                <p className="text-xs text-muted-foreground">Because Your Homeowners Deserve Clarity.</p>
               </div>
             </Link>
           </div>

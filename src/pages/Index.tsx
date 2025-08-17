@@ -29,7 +29,7 @@ const Index = () => {
               <Building2 className="h-8 w-8 text-primary mr-3" />
               <div>
                 <h1 className="text-xl font-semibold text-foreground">Entitle Guard for Builders</h1>
-                <p className="text-sm text-muted-foreground">Because Your Homeowners Deserve Clarity.</p>
+                <p className="text-sm text-muted-foreground">Handover Made Simple. Entitlements Made Clear</p>
               </div>
             </div>
             <Button onClick={() => navigate('/auth')}>

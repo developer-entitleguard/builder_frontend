@@ -15,8 +15,12 @@ const Header = () => {
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center space-x-3">
             <Link to="/dashboard" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-              <div className="bg-gradient-to-r from-primary to-accent p-2 rounded-lg">
-                <Building2 className="h-6 w-6 text-white" />
+              <div className="p-1">
+                <img 
+                  src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
+                  alt="Entitle Guard for Builders Logo" 
+                  className="h-10 w-10 rounded-lg"
+                />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-foreground">Entitle Guard for Builders</h1>

@@ -108,6 +108,10 @@ const ItemsManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.category) return;
+    if (!user) {
+      toast({ title: "Not signed in", description: "Please log in and try again.", variant: "destructive" });
+      return;
+    }
 
     try {
       const itemData = {
@@ -133,7 +137,7 @@ const ItemsManagement = () => {
       } else {
         const { error } = await supabase
           .from('builder_items')
-          .insert(itemData);
+          .insert({ ...itemData, builder_id: user.id });
 
         if (error) throw error;
         toast({ title: "Item added successfully" });

@@ -52,10 +52,11 @@ export const useRegistrations = () => {
   };
 
   const createRegistration = async (data: RegistrationData) => {
+    if (!user) throw new Error('Not authenticated');
     const registrationData = {
       ...data,
       status: 'draft',
-      builder_id: user?.id
+      builder_id: user.id
     };
 
     const { data: result, error } = await supabase

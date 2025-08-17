@@ -219,7 +219,12 @@ const ItemsManagement = () => {
     return acc;
   }, {} as Record<string, BuilderItem[]>);
 
-  console.log('ItemsManagement - Render state:', { loading, user, itemsCount: items.length });
+  console.log('ItemsManagement - Render state:', { loading, user: !!user, itemsCount: items.length, userLoading: !user });
+  console.log('ItemsManagement - About to render, conditions:', { 
+    isLoading: loading, 
+    hasUser: !!user, 
+    shouldShowMain: !loading && !!user 
+  });
 
   if (loading) {
     return (
@@ -247,6 +252,7 @@ const ItemsManagement = () => {
     );
   }
 
+  console.log('ItemsManagement - Rendering main component');
   return (
     <div className="min-h-screen bg-background">
       <Header />

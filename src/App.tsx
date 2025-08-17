@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
 import ItemsManagement from "./pages/ItemsManagement";
+import ItemsManagementTest from "./pages/ItemsManagementTest";
 import QueriesManagement from "./pages/QueriesManagement";
 import RegistrationDetail from "./pages/RegistrationDetail";
 import Admin from "./pages/Admin";
@@ -48,7 +49,7 @@ const App = () => (
             } />
             <Route path="/items" element={
               <ProtectedRoute>
-                <ItemsManagement />
+                <ItemsManagementTest />
               </ProtectedRoute>
             } />
             <Route path="/queries" element={

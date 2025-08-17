@@ -272,7 +272,7 @@ const Onboarding = () => {
       case 'items':
         return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} />;
       case 'documents':
-        return <DocumentUploadForm onNext={handleDocumentsNext} initialData={formData.documents} />;
+        return <DocumentUploadForm onNext={handleDocumentsNext} initialData={formData.documents} selectedItems={(formData.items as any)?.selected_items || []} />;
       case 'review':
         return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} />;
       case 'send':

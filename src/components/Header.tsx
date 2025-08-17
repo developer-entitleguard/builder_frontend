@@ -29,7 +29,7 @@ const Header = () => {
             <div className="flex items-center space-x-4">
               <Button 
                 asChild 
-                className={location.pathname === '/dashboard' ? "bg-primary hover:bg-primary/90" : "bg-secondary hover:bg-secondary/90"}
+                variant={location.pathname === '/dashboard' ? "default" : "secondary"}
               >
                 <Link to="/dashboard">
                   <LayoutDashboard className="h-4 w-4 mr-2" />

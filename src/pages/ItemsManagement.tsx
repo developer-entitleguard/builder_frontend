@@ -66,9 +66,9 @@ const ItemsManagement = () => {
 
   useEffect(() => {
     console.log('ItemsManagement - user/organization changed:', { user: !!user, organization: !!organization, orgLoading });
-    if (user && organization) {
+    if (user) {
       fetchItems();
-    } else if (!orgLoading && !user) {
+    } else if (!user) {
       console.log('ItemsManagement - No user, setting loading to false');
       setLoading(false);
     }
@@ -90,8 +90,11 @@ const ItemsManagement = () => {
         .order('category', { ascending: true })
         .order('name', { ascending: true });
 
-      console.log('ItemsManagement - fetchItems result:', { data, error });
-      if (error) throw error;
+      console.log('ItemsManagement - fetchItems result:', { data, error, dataLength: data?.length });
+      if (error) {
+        console.error('ItemsManagement - fetchItems error:', error);
+        throw error;
+      }
       setItems(data || []);
       console.log('ItemsManagement - items set:', data?.length || 0, 'items');
     } catch (error: any) {
@@ -228,12 +231,13 @@ const ItemsManagement = () => {
   });
 
   if (loading) {
+    console.log('ItemsManagement - Showing loading state');
     return (
       <div className="min-h-screen bg-background">
         <Header />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-center h-64">
-            <div className="text-lg">Loading...</div>
+            <div className="text-lg">Loading items...</div>
           </div>
         </div>
       </div>

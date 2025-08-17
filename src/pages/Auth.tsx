@@ -97,12 +97,10 @@ const Auth = () => {
         });
       } else {
         toast({
-          title: "Account created!",
-          description: "Please check your email to verify your account."
+          title: "Welcome!",
+          description: "Your account has been created successfully."
         });
-        // Switch to sign in tab
-        const signInTab = document.querySelector('[value="signin"]') as HTMLElement;
-        signInTab?.click();
+        navigate('/dashboard');
       }
     } catch (error) {
       toast({

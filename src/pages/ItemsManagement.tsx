@@ -64,30 +64,44 @@ const ItemsManagement = () => {
   });
 
   useEffect(() => {
-    if (organization) {
+    console.log('ItemsManagement - user/organization changed:', { user: !!user, organization: !!organization, orgLoading });
+    if (user && organization) {
       fetchItems();
-    } else if (!orgLoading) {
+    } else if (!orgLoading && !user) {
+      console.log('ItemsManagement - No user, setting loading to false');
       setLoading(false);
     }
-  }, [organization, orgLoading]);
+  }, [user, organization, orgLoading]);
 
   const fetchItems = async () => {
+    if (!user) {
+      console.log('ItemsManagement - No user, cannot fetch items');
+      setLoading(false);
+      return;
+    }
+    
+    console.log('ItemsManagement - fetchItems started for user:', user.id);
     try {
       const { data, error } = await supabase
         .from('builder_items')
         .select('*')
+        .eq('builder_id', user.id)
         .order('category', { ascending: true })
         .order('name', { ascending: true });
 
+      console.log('ItemsManagement - fetchItems result:', { data, error });
       if (error) throw error;
       setItems(data || []);
+      console.log('ItemsManagement - items set:', data?.length || 0, 'items');
     } catch (error: any) {
+      console.error('ItemsManagement - fetchItems error:', error);
       toast({
         title: "Error fetching items",
         description: error.message,
         variant: "destructive"
       });
     } finally {
+      console.log('ItemsManagement - setting loading to false');
       setLoading(false);
     }
   };

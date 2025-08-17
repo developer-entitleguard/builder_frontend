@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useAuth } from "@/hooks/useAuth";
 import { useRegistrations } from "@/hooks/useRegistrations";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -33,6 +34,7 @@ interface ItemsSelectionFormProps {
 }
 
 const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelectionFormProps) => {
+  const { user } = useAuth();
   const { organization } = useOrganization();
   const { updateRegistration } = useRegistrations();
   const { toast } = useToast();
@@ -42,29 +44,45 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (organization) {
+    console.log('ItemsSelectionForm - user/organization changed:', { user: !!user, organization: !!organization });
+    if (user && organization) {
       fetchAvailableItems();
+    } else {
+      console.log('ItemsSelectionForm - No user or organization, setting loading to false');
+      setLoading(false);
     }
-  }, [organization]);
+  }, [user, organization]);
 
   const fetchAvailableItems = async () => {
+    if (!user) {
+      console.log('ItemsSelectionForm - No user, cannot fetch items');
+      setLoading(false);
+      return;
+    }
+    
+    console.log('ItemsSelectionForm - fetchAvailableItems started for user:', user.id);
     try {
       const { data, error } = await supabase
         .from('builder_items')
         .select('*')
+        .eq('builder_id', user.id)
         .eq('status', 'active')
         .order('category', { ascending: true })
         .order('name', { ascending: true });
 
+      console.log('ItemsSelectionForm - fetchAvailableItems result:', { data, error });
       if (error) throw error;
       setAvailableItems(data || []);
+      console.log('ItemsSelectionForm - availableItems set:', data?.length || 0, 'items');
     } catch (error: any) {
+      console.error('ItemsSelectionForm - fetchAvailableItems error:', error);
       toast({
         title: "Error fetching items",
         description: error.message,
         variant: "destructive"
       });
     } finally {
+      console.log('ItemsSelectionForm - setting loading to false');
       setLoading(false);
     }
   };

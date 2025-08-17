@@ -44,14 +44,14 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    console.log('ItemsSelectionForm - user/organization changed:', { user: !!user, organization: !!organization });
-    if (user && organization) {
+    console.log('ItemsSelectionForm - user changed:', { user: !!user });
+    if (user) {
       fetchAvailableItems();
     } else {
-      console.log('ItemsSelectionForm - No user or organization, setting loading to false');
+      console.log('ItemsSelectionForm - No user, setting loading to false');
       setLoading(false);
     }
-  }, [user, organization]);
+  }, [user]);
 
   const fetchAvailableItems = async () => {
     if (!user) {

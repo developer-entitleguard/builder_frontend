@@ -26,7 +26,11 @@ const Index = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
-              <Building2 className="h-8 w-8 text-primary mr-3" />
+              <img 
+                src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
+                alt="Entitle Guard for Builders Logo" 
+                className="h-8 w-8 rounded mr-3"
+              />
               <div>
                 <h1 className="text-xl font-semibold text-foreground">Entitle Guard for Builders</h1>
                 <p className="text-sm text-muted-foreground">Handover Made Simple. Entitlements Made Clear</p>

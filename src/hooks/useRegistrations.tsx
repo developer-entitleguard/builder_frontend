@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 interface RegistrationData {
   customer_name: string;
@@ -19,6 +20,7 @@ interface RegistrationData {
 
 export const useRegistrations = () => {
   const { organization } = useOrganization();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [registrations, setRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +54,8 @@ export const useRegistrations = () => {
   const createRegistration = async (data: RegistrationData) => {
     const registrationData = {
       ...data,
-      status: 'draft'
+      status: 'draft',
+      builder_id: user?.id
     };
 
     const { data: result, error } = await supabase

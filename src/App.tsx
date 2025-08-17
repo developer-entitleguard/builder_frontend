@@ -9,7 +9,6 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
 import ItemsManagement from "./pages/ItemsManagement";
-import ItemsManagementTest from "./pages/ItemsManagementTest";
 import QueriesManagement from "./pages/QueriesManagement";
 import RegistrationDetail from "./pages/RegistrationDetail";
 import Admin from "./pages/Admin";
@@ -20,11 +19,20 @@ const queryClient = new QueryClient();
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   
+  console.log('ProtectedRoute - Auth state:', { user: !!user, loading });
+  
   if (loading) {
+    console.log('ProtectedRoute - Showing loading');
     return <div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>;
   }
   
-  return user ? <>{children}</> : <Navigate to="/auth" replace />;
+  if (!user) {
+    console.log('ProtectedRoute - No user, redirecting to auth');
+    return <Navigate to="/auth" replace />;
+  }
+  
+  console.log('ProtectedRoute - User authenticated, rendering children');
+  return <>{children}</>;
 };
 
 const App = () => (
@@ -49,7 +57,7 @@ const App = () => (
             } />
             <Route path="/items" element={
               <ProtectedRoute>
-                <ItemsManagementTest />
+                <ItemsManagement />
               </ProtectedRoute>
             } />
             <Route path="/queries" element={

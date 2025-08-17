@@ -43,6 +43,7 @@ const categories = [
 ];
 
 const ItemsManagement = () => {
+  console.log('ItemsManagement - Component initialized');
   const { user } = useAuth();
   const { organization, loading: orgLoading } = useOrganization();
   const { toast } = useToast();

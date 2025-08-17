@@ -26,6 +26,7 @@ interface BuilderItem {
   price: number | null;
   documentation_url: string | null;
   notes: string | null;
+  purchaser: string | null;
 }
 
 const categories = [
@@ -58,7 +59,8 @@ const ItemsManagement = () => {
     description: "",
     price: "",
     documentation_url: "",
-    notes: ""
+    notes: "",
+    purchaser: ""
   });
 
   useEffect(() => {
@@ -100,7 +102,8 @@ const ItemsManagement = () => {
       description: "",
       price: "",
       documentation_url: "",
-      notes: ""
+      notes: "",
+      purchaser: ""
     });
     setEditingItem(null);
   };
@@ -123,7 +126,8 @@ const ItemsManagement = () => {
         description: formData.description || null,
         price: formData.price ? parseFloat(formData.price) : null,
         documentation_url: formData.documentation_url || null,
-        notes: formData.notes || null
+        notes: formData.notes || null,
+        purchaser: formData.purchaser || null
       };
 
       if (editingItem) {
@@ -166,7 +170,8 @@ const ItemsManagement = () => {
       description: item.description || "",
       price: item.price?.toString() || "",
       documentation_url: item.documentation_url || "",
-      notes: item.notes || ""
+      notes: item.notes || "",
+      purchaser: item.purchaser || ""
     });
     setDialogOpen(true);
   };
@@ -323,15 +328,26 @@ const ItemsManagement = () => {
                     />
                   </div>
                 </div>
-                <div>
-                  <Label htmlFor="documentation_url">Documentation URL</Label>
-                  <Input
-                    id="documentation_url"
-                    type="url"
-                    value={formData.documentation_url}
-                    onChange={(e) => setFormData({ ...formData, documentation_url: e.target.value })}
-                    placeholder="https://..."
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="documentation_url">Documentation URL</Label>
+                    <Input
+                      id="documentation_url"
+                      type="url"
+                      value={formData.documentation_url}
+                      onChange={(e) => setFormData({ ...formData, documentation_url: e.target.value })}
+                      placeholder="https://..."
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="purchaser">Purchaser</Label>
+                    <Input
+                      id="purchaser"
+                      value={formData.purchaser}
+                      onChange={(e) => setFormData({ ...formData, purchaser: e.target.value })}
+                      placeholder="Who purchases this item"
+                    />
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="notes">Notes</Label>
@@ -372,16 +388,17 @@ const ItemsManagement = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Make</TableHead>
-                        <TableHead>Brand</TableHead>
-                        <TableHead>Model</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Make</TableHead>
+                          <TableHead>Brand</TableHead>
+                          <TableHead>Model</TableHead>
+                          <TableHead>Purchaser</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
                     <TableBody>
                       {categoryItems.map((item) => (
                         <TableRow key={item.id}>
@@ -389,6 +406,7 @@ const ItemsManagement = () => {
                           <TableCell>{item.make || "-"}</TableCell>
                           <TableCell>{item.brand || "-"}</TableCell>
                           <TableCell>{item.model || "-"}</TableCell>
+                          <TableCell>{item.purchaser || "-"}</TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
                               <Button variant="outline" size="sm" onClick={() => handleEdit(item)}>

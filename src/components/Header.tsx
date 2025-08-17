@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -7,6 +7,7 @@ import { Building2, LogOut, LayoutDashboard } from "lucide-react";
 const Header = () => {
   const { user, signOut } = useAuth();
   const { isAdmin } = useOrganization();
+  const location = useLocation();
 
   return (
     <header className="bg-card border-b border-border shadow-soft">
@@ -26,7 +27,10 @@ const Header = () => {
           
           {user && (
             <div className="flex items-center space-x-4">
-              <Button asChild className="bg-primary hover:bg-primary/90">
+              <Button 
+                asChild 
+                className={location.pathname === '/dashboard' ? "bg-primary hover:bg-primary/90" : "bg-secondary hover:bg-secondary/90"}
+              >
                 <Link to="/dashboard">
                   <LayoutDashboard className="h-4 w-4 mr-2" />
                   Dashboard
@@ -34,17 +38,33 @@ const Header = () => {
               </Button>
               
               <nav className="flex space-x-2">
-                <Button variant="ghost" size="sm" asChild>
+                <Button 
+                  variant={location.pathname === '/onboarding' ? "default" : "ghost"} 
+                  size="sm" 
+                  asChild
+                >
                   <Link to="/onboarding">New Registration</Link>
                 </Button>
-                <Button variant="ghost" size="sm" asChild>
+                <Button 
+                  variant={location.pathname === '/items' ? "default" : "ghost"} 
+                  size="sm" 
+                  asChild
+                >
                   <Link to="/items">Items</Link>
                 </Button>
-                <Button variant="ghost" size="sm" asChild>
+                <Button 
+                  variant={location.pathname === '/queries' ? "default" : "ghost"} 
+                  size="sm" 
+                  asChild
+                >
                   <Link to="/queries">Queries</Link>
                 </Button>
                 {isAdmin && (
-                  <Button variant="ghost" size="sm" asChild>
+                  <Button 
+                    variant={location.pathname === '/admin' ? "default" : "ghost"} 
+                    size="sm" 
+                    asChild
+                  >
                     <Link to="/admin">Admin</Link>
                   </Button>
                 )}

@@ -21,21 +21,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
+    console.log('useAuth - Setting up auth listener');
+    
+    // Get initial session first
+    const getInitialSession = async () => {
+      console.log('useAuth - Getting initial session');
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('useAuth - Initial session:', !!session);
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    };
+
+    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('useAuth - Auth state changed:', event, !!session);
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
       }
     );
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    getInitialSession();
 
     return () => subscription.unsubscribe();
   }, []);

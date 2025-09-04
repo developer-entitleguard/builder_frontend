@@ -8,9 +8,22 @@ import { Upload, FileText, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
+interface BuilderItem {
+  id: string;
+  name: string;
+  category: string;
+  brand?: string;
+  model?: string;
+}
+
+interface FormData {
+  documents: Record<string, string[]>;
+  itemDetails: Record<string, { seller: string; serialNumber: string }>;
+}
+
 interface DocumentUploadFormProps {
-  onNext: (data: any) => void;
-  initialData?: any;
+  onNext: (data: FormData) => void;
+  initialData?: FormData;
   selectedItems?: string[];
 }
 
@@ -18,7 +31,7 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
   const { toast } = useToast();
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>(initialData?.documents || {});
   const [itemDetails, setItemDetails] = useState<Record<string, { seller: string; serialNumber: string }>>(initialData?.itemDetails || {});
-  const [availableItems, setAvailableItems] = useState<any[]>([]);
+  const [availableItems, setAvailableItems] = useState<BuilderItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -43,10 +56,10 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
 
       if (error) throw error;
       setAvailableItems(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error fetching selected items",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'An error occurred',
         variant: "destructive"
       });
     } finally {
@@ -61,14 +74,15 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
     }
     acc[item.category].push(item);
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {} as Record<string, BuilderItem[]>);
 
   const handleDetailChange = (itemId: string, field: 'seller' | 'serialNumber', value: string) => {
-    const key = itemId;
     setItemDetails(prev => ({
       ...prev,
-      [key]: {
-        ...prev[key],
+      [itemId]: {
+        seller: '',
+        serialNumber: '',
+        ...prev[itemId],
         [field]: value
       }
     }));
@@ -135,7 +149,7 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
         </Card>
       ) : (
         <div className="grid gap-6">
-          {Object.entries(groupedItems).map(([category, items]: [string, any[]]) => (
+          {Object.entries(groupedItems).map(([category, items]: [string, BuilderItem[]]) => (
           <Card key={category}>
             <CardHeader>
               <CardTitle className="text-lg">{category}</CardTitle>
@@ -145,7 +159,7 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
             </CardHeader>
             <CardContent>
               <div className="grid gap-6">
-                {items.map((item: any) => {
+                {items.map((item: BuilderItem) => {
                   const key = `${category}-${item.name}`;
                   const docs = uploadedDocs[key] || [];
                   const hasUploads = docs.length > 0;

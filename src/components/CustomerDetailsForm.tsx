@@ -10,9 +10,24 @@ import { useRegistrations } from "@/hooks/useRegistrations";
 import { useToast } from "@/hooks/use-toast";
 import { australianStates, validateAustralianPhone, formatAustralianPhone, validateAustralianPostcode, validateEmail } from "@/utils/validation";
 
+interface CustomerFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  propertyAddress: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  projectName: string;
+  settlementDate: string;
+  notes: string;
+  registrationId?: string;
+}
+
 interface CustomerDetailsFormProps {
-  onNext: (data: any) => void;
-  initialData?: any;
+  onNext: (data: CustomerFormData) => void;
+  initialData?: Partial<CustomerFormData>;
 }
 
 const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) => {
@@ -107,10 +122,10 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
       });
       
       onNext({ ...formData, registrationId: registration.id });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error saving customer details",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'An error occurred',
         variant: "destructive"
       });
     } finally {

@@ -8,15 +8,44 @@ import { User, Home, FileText, Building, CheckCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+interface BuilderItem {
+  id: string;
+  name: string;
+  category: string;
+  brand?: string;
+  model?: string;
+}
+
+interface FormData {
+  customer: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    propertyAddress?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    projectName?: string;
+    settlementDate?: string;
+    notes?: string;
+    registrationId?: string;
+  };
+  items: {
+    selected_items: string[];
+  };
+  documents: Record<string, string[]>;
+}
+
 interface ReviewApprovalFormProps {
   onNext: () => void;
-  formData?: any;
+  formData?: FormData;
 }
 
 const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
   const [approved, setApproved] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<any[]>([]);
+  const [selectedItems, setSelectedItems] = useState<BuilderItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,10 +70,10 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
 
       if (error) throw error;
       setSelectedItems(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error fetching selected items",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'An error occurred',
         variant: "destructive"
       });
     } finally {
@@ -57,14 +86,14 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
 
   // Count total uploaded documents
   const getTotalDocuments = () => {
-    return Object.values(uploadedDocs).reduce((total: number, docs: any) => total + (Array.isArray(docs) ? docs.length : 0), 0);
+    return Object.values(uploadedDocs).reduce((total: number, docs: string[]) => total + docs.length, 0);
   };
 
   const groupedItems = selectedItems.reduce((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
     acc[item.category].push(item);
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {} as Record<string, BuilderItem[]>);
 
   if (loading) {
     return (
@@ -96,26 +125,26 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="font-medium">Name</p>
-              <p className="text-muted-foreground">{customerData.customer_name || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.firstName && customerData.lastName ? `${customerData.firstName} ${customerData.lastName}` : 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Email</p>
-              <p className="text-muted-foreground">{customerData.customer_email || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.email || 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Phone</p>
-              <p className="text-muted-foreground">{customerData.customer_phone || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.phone || 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Settlement Date</p>
-              <p className="text-muted-foreground">{customerData.settlement_date || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.settlementDate || 'Not provided'}</p>
             </div>
           </div>
           <div>
             <p className="font-medium">Property Address</p>
             <p className="text-muted-foreground">
-              {customerData.property_address && customerData.property_city && customerData.property_state 
-                ? `${customerData.property_address}, ${customerData.property_city}, ${customerData.property_state} ${customerData.property_zip || ''}`
+              {customerData.propertyAddress && customerData.city && customerData.state 
+                ? `${customerData.propertyAddress}, ${customerData.city}, ${customerData.state} ${customerData.zipCode || ''}`
                 : 'Not provided'
               }
             </p>
@@ -152,10 +181,10 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
                 <div key={category}>
                   <h4 className="font-semibold mb-3">{category}</h4>
                   <div className="space-y-2">
-                    {(items as any[]).map((item, index) => {
+                    {items.map((item, index) => {
                       const itemKey = `${category}-${item.name}`;
-                      const itemDocs = (uploadedDocs as any)[itemKey] || [];
-                      const hasDocuments = Array.isArray(itemDocs) && itemDocs.length > 0;
+                      const itemDocs = uploadedDocs[itemKey] || [];
+                      const hasDocuments = itemDocs.length > 0;
                       
                       return (
                         <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
@@ -170,7 +199,7 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
                               )}
                               {hasDocuments && (
                                 <p className="text-xs text-green-600">
-                                  {(itemDocs as any[]).length} document{(itemDocs as any[]).length !== 1 ? 's' : ''} uploaded
+                                  {itemDocs.length} document{itemDocs.length !== 1 ? 's' : ''} uploaded
                                 </p>
                               )}
                             </div>
@@ -205,7 +234,7 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {(getTotalDocuments() as number) > 0 ? (
+          {getTotalDocuments() > 0 ? (
             <div className="flex items-center space-x-2 text-green-600">
               <CheckCircle className="w-5 h-5" />
               <span className="font-medium">Documents uploaded</span>
@@ -217,7 +246,7 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
             </div>
           )}
           <p className="text-sm text-muted-foreground mt-2">
-            {getTotalDocuments() as number} document{(getTotalDocuments() as number) !== 1 ? 's' : ''} ready for delivery
+            {getTotalDocuments()} document{getTotalDocuments() !== 1 ? 's' : ''} ready for delivery
           </p>
         </CardContent>
       </Card>

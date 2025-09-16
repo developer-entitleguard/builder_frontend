@@ -13,17 +13,27 @@ export interface SignInRequest {
 }
 
 export interface AuthResponse {
-  user: {
+  success: boolean;
+  message: string;
+  data: {
     id: string;
-    email: string;
-    company_name: string;
-    contact_person: string;
-    phone: string;
-  };
-  session: {
-    access_token: string;
-    refresh_token: string;
-    expires_at: number;
+    jwt: string;
+    customer: unknown;
+    userInfo: {
+      id: string;
+      name: string;
+      email: string;
+      contact: string;
+      source: {
+        id: string;
+        name: string;
+        code: string;
+      };
+    };
+    type: unknown;
+    logged: string;
+    createdAt: string;
+    loggedOutTime: string | null;
   };
 }
 
@@ -60,7 +70,7 @@ export interface RecentActivity {
 export interface FilterOptions {
   statuses: string[];
   categories: string[];
-  organizations: any[];
+  organizations: unknown[];
   date_ranges: {
     label: string;
     value: string;
@@ -137,8 +147,8 @@ export interface HomeownerRegistration extends BaseEntity {
   registration_number: string;
   status: 'pending' | 'approved' | 'rejected' | 'completed';
   organization_id: string;
-  selected_items?: any;
-  documents?: any;
+  selected_items?: unknown;
+  documents?: unknown;
   notes?: string;
   approved_by?: string;
   approved_at?: string;
@@ -152,8 +162,8 @@ export interface CreateRegistrationRequest {
   property_address: string;
   property_type: string;
   organization_id: string;
-  selected_items?: any;
-  documents?: any;
+  selected_items?: unknown;
+  documents?: unknown;
   notes?: string;
 }
 
@@ -164,8 +174,8 @@ export interface UpdateRegistrationRequest {
   property_address?: string;
   property_type?: string;
   status?: 'pending' | 'approved' | 'rejected' | 'completed';
-  selected_items?: any;
-  documents?: any;
+  selected_items?: unknown;
+  documents?: unknown;
   notes?: string;
   approved_by?: string;
   approved_at?: string;

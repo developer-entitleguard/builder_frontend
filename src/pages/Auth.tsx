@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useSignInMutation } from '@/store/api/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +19,8 @@ const Auth = () => {
     password: '',
     confirmPassword: ''
   });
-  const { signIn, signUp, resetPassword, updatePassword } = useAuth();
+  const { signUp, resetPassword, updatePassword, setApiUser } = useAuth();
+  const [signInMutation, { isLoading: isSignInLoading }] = useSignInMutation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
@@ -48,25 +50,35 @@ const Auth = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await signIn(signInData.email, signInData.password);
+      const result = await signInMutation({
+        email: signInData.email,
+        password: signInData.password
+      }).unwrap();
       
-      if (error) {
-        toast({
-          title: "Sign in failed",
-          description: error.message,
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Welcome back!",
-          description: "You have been signed in successfully."
-        });
-        navigate('/dashboard');
+      // Set the user in auth context for navigation
+      if (result.data?.userInfo) {
+        setApiUser(result.data.userInfo);
       }
-    } catch (error) {
+      
+      toast({
+        title: "Welcome back!",
+        description: "You have been signed in successfully."
+      });
+      navigate('/dashboard');
+    } catch (error: unknown) {
+      let errorMessage = "An unexpected error occurred.";
+      
+      if (error && typeof error === 'object') {
+        if ('data' in error && error.data && typeof error.data === 'object' && 'message' in error.data) {
+          errorMessage = String(error.data.message);
+        } else if ('message' in error) {
+          errorMessage = String(error.message);
+        }
+      }
+      
       toast({
         title: "Sign in failed",
-        description: "An unexpected error occurred.",
+        description: errorMessage || "An unexpected error occurred.",
         variant: "destructive"
       });
     } finally {
@@ -92,7 +104,7 @@ const Auth = () => {
       if (error) {
         toast({
           title: "Sign up failed",
-          description: error.message,
+          description: error instanceof Error ? error.message : "An unexpected error occurred.",
           variant: "destructive"
         });
       } else {
@@ -123,7 +135,7 @@ const Auth = () => {
       if (error) {
         toast({
           title: "Error",
-          description: error.message,
+          description: error instanceof Error ? error.message : "An unexpected error occurred.",
           variant: "destructive"
         });
       } else {
@@ -165,7 +177,7 @@ const Auth = () => {
       if (error) {
         toast({
           title: "Error updating password",
-          description: error.message,
+          description: error instanceof Error ? error.message : "An unexpected error occurred.",
           variant: "destructive"
         });
       } else {
@@ -329,8 +341,8 @@ const Auth = () => {
                       />
                     </div>
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Signing in..." : "Sign In"}
+                  <Button type="submit" className="w-full" disabled={isLoading || isSignInLoading}>
+                    {isLoading || isSignInLoading ? "Signing in..." : "Sign In"}
                   </Button>
                   <div className="text-center">
                     <Button 

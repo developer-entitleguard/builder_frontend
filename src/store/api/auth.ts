@@ -10,9 +10,9 @@ import type {
 export const authApi = api.injectEndpoints({
   endpoints: (build) => ({
     // Get current user profile
-    getProfile: build.query<AuthResponse['user'], void>({
+    getProfile: build.query<AuthResponse['data']['userInfo'], void>({
       query: () => ({
-        url: '/auth/profile',
+        url: '/profile',
         method: 'GET',
       }),
       providesTags: ['Auth'],
@@ -21,7 +21,7 @@ export const authApi = api.injectEndpoints({
     // Sign up
     signUp: build.mutation<AuthResponse, SignUpRequest>({
       query: (data) => ({
-        url: '/auth/signup',
+        url: '/signup',
         method: 'POST',
         body: data,
       }),
@@ -31,7 +31,7 @@ export const authApi = api.injectEndpoints({
     // Sign in
     signIn: build.mutation<AuthResponse, SignInRequest>({
       query: (data) => ({
-        url: '/auth/signin',
+        url: '/unsecure/builderlogin',
         method: 'POST',
         body: data,
       }),
@@ -41,7 +41,7 @@ export const authApi = api.injectEndpoints({
     // Sign out
     signOut: build.mutation<void, void>({
       query: () => ({
-        url: '/auth/signout',
+        url: '/signout',
         method: 'POST',
       }),
       invalidatesTags: ['Auth'],
@@ -50,7 +50,7 @@ export const authApi = api.injectEndpoints({
     // Reset password
     resetPassword: build.mutation<{ message: string }, ResetPasswordRequest>({
       query: (data) => ({
-        url: '/auth/reset-password',
+        url: '/reset-password',
         method: 'POST',
         body: data,
       }),
@@ -59,7 +59,7 @@ export const authApi = api.injectEndpoints({
     // Update password
     updatePassword: build.mutation<{ message: string }, UpdatePasswordRequest>({
       query: (data) => ({
-        url: '/auth/update-password',
+        url: '/update-password',
         method: 'PATCH',
         body: data,
       }),
@@ -68,7 +68,7 @@ export const authApi = api.injectEndpoints({
     // Verify email
     verifyEmail: build.mutation<{ message: string }, { token: string }>({
       query: (data) => ({
-        url: '/auth/verify-email',
+        url: '/verify-email',
         method: 'POST',
         body: data,
       }),
@@ -77,16 +77,16 @@ export const authApi = api.injectEndpoints({
     // Resend verification
     resendVerification: build.mutation<{ message: string }, { email: string }>({
       query: (data) => ({
-        url: '/auth/resend-verification',
+        url: '/resend-verification',
         method: 'POST',
         body: data,
       }),
     }),
 
     // Update profile
-    updateProfile: build.mutation<AuthResponse['user'], Partial<AuthResponse['user']>>({
+    updateProfile: build.mutation<AuthResponse['data']['userInfo'], Partial<AuthResponse['data']['userInfo']>>({
       query: (data) => ({
-        url: '/auth/profile',
+        url: '/profile',
         method: 'PATCH',
         body: data,
       }),

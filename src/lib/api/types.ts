@@ -46,6 +46,10 @@ export interface UpdatePasswordRequest {
   new_password: string;
 }
 
+export interface ResetPasswordWithTokenRequest {
+  password: string;
+}
+
 export interface DashboardStats {
   total_registrations: number;
   pending_registrations: number;

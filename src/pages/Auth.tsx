@@ -58,6 +58,12 @@ const Auth = () => {
       // Set the user in auth context for navigation
       if (result.data?.userInfo) {
         setApiUser(result.data.userInfo);
+        localStorage.setItem('userData', JSON.stringify({
+          userInfo: result.data.userInfo,
+          jwt: result.data.jwt,
+          logged: result.data.logged,
+          createdAt: result.data.createdAt
+        }));
       }
       
       toast({
@@ -108,6 +114,19 @@ const Auth = () => {
           variant: "destructive"
         });
       } else {
+        localStorage.setItem('userData', JSON.stringify({
+          userInfo: {
+            name: signUpData.contactPerson,
+            email: signUpData.email,
+            contact: signUpData.phone,
+            source: {
+              name: signUpData.companyName
+            }
+          },
+          logged: new Date().toISOString(),
+          createdAt: new Date().toISOString()
+        }));
+        
         toast({
           title: "Welcome!",
           description: "Your account has been created successfully."

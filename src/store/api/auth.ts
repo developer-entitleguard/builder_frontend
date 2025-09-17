@@ -4,7 +4,8 @@ import type {
   SignInRequest, 
   AuthResponse, 
   ResetPasswordRequest, 
-  UpdatePasswordRequest 
+  UpdatePasswordRequest,
+  ResetPasswordWithTokenRequest
 } from '@/lib/api/types';
 
 export const authApi = api.injectEndpoints({
@@ -47,10 +48,10 @@ export const authApi = api.injectEndpoints({
       invalidatesTags: ['Auth'],
     }),
 
-    // Reset password
-    resetPassword: build.mutation<{ message: string }, ResetPasswordRequest>({
+    // Reset password with token
+    resetPasswordWithToken: build.mutation<{ message: string }, ResetPasswordWithTokenRequest>({
       query: (data) => ({
-        url: '/reset-password',
+        url: '/unsecure/resetpassword',
         method: 'POST',
         body: data,
       }),
@@ -100,7 +101,7 @@ export const {
   useSignUpMutation,
   useSignInMutation,
   useSignOutMutation,
-  useResetPasswordMutation,
+  useResetPasswordWithTokenMutation,
   useUpdatePasswordMutation,
   useVerifyEmailMutation,
   useResendVerificationMutation,

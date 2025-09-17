@@ -24,6 +24,7 @@ interface AuthContextType {
   resetPassword: (email: string) => Promise<{ error: unknown }>;
   updatePassword: (password: string) => Promise<{ error: unknown }>;
   setApiUser: (user: ApiUser | null) => void;
+  getUserFromStorage: () => ApiUser | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -35,10 +36,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     console.log('useAuth - Setting up auth listener');
-    
+    const checkLocalStorage = () => {
+      try {
+        const storedUserData = localStorage.getItem('userData');
+        if (storedUserData) {
+          const userData = JSON.parse(storedUserData);
+          if (userData.userInfo) {
+            console.log('useAuth - Found user data in localStorage');
+            setUser(userData.userInfo);
+            setLoading(false);
+            return true;
+          }
+        }
+      } catch (error) {
+        console.error('useAuth - Error parsing localStorage data:', error);
+        localStorage.removeItem('userData');
+      }
+      return false; // No valid user data found
+    };
+
     // Get initial session first
     const getInitialSession = async () => {
       console.log('useAuth - Getting initial session');
+      
+      // Check localStorage first
+      if (checkLocalStorage()) {
+        return; // User data found in localStorage, skip Supabase
+      }
+      
       const { data: { session } } = await supabase.auth.getSession();
       console.log('useAuth - Initial session:', !!session);
       setSession(session);
@@ -87,6 +112,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
+    localStorage.removeItem('userData');
   };
 
   const resetPassword = async (email: string) => {
@@ -110,6 +136,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setLoading(false);
   };
 
+  const getUserFromStorage = (): ApiUser | null => {
+    try {
+      const storedUserData = localStorage.getItem('userData');
+      if (storedUserData) {
+        const userData = JSON.parse(storedUserData);
+        return userData.userInfo || null;
+      }
+    } catch (error) {
+      console.error('Error getting user from localStorage:', error);
+      localStorage.removeItem('userData');
+    }
+    return null;
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -120,7 +160,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       signOut,
       resetPassword,
       updatePassword,
-      setApiUser
+      setApiUser,
+      getUserFromStorage
     }}>
       {children}
     </AuthContext.Provider>

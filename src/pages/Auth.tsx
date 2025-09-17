@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Building2, Mail, Lock, User, Phone } from 'lucide-react';
+import { Building2, Mail, Lock, User, Phone, Eye, EyeOff } from 'lucide-react';
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -29,6 +29,7 @@ const Auth = () => {
     email: '',
     password: ''
   });
+  const [showSignInPassword, setShowSignInPassword] = useState(false);
 
   const [signUpData, setSignUpData] = useState({
     email: '',
@@ -347,17 +348,30 @@ const Auth = () => {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="signin-password">Password</Label>
-                    <div className="relative">
+                  <div className="relative">
                       <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
+                    <Input
                         id="signin-password"
-                        type="password"
-                        placeholder="Your password"
-                        className="pl-10"
+                      type={showSignInPassword ? "text" : "password"}
+                      placeholder="Your password"
+                      className="pl-10 pr-10"
                         value={signInData.password}
                         onChange={(e) => setSignInData(prev => ({ ...prev, password: e.target.value }))}
                         required
                       />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowSignInPassword(!showSignInPassword)}
+                    >
+                      {showSignInPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
                     </div>
                   </div>
                   <Button type="submit" className="w-full" disabled={isLoading || isSignInLoading}>

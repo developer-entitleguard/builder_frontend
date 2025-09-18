@@ -36,6 +36,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     console.log('useAuth - Setting up auth listener');
+    
     const checkLocalStorage = () => {
       try {
         const storedUserData = localStorage.getItem('userData');
@@ -59,11 +60,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const getInitialSession = async () => {
       console.log('useAuth - Getting initial session');
       
-      // Check localStorage first
+      // Check localStorage first - this should be synchronous
       if (checkLocalStorage()) {
         return; // User data found in localStorage, skip Supabase
       }
       
+      // Only check Supabase if no localStorage data
       const { data: { session } } = await supabase.auth.getSession();
       console.log('useAuth - Initial session:', !!session);
       setSession(session);
@@ -75,8 +77,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('useAuth - Auth state changed:', event, !!session);
-        setSession(session);
-        setUser(session?.user ?? null);
+        // Only update if we don't have localStorage data
+        const hasLocalStorageData = localStorage.getItem('userData');
+        if (!hasLocalStorageData) {
+          setSession(session);
+          setUser(session?.user ?? null);
+        }
         setLoading(false);
       }
     );

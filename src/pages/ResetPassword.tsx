@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useResetPasswordWithTokenMutation } from '@/store/api/auth';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSetPasswordForUserMutation } from '@/store/api/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,9 +15,28 @@ const ResetPassword = () => {
     password: '',
     confirmPassword: ''
   });
-  const [resetPasswordWithToken, { isLoading }] = useResetPasswordWithTokenMutation();
+  const [setPasswordForUser, { isLoading }] = useSetPasswordForUserMutation();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token') || '';
+  const getEmailFromToken = (token: string): string => {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      const payload = JSON.parse(jsonPayload);
+      return payload.mail || payload.email || '';
+    } catch (error) {
+      console.error('Error decoding token:', error);
+      return '';
+    }
+  };
+  
+  const email = getEmailFromToken(token);
+  console.log('Extracted email from token:', email);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,9 +59,33 @@ const ResetPassword = () => {
       return;
     }
 
+    // Validate required URL parameters
+    if (!token) {
+      toast({
+        title: "Invalid reset link",
+        description: "Please use the reset link sent to your email.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!email) {
+      toast({
+        title: "Invalid token",
+        description: "Unable to extract email from reset link. Please request a new reset link.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
-      const result = await resetPasswordWithToken({
-        password: passwordData.password
+      const result = await setPasswordForUser({
+        contact: '',
+        email: email,
+        loginType: 'email',
+        otp: '',
+        password: passwordData.password,
+        token: token
       }).unwrap();
 
       toast({
@@ -85,7 +128,7 @@ const ResetPassword = () => {
           <CardHeader>
             <CardTitle>Reset Password</CardTitle>
             <CardDescription>
-              Enter your new password below to complete the reset process
+              {email ? `Enter your new password for ${email}` : 'Enter your new password below to complete the reset process'}
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
-import { supabase } from "@/integrations/supabase/client";
+import { useGetItemsByBuilderQuery, useCreateItemMutation, useUpdateItemMutation, useDeleteItemMutation } from "@/store/api/items";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,16 +17,20 @@ import Header from "@/components/Header";
 
 interface BuilderItem {
   id: string;
+  sourceId: string | null;
   name: string;
-  category: string;
+  category: string | null;
   make: string | null;
   brand: string | null;
   model: string | null;
-  description: string | null;
-  price: number | null;
-  documentation_url: string | null;
-  notes: string | null;
+  text: string | null;
+  documentationUrl: string | null;
+  status: string;
   purchaser: string | null;
+  description?: string | null;
+  price?: number | null;
+  documentation_url?: string | null;
+  notes?: string | null;
 }
 
 const categories = [
@@ -63,52 +67,51 @@ const ItemsManagement = () => {
     notes: "",
     purchaser: ""
   });
+  const builderId = user && 'source' in user ? (user as { source: { id: string } }).source?.id : null;
+  
+  const { data: apiResponse, isLoading: apiLoading, error: apiError } = useGetItemsByBuilderQuery(
+    builderId || '',
+    { skip: !builderId }
+  );
+
+  const [createItem] = useCreateItemMutation();
+  const [updateItem] = useUpdateItemMutation();
+  const [deleteItem] = useDeleteItemMutation();
+
+  useEffect(() => {
+    if (apiResponse && apiResponse.success) {
+      const allItems: BuilderItem[] = [];
+      apiResponse.data.forEach(categoryGroup => {
+        categoryGroup.items.forEach(item => {
+          allItems.push({
+            ...item,
+            category: categoryGroup.category
+          });
+        });
+      });
+      setItems(allItems);
+      setLoading(false);
+    } else if (apiError) {
+      console.error('ItemsManagement - API error:', apiError);
+      toast({
+        title: "Error fetching items",
+        description: "Failed to load items from the server",
+        variant: "destructive"
+      });
+      setLoading(false);
+    } else if (apiLoading) {
+      setLoading(true);
+    }
+  }, [apiResponse, apiError, apiLoading, toast]);
 
   useEffect(() => {
     console.log('ItemsManagement - user/organization changed:', { user: !!user, organization: !!organization, orgLoading });
-    if (user) {
-      fetchItems();
-    } else if (!user) {
+    if (!user) {
       console.log('ItemsManagement - No user, setting loading to false');
       setLoading(false);
     }
   }, [user, organization, orgLoading]);
 
-  const fetchItems = async () => {
-    if (!user) {
-      console.log('ItemsManagement - No user, cannot fetch items');
-      setLoading(false);
-      return;
-    }
-    
-    console.log('ItemsManagement - fetchItems started for user:', user.id);
-    try {
-      const { data, error } = await supabase
-        .from('builder_items')
-        .select('*')
-        .eq('builder_id', user.id)
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
-
-      console.log('ItemsManagement - fetchItems result:', { data, error, dataLength: data?.length });
-      if (error) {
-        console.error('ItemsManagement - fetchItems error:', error);
-        throw error;
-      }
-      setItems(data || []);
-      console.log('ItemsManagement - items set:', data?.length || 0, 'items');
-    } catch (error: any) {
-      console.error('ItemsManagement - fetchItems error:', error);
-      toast({
-        title: "Error fetching items",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      console.log('ItemsManagement - setting loading to false');
-      setLoading(false);
-    }
-  };
 
   const resetForm = () => {
     setFormData({
@@ -129,7 +132,7 @@ const ItemsManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.category) return;
-    if (!user) {
+    if (!user || !builderId) {
       toast({ title: "Not signed in", description: "Please log in and try again.", variant: "destructive" });
       return;
     }
@@ -145,33 +148,27 @@ const ItemsManagement = () => {
         price: formData.price ? parseFloat(formData.price) : null,
         documentation_url: formData.documentation_url || null,
         notes: formData.notes || null,
-        purchaser: formData.purchaser || null
+        purchaser: formData.purchaser || null,
+        organization_id: builderId
       };
 
       if (editingItem) {
-        const { error } = await supabase
-          .from('builder_items')
-          .update(itemData)
-          .eq('id', editingItem.id);
-
-        if (error) throw error;
+        await updateItem({ id: editingItem.id, data: itemData }).unwrap();
         toast({ title: "Item updated successfully" });
       } else {
-        const { error } = await supabase
-          .from('builder_items')
-          .insert({ ...itemData, builder_id: user.id });
-
-        if (error) throw error;
+        await createItem(itemData).unwrap();
         toast({ title: "Item added successfully" });
       }
 
       setDialogOpen(false);
       resetForm();
-      fetchItems();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error && typeof error === 'object' && 'message' in error 
+        ? String(error.message) 
+        : "Failed to save item";
       toast({
         title: "Error saving item",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive"
       });
     }
@@ -181,13 +178,13 @@ const ItemsManagement = () => {
     setEditingItem(item);
     setFormData({
       name: item.name,
-      category: item.category,
+      category: item.category || "",
       make: item.make || "",
       brand: item.brand || "",
       model: item.model || "",
-      description: item.description || "",
+      description: item.description || item.text || "",
       price: item.price?.toString() || "",
-      documentation_url: item.documentation_url || "",
+      documentation_url: item.documentation_url || item.documentationUrl || "",
       notes: item.notes || "",
       purchaser: item.purchaser || ""
     });
@@ -198,28 +195,26 @@ const ItemsManagement = () => {
     if (!confirm("Are you sure you want to delete this item?")) return;
 
     try {
-      const { error } = await supabase
-        .from('builder_items')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await deleteItem(id).unwrap();
       toast({ title: "Item deleted successfully" });
-      fetchItems();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error && typeof error === 'object' && 'message' in error 
+        ? String(error.message) 
+        : "Failed to delete item";
       toast({
         title: "Error deleting item",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive"
       });
     }
   };
 
   const groupedItems = items.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
+    const category = item.category || 'Uncategorized';
+    if (!acc[category]) {
+      acc[category] = [];
     }
-    acc[item.category].push(item);
+    acc[category].push(item);
     return acc;
   }, {} as Record<string, BuilderItem[]>);
 

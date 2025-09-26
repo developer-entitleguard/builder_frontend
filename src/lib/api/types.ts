@@ -133,21 +133,35 @@ export interface SearchParams {
 }
 
 export interface BuilderItem extends BaseEntity {
+  id: string;
+  sourceId: string | null;
   name: string;
+  category: string | null;
+  make: string | null;
+  brand: string | null;
+  model: string | null;
+  text: string | null;
+  documentationUrl: string | null;
+  status: string;
+  purchaser: string | null;
   description?: string;
-  category: string;
-  price: number;
-  unit: string;
-  is_active: boolean;
-  organization_id: string;
+  price?: number;
+  unit?: string;
+  is_active?: boolean;
+  organization_id?: string;
 }
 
 export interface CreateBuilderItemRequest {
   name: string;
   description?: string;
   category: string;
-  price: number;
-  unit: string;
+  make?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  price?: number | null;
+  documentation_url?: string | null;
+  notes?: string | null;
+  purchaser?: string | null;
   organization_id: string;
 }
 

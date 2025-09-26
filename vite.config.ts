@@ -9,13 +9,27 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 3000,
     proxy: {
-      '^/api': {
+      '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            proxyReq.removeHeader('Origin');
+          });
+        },
       },
-      '^/(unsecure|profile|signup|signout|reset-password|update-password|verify-email|resend-verification)': {
+      '/unsecure': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            proxyReq.removeHeader('Origin');
+          });
+        },
+      },
+      '^/(profile|signup|signout|reset-password|update-password|verify-email|resend-verification)': {
         target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false,

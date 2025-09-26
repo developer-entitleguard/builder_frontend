@@ -95,6 +95,15 @@ export const itemsApi = api.injectEndpoints({
       providesTags: ['Item'],
     }),
 
+    getItemsByBuilder: build.query<{ success: boolean; message: string; data: Array<{ category: string; items: BuilderItem[] }> }, string>({
+      query: (builderId) => ({
+        url: `/api/builder/item`,
+        method: 'GET',
+        params: { builderId },
+      }),
+      providesTags: ['Item'],
+    }),
+
     // Search items
     searchItems: build.query<PaginatedResponse<BuilderItem>, { query: string } & PaginationParams>({
       query: ({ query, ...params }) => ({
@@ -150,6 +159,7 @@ export const {
   useToggleItemStatusMutation,
   useGetItemsByCategoryQuery,
   useGetItemsByOrganizationQuery,
+  useGetItemsByBuilderQuery,
   useLazySearchItemsQuery,
   useGetCategoriesQuery,
   useBulkUpdateItemsMutation,

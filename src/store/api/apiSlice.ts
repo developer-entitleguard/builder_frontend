@@ -5,14 +5,19 @@ import { getApiBaseUrl } from '../../lib/config';
 // Base query with authentication
 const baseQuery = fetchBaseQuery({
   baseUrl: getApiBaseUrl(),
-  prepareHeaders: async (headers) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        headers.set('authorization', `Bearer ${session.access_token}`);
+  prepareHeaders: async (headers, { endpoint }) => {
+    if (!endpoint?.includes('unsecure')) {
+      try {
+        const userData = localStorage.getItem('userData');
+        if (userData) {
+          const parsedData = JSON.parse(userData);
+          if (parsedData.jwt) {
+            headers.set('authorization', `Bearer ${parsedData.jwt}`);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to get JWT token for API request:', error);
       }
-    } catch (error) {
-      console.warn('Failed to get session for API request:', error);
     }
     
     headers.set('Content-Type', 'application/json');
@@ -23,26 +28,12 @@ const baseQuery = fetchBaseQuery({
 
 // Base query with re-authentication
 const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (args, api, extraOptions) => {
-  let result = await baseQuery(args, api, extraOptions);
+  const result = await baseQuery(args, api, extraOptions);
 
   if (result.error && result.error.status === 401) {
-    // Try to refresh the session
-    try {
-      const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
-      
-      if (refreshError || !session) {
-        // Refresh failed, redirect to login
-        await supabase.auth.signOut();
-        window.location.href = '/auth';
-        return result;
-      }
-
-      // Retry the original query with new token
-      result = await baseQuery(args, api, extraOptions);
-    } catch (error) {
-      await supabase.auth.signOut();
-      window.location.href = '/auth';
-    }
+    console.warn('API request failed with 401, redirecting to login');
+    localStorage.removeItem('userData');
+    window.location.href = '/auth';
   }
 
   return result;

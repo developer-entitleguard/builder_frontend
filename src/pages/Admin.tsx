@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,7 +12,8 @@ import { Shield, ArrowLeft, Truck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function Admin() {
-  const { organization, userRole, loading, isAdmin } = useOrganization();
+  const { isAdmin } = useAuth();
+  const { organization, loading } = useOrganization();
   const navigate = useNavigate();
 
   if (loading) {

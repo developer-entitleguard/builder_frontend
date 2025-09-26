@@ -1,12 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { useOrganization } from "@/hooks/useOrganization";
 import { Building2, LogOut, LayoutDashboard } from "lucide-react";
 
 const Header = () => {
-  const { user, signOut } = useAuth();
-  const { isAdmin } = useOrganization();
+  const { user, signOut, isAdmin } = useAuth();
   const location = useLocation();
 
   return (

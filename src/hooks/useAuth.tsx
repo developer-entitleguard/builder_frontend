@@ -4,13 +4,18 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface ApiUser {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string | null;
   email: string;
   contact: string;
+  role: string;
   source: {
     id: string;
     name: string;
     code: string;
+    email: string | null;
+    contact: string | null;
+    address: string | null;
   };
 }
 
@@ -18,6 +23,7 @@ interface AuthContextType {
   user: User | ApiUser | null;
   session: Session | null;
   loading: boolean;
+  isAdmin: boolean;
   signUp: (email: string, password: string, metadata?: unknown) => Promise<{ error: unknown }>;
   signIn: (email: string, password: string) => Promise<{ error: unknown }>;
   signOut: () => Promise<void>;
@@ -33,6 +39,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | ApiUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const isAdmin = (): boolean => {
+    if (!user || 'role' in user === false) return false;
+    return (user as ApiUser).role === 'admin';
+  };
 
   useEffect(() => {
     console.log('useAuth - Setting up auth listener');
@@ -161,6 +172,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       user,
       session,
       loading,
+      isAdmin: isAdmin(),
       signUp,
       signIn,
       signOut,

@@ -21,13 +21,18 @@ export interface AuthResponse {
     customer: unknown;
     userInfo: {
       id: string;
-      name: string;
+      firstName: string;
+      lastName: string | null;
       email: string;
       contact: string;
+      role: string;
       source: {
         id: string;
         name: string;
         code: string;
+        email: string | null;
+        contact: string | null;
+        address: string | null;
       };
     };
     type: unknown;

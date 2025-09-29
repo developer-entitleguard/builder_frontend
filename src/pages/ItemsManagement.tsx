@@ -31,6 +31,7 @@ interface BuilderItem {
   price?: number | null;
   documentation_url?: string | null;
   notes?: string | null;
+  note?: string | null;
 }
 
 const categories = [
@@ -141,15 +142,16 @@ const ItemsManagement = () => {
       const itemData = {
         name: formData.name,
         category: formData.category,
-        make: formData.make || null,
-        brand: formData.brand || null,
-        model: formData.model || null,
-        description: formData.description || null,
-        price: formData.price ? parseFloat(formData.price) : null,
-        documentation_url: formData.documentation_url || null,
-        notes: formData.notes || null,
-        purchaser: formData.purchaser || null,
-        organization_id: builderId
+        make: formData.make || undefined,
+        brand: formData.brand || undefined,
+        model: formData.model || undefined,
+        documentationUrl: formData.documentation_url || undefined,
+        purchaser: formData.purchaser || undefined,
+        sourceId: builderId || undefined,
+        // status: 'ACTIVE',
+        text: formData.description || undefined,
+        note: formData.notes || null,
+        price: formData.price ? parseFloat(formData.price) : null
       };
 
       if (editingItem) {
@@ -185,7 +187,7 @@ const ItemsManagement = () => {
       description: item.description || item.text || "",
       price: item.price?.toString() || "",
       documentation_url: item.documentation_url || item.documentationUrl || "",
-      notes: item.notes || "",
+      notes: item.notes || item.note || "",
       purchaser: item.purchaser || ""
     });
     setDialogOpen(true);

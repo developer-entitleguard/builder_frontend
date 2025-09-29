@@ -33,7 +33,7 @@ export const itemsApi = api.injectEndpoints({
     // Create item
     createItem: build.mutation<BuilderItem, CreateBuilderItemRequest>({
       query: (data) => ({
-        url: '/items',
+        url: '/api/builder/item',
         method: 'POST',
         body: data,
       }),
@@ -43,9 +43,9 @@ export const itemsApi = api.injectEndpoints({
     // Update item
     updateItem: build.mutation<BuilderItem, { id: string; data: UpdateBuilderItemRequest }>({
       query: ({ id, data }) => ({
-        url: `/items/${id}`,
-        method: 'PATCH',
-        body: data,
+        url: '/api/builder/item',
+        method: 'POST',
+        body: { ...data, id },
       }),
       invalidatesTags: (result, error, { id }) => [
         { type: 'Item', id },
@@ -56,7 +56,7 @@ export const itemsApi = api.injectEndpoints({
     // Delete item
     deleteItem: build.mutation<void, string>({
       query: (id) => ({
-        url: `/items/${id}`,
+        url: `/api/builder/item/${id}`,
         method: 'DELETE',
       }),
       invalidatesTags: ['Item'],

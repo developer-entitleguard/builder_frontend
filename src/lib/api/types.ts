@@ -146,23 +146,26 @@ export interface BuilderItem extends BaseEntity {
   purchaser: string | null;
   description?: string;
   price?: number;
+  note?: string | null;
   unit?: string;
   is_active?: boolean;
   organization_id?: string;
 }
 
 export interface CreateBuilderItemRequest {
+  id?: string; // Optional ID for updates
   name: string;
-  description?: string;
   category: string;
-  make?: string | null;
-  brand?: string | null;
-  model?: string | null;
+  brand?: string;
+  make?: string;
+  model?: string;
+  documentationUrl?: string;
+  purchaser?: string;
+  sourceId?: string;
+  status?: string;
+  text?: string;
+  note?: string | null;
   price?: number | null;
-  documentation_url?: string | null;
-  notes?: string | null;
-  purchaser?: string | null;
-  organization_id: string;
 }
 
 export interface UpdateBuilderItemRequest {

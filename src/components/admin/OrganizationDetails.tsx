@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { validatePhone, validateABN } from "@/utils/validation";
 import { Building, Save, Edit } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required"),
@@ -27,13 +28,28 @@ const organizationSchema = z.object({
 type OrganizationFormData = z.infer<typeof organizationSchema>;
 
 interface OrganizationDetailsProps {
-  organization: any;
+  organization: {
+    id?: string;
+    name?: string;
+    address?: string;
+    contact_email?: string;
+    contact_phone?: string;
+    abn?: string;
+    description?: string;
+  } | null;
 }
 
 export function OrganizationDetails({ organization }: OrganizationDetailsProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { getUserFromStorage } = useAuth();
+  
+  const userData = getUserFromStorage();
+  const organizationName = userData?.source?.name  || "";
+  const organizationAddress = (userData?.source?.address as { apt?: string })?.apt || organization?.address || "";
+  const organizationEmail = userData?.source?.email || "";
+  const organizationPhone = userData?.source?.contact  || "";
 
   const form = useForm<OrganizationFormData>({
     resolver: zodResolver(organizationSchema),
@@ -90,7 +106,7 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Building className="h-5 w-5 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">{organization?.name}</h3>
+            <h3 className="text-lg font-semibold">{organizationName}</h3>
           </div>
           <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
             <Edit className="h-4 w-4 mr-2" />
@@ -101,15 +117,15 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div>
             <label className="font-medium text-muted-foreground">Address</label>
-            <p className="mt-1">{organization?.address}</p>
+            <p className="mt-1">{organizationAddress}</p>
           </div>
           <div>
             <label className="font-medium text-muted-foreground">Contact Email</label>
-            <p className="mt-1">{organization?.contact_email}</p>
+            <p className="mt-1">{organizationEmail}</p>
           </div>
           <div>
             <label className="font-medium text-muted-foreground">Contact Phone</label>
-            <p className="mt-1">{organization?.contact_phone}</p>
+            <p className="mt-1">{organizationPhone}</p>
           </div>
           <div>
             <label className="font-medium text-muted-foreground">ABN</label>

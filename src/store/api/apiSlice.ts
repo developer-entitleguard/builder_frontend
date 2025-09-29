@@ -51,7 +51,8 @@ export const api = createApi({
     'Query',
     'Document',
     'Dashboard',
-    'Auth'
+    'Auth',
+    'BuilderUser'
   ],
   endpoints: () => ({}),
 });

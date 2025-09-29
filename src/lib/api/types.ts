@@ -235,3 +235,55 @@ export interface UpdateUserRequest {
   contact_person?: string;
   phone?: string;
 }
+
+export interface BuilderUser {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  email: string;
+  contact: string;
+  role: string;
+  source: {
+    id: string;
+    name: string;
+    code: string;
+    email: string;
+    contact: string;
+    address: {
+      id: string;
+      apt: string;
+      street: string;
+      city: string;
+      state: string;
+      zipCode: string;
+      isActive: boolean;
+      createdAt: string;
+      country: string;
+    };
+  };
+}
+
+export interface CreateBuilderUserRequest {
+  email: string;
+  firstName: string;
+  lastName?: string;
+  contact?: string;
+  role: string;
+  sourceId: string;
+}
+
+export interface UpdateBuilderUserRequest {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName?: string;
+  contact?: string;
+  role: string;
+  sourceId: string;
+}
+
+export interface BuilderUserResponse {
+  success: boolean;
+  message: string;
+  data: BuilderUser[];
+}

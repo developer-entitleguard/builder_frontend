@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,39 +13,57 @@ import { Plus, Edit, Trash2, Users, Mail, Phone, Building2 } from "lucide-react"
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useGetBuilderVendorsQuery, useCreateOrUpdateBuilderVendorMutation, useDeleteBuilderVendorMutation } from "@/lib/api/services/builderVendor";
+import type { Vendor as VendorType, CreateVendorRequest, UpdateVendorRequest } from "@/lib/api/types";
 
 const vendorTypes = ['Tradesman', 'Plumber', 'Electrician', 'Landscaper', 'Sellers', 'Others'] as const;
 
 const vendorSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  contact_email: z.string().email("Please enter a valid email"),
-  contact_phone: z.string().min(8, "Phone number must be at least 8 characters"),
+  email: z.string().email("Please enter a valid email"),
+  contact: z.string().min(8, "Phone number must be at least 8 characters"),
   type: z.enum(vendorTypes),
   description: z.string().optional()
 });
 
 type VendorFormData = z.infer<typeof vendorSchema>;
 
-interface Vendor {
-  id: string;
-  name: string;
-  contact_email: string;
-  contact_phone: string;
-  type: string;
-  description: string | null;
-  created_at: string;
-}
-
 interface VendorManagementProps {
   organizationId?: string;
 }
 
-const VendorManagement = ({ organizationId }: VendorManagementProps) => {
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [loading, setLoading] = useState(true);
+const VendorManagement = ({ organizationId: propOrganizationId }: VendorManagementProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [editingVendor, setEditingVendor] = useState<VendorType | null>(null);
   const { toast } = useToast();
+
+  // Get organization ID from props or localStorage
+  const getOrganizationId = (): string | undefined => {
+    if (propOrganizationId) return propOrganizationId;
+    
+    try {
+      const userData = localStorage.getItem('userData');
+      if (userData) {
+        const parsedData = JSON.parse(userData);
+        return parsedData?.userInfo?.builderOrganization?.id;
+      }
+    } catch (error) {
+      console.error('Error getting organization ID:', error);
+    }
+    return undefined;
+  };
+
+  const organizationId = getOrganizationId();
+
+  // API Hooks
+  const { data: vendorsData, isLoading, error } = useGetBuilderVendorsQuery(
+    { builderId: organizationId || '' },
+    { skip: !organizationId }
+  );
+  const [createOrUpdateVendor] = useCreateOrUpdateBuilderVendorMutation();
+  const [deleteVendor] = useDeleteBuilderVendorMutation();
+
+  const vendors = vendorsData?.data || [];
 
   const {
     register,
@@ -61,88 +78,67 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
 
   const watchedType = watch('type');
 
+  // Show error toast if API fetch fails
   useEffect(() => {
-    fetchVendors();
-  }, [organizationId]);
-
-  const fetchVendors = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('vendors')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setVendors(data || []);
-    } catch (error) {
+    if (error) {
       toast({
         title: "Error fetching vendors",
-        description: error instanceof Error ? error.message : 'An unknown error occurred',
+        description: 'Failed to load vendors',
         variant: "destructive"
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [error, toast]);
 
   const onSubmit = async (data: VendorFormData) => {
     try {
-      if (editingVendor) {
-        const { error } = await supabase
-          .from('vendors')
-          .update({
+      const vendorData = editingVendor 
+        ? {
+            id: editingVendor.id,
             name: data.name,
-            contact_email: data.contact_email,
-            contact_phone: data.contact_phone,
+            email: data.email,
+            contact: data.contact,
             type: data.type,
-            description: data.description || null
-          })
-          .eq('id', editingVendor.id);
-
-        if (error) throw error;
-        
-        toast({
-          title: "Vendor updated",
-          description: "Vendor has been updated successfully"
-        });
-      } else {
-        const { error } = await supabase
-          .from('vendors')
-          .insert({
+            description: data.description || '',
+            builderOrganizationId: organizationId,
+            sourceId: editingVendor.sourceId
+          } as UpdateVendorRequest
+        : {
             name: data.name,
-            contact_email: data.contact_email,
-            contact_phone: data.contact_phone,
+            email: data.email,
+            contact: data.contact,
             type: data.type,
-            description: data.description || null,
-            organization_id: organizationId!
-          });
+            description: data.description || '',
+            builderOrganizationId: organizationId,
+            sourceId: organizationId
+          } as CreateVendorRequest;
 
-        if (error) throw error;
-        
+      const result = await createOrUpdateVendor(vendorData).unwrap();
+      
+      if (result.success) {
         toast({
-          title: "Vendor added",
-          description: "New vendor has been added successfully"
+          title: editingVendor ? "Vendor updated" : "Vendor added",
+          description: result.message || (editingVendor ? "Vendor has been updated successfully" : "New vendor has been added successfully")
         });
+        
+        setDialogOpen(false);
+        setEditingVendor(null);
+        reset();
       }
-
-      await fetchVendors();
-      setDialogOpen(false);
-      setEditingVendor(null);
-      reset();
-    } catch (error) {
+    } catch (err) {
+      const error = err as { data?: { message?: string }; message?: string };
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : 'An unknown error occurred',
+        description: error?.data?.message || error?.message || 'An unknown error occurred',
         variant: "destructive"
       });
     }
   };
 
-  const handleEdit = (vendor: Vendor) => {
+  const handleEdit = (vendor: VendorType) => {
     setEditingVendor(vendor);
     setValue('name', vendor.name);
-    setValue('contact_email', vendor.contact_email);
-    setValue('contact_phone', vendor.contact_phone);
+    setValue('email', vendor.email);
+    setValue('contact', vendor.contact);
     setValue('type', vendor.type as typeof vendorTypes[number]);
     setValue('description', vendor.description || '');
     setDialogOpen(true);
@@ -150,23 +146,17 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
 
   const handleDelete = async (vendorId: string) => {
     try {
-      const { error } = await supabase
-        .from('vendors')
-        .delete()
-        .eq('id', vendorId);
-
-      if (error) throw error;
+      const result = await deleteVendor(vendorId).unwrap();
 
       toast({
         title: "Vendor deleted",
-        description: "Vendor has been removed successfully"
+        description: result.message || "Vendor has been removed successfully"
       });
-
-      await fetchVendors();
-    } catch (error) {
+    } catch (err) {
+      const error = err as { data?: { message?: string }; message?: string };
       toast({
         title: "Error deleting vendor",
-        description: error instanceof Error ? error.message : 'An unknown error occurred',
+        description: error?.data?.message || error?.message || 'An unknown error occurred',
         variant: "destructive"
       });
     }
@@ -184,7 +174,23 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
     return iconMap[type] || <Building2 className="h-4 w-4" />;
   };
 
-  if (loading) {
+  if (!organizationId) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center py-8">
+            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">Organization not found</h3>
+            <p className="text-muted-foreground">
+              Unable to load vendor management. Please ensure you are logged in with a valid organization.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="p-6">
@@ -242,27 +248,27 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="contact_email">Contact Email *</Label>
+                  <Label htmlFor="email">Contact Email *</Label>
                   <Input
-                    id="contact_email"
+                    id="email"
                     type="email"
-                    {...register('contact_email')}
+                    {...register('email')}
                     placeholder="vendor@example.com"
                   />
-                  {errors.contact_email && (
-                    <p className="text-sm text-destructive">{errors.contact_email.message}</p>
+                  {errors.email && (
+                    <p className="text-sm text-destructive">{errors.email.message}</p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="contact_phone">Contact Phone *</Label>
+                  <Label htmlFor="contact">Contact Phone *</Label>
                   <Input
-                    id="contact_phone"
-                    {...register('contact_phone')}
+                    id="contact"
+                    {...register('contact')}
                     placeholder="Enter phone number"
                   />
-                  {errors.contact_phone && (
-                    <p className="text-sm text-destructive">{errors.contact_phone.message}</p>
+                  {errors.contact && (
+                    <p className="text-sm text-destructive">{errors.contact.message}</p>
                   )}
                 </div>
 
@@ -341,11 +347,11 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
                     <div className="space-y-1 text-sm text-muted-foreground">
                       <div className="flex items-center gap-2">
                         <Mail className="h-4 w-4" />
-                        <span>{vendor.contact_email}</span>
+                        <span>{vendor.email}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Phone className="h-4 w-4" />
-                        <span>{vendor.contact_phone}</span>
+                        <span>{vendor.contact}</span>
                       </div>
                       {vendor.description && (
                         <p className="mt-2 text-sm">{vendor.description}</p>

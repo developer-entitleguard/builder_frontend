@@ -308,3 +308,41 @@ export interface BuilderUserResponse {
   message: string;
   data: BuilderUser[];
 }
+
+export interface Vendor extends BaseEntity {
+  id: string;
+  name: string;
+  email: string;
+  contact: string;
+  type: string;
+  description: string | null;
+  builderOrganizationId: string;
+  sourceId: string;
+}
+
+export interface CreateVendorRequest {
+  name: string;
+  email: string;
+  contact: string;
+  type: string;
+  description?: string;
+  builderOrganizationId: string;
+  sourceId: string;
+}
+
+export interface UpdateVendorRequest {
+  id: string;
+  name: string;
+  email: string;
+  contact: string;
+  type: string;
+  description?: string;
+  builderOrganizationId: string;
+  sourceId: string;
+}
+
+export interface VendorResponse {
+  success: boolean;
+  message: string;
+  data: Vendor[];
+}

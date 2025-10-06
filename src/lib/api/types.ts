@@ -26,13 +26,15 @@ export interface AuthResponse {
       email: string;
       contact: string;
       role: string;
-      source: {
+      builderOrganization: {
         id: string;
         name: string;
-        code: string;
-        email: string | null;
-        contact: string | null;
-        address: string | null;
+        address: string;
+        contact: string;
+        email: string;
+        abn: string | null;
+        description: string;
+        isActive: boolean;
       };
     };
     type: unknown;
@@ -243,23 +245,15 @@ export interface BuilderUser {
   email: string;
   contact: string;
   role: string;
-  source: {
+  builderOrganization: {
     id: string;
     name: string;
-    code: string;
-    email: string;
+    address: string;
     contact: string;
-    address: {
-      id: string;
-      apt: string;
-      street: string;
-      city: string;
-      state: string;
-      zipCode: string;
-      isActive: boolean;
-      createdAt: string;
-      country: string;
-    };
+    email: string;
+    abn: string | null;
+    description: string;
+    isActive: boolean;
   };
 }
 

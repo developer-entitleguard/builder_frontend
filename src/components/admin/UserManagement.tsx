@@ -41,23 +41,16 @@ interface User {
   email: string;
   contact: string;
   role: string;
-  source: {
+  createdAt?: string;
+  builderOrganization: {
     id: string;
     name: string;
-    code: string;
-    email: string;
+    address: string;
     contact: string;
-    address: {
-      id: string;
-      apt: string;
-      street: string;
-      city: string;
-      state: string;
-      zipCode: string;
-      isActive: boolean;
-      createdAt: string;
-      country: string;
-    };
+    email: string;
+    abn: string | null;
+    description: string;
+    isActive: boolean;
   };
 }
 
@@ -68,7 +61,7 @@ export function UserManagement({ organizationId }: UserManagementProps) {
   const { getUserFromStorage } = useAuth();
   
   const userData = getUserFromStorage();
-  const builderId = userData?.source?.id;
+  const builderId = userData?.builderOrganization?.id;
   
   const { data: usersResponse, isLoading: loading, refetch } = useGetBuilderUsersQuery(
     { builderId: builderId || '' },
@@ -352,7 +345,7 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                       </div>
                       <div>
                         <div className="font-medium">{user.firstName} {user.lastName}</div>
-                        <div className="text-sm text-muted-foreground">{user.source.name}</div>
+                        <div className="text-sm text-muted-foreground">{user.builderOrganization.name}</div>
                       </div>
                     </div>
                   </TableCell>
@@ -378,7 +371,7 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {new Date(user.source.address.createdAt).toLocaleDateString()}
+                    N/A
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

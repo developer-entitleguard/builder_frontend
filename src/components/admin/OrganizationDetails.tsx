@@ -46,10 +46,10 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
   const { getUserFromStorage } = useAuth();
   
   const userData = getUserFromStorage();
-  const organizationName = userData?.source?.name  || "";
-  const organizationAddress = (userData?.source?.address as { apt?: string })?.apt || organization?.address || "";
-  const organizationEmail = userData?.source?.email || "";
-  const organizationPhone = userData?.source?.contact  || "";
+  const organizationName = userData?.builderOrganization?.name || "";
+  const organizationAddress = userData?.builderOrganization?.address || organization?.address || "";
+  const organizationEmail = userData?.builderOrganization?.email || "";
+  const organizationPhone = userData?.builderOrganization?.contact || "";
 
   const form = useForm<OrganizationFormData>({
     resolver: zodResolver(organizationSchema),

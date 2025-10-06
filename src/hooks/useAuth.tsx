@@ -9,13 +9,15 @@ interface ApiUser {
   email: string;
   contact: string;
   role: string;
-  source: {
+  builderOrganization: {
     id: string;
     name: string;
-    code: string;
-    email: string | null;
-    contact: string | null;
-    address: string | null;
+    address: string;
+    contact: string;
+    email: string;
+    abn: string | null;
+    description: string;
+    isActive: boolean;
   };
 }
 

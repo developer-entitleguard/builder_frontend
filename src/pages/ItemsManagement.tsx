@@ -68,7 +68,7 @@ const ItemsManagement = () => {
     notes: "",
     purchaser: ""
   });
-  const builderId = user && 'source' in user ? (user as { source: { id: string } }).source?.id : null;
+  const builderId = user && 'builderOrganization' in user ? (user as { builderOrganization: { id: string } }).builderOrganization?.id : null;
   
   const { data: apiResponse, isLoading: apiLoading, error: apiError } = useGetItemsByBuilderQuery(
     builderId || '',

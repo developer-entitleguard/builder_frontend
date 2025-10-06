@@ -266,6 +266,33 @@ export interface CreateBuilderUserRequest {
   sourceId: string;
 }
 
+export interface BuilderOrganization {
+  id: string;
+  name: string;
+  address: string;
+  contact: string;
+  email: string;
+  abn: string | null;
+  description: string;
+  isActive: boolean;
+}
+
+export interface UpdateBuilderOrganizationRequest {
+  id: string;
+  name: string;
+  address: string;
+  contact: string;
+  email: string;
+  abn?: string | null;
+  description?: string | null;
+}
+
+export interface BuilderOrganizationResponse {
+  success: boolean;
+  message: string;
+  data?: BuilderOrganization;
+}
+
 export interface UpdateBuilderUserRequest {
   id: string;
   email: string;

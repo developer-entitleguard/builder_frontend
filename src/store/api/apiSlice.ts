@@ -52,7 +52,8 @@ export const api = createApi({
     'Document',
     'Dashboard',
     'Auth',
-    'BuilderUser'
+    'BuilderUser',
+    'BuilderOrganization'
   ],
   endpoints: () => ({}),
 });

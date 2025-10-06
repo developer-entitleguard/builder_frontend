@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { validatePhone, validateABN } from "@/utils/validation";
 import { Building, Save, Edit } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useUpdateBuilderOrganizationMutation } from "@/lib/api/services/builderOrganization";
 
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required"),
@@ -41,9 +41,9 @@ interface OrganizationDetailsProps {
 
 export function OrganizationDetails({ organization }: OrganizationDetailsProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { getUserFromStorage } = useAuth();
+  const [updateOrganization, { isLoading: loading }] = useUpdateBuilderOrganizationMutation();
   
   const userData = getUserFromStorage();
   const organizationName = userData?.builderOrganization?.name || "";
@@ -54,35 +54,56 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
   const form = useForm<OrganizationFormData>({
     resolver: zodResolver(organizationSchema),
     defaultValues: {
-      name: organization?.name || "",
-      address: organization?.address || "",
-      contact_email: organization?.contact_email || "",
-      contact_phone: organization?.contact_phone || "",
-      abn: organization?.abn || "",
-      description: organization?.description || "",
+      name: userData?.builderOrganization?.name || "",
+      address: userData?.builderOrganization?.address || "",
+      contact_email: userData?.builderOrganization?.email || "",
+      contact_phone: userData?.builderOrganization?.contact || "",
+      abn: userData?.builderOrganization?.abn || "",
+      description: userData?.builderOrganization?.description || "",
     },
   });
 
-  const onSubmit = async (data: OrganizationFormData) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from('builder_organizations')
-        .update({
-          name: data.name,
-          address: data.address,
-          contact_email: data.contact_email,
-          contact_phone: data.contact_phone,
-          abn: data.abn || null,
-          description: data.description || null,
-        })
-        .eq('id', organization?.id);
+  useEffect(() => {
+    if (isEditing && userData?.builderOrganization) {
+      form.reset({
+        name: userData.builderOrganization.name || "",
+        address: userData.builderOrganization.address || "",
+        contact_email: userData.builderOrganization.email || "",
+        contact_phone: userData.builderOrganization.contact || "",
+        abn: userData.builderOrganization.abn || "",
+        description: userData.builderOrganization.description || "",
+      });
+    }
+  }, [isEditing]);
 
-      if (error) throw error;
+  const onSubmit = async (data: OrganizationFormData) => {
+    try {
+      const organizationId = userData?.builderOrganization?.id;
+      
+      if (!organizationId) {
+        toast({
+          title: "Error",
+          description: "Organization ID not found",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const payload = {
+        id: organizationId,
+        name: data.name,
+        address: data.address,
+        contact: data.contact_phone,
+        email: data.contact_email,
+        abn: data.abn || null,
+        description: data.description || null,
+      };
+
+      const response = await updateOrganization(payload).unwrap();
 
       toast({
         title: "Success",
-        description: "Organization details updated successfully",
+        description: response.message || "Organization details updated successfully",
       });
       setIsEditing(false);
       
@@ -90,13 +111,15 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
       window.location.reload();
     } catch (error) {
       console.error("Error updating organization:", error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error 
+        ? (error as { data: { message?: string } }).data?.message 
+        : "Failed to update organization details";
+      
       toast({
         title: "Error",
-        description: "Failed to update organization details",
+        description: errorMessage,
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
   };
 

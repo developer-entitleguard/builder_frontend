@@ -7,6 +7,13 @@ import type {
 
 export const builderOrganizationApi = api.injectEndpoints({
   endpoints: (build) => ({
+    getBuilderOrganization: build.query<BuilderOrganizationResponse, string>({
+      query: (builderId) => ({
+        url: `/api/builderorganization?builderId=${builderId}`,
+        method: 'GET',
+      }),
+      providesTags: ['BuilderOrganization'],
+    }),
     updateBuilderOrganization: build.mutation<BuilderOrganizationResponse, UpdateBuilderOrganizationRequest>({
       query: (data) => ({
         url: '/api/builder/organization',
@@ -19,5 +26,6 @@ export const builderOrganizationApi = api.injectEndpoints({
 });
 
 export const {
+  useGetBuilderOrganizationQuery,
   useUpdateBuilderOrganizationMutation,
 } = builderOrganizationApi;

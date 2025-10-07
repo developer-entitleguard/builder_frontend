@@ -8,9 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { validatePhone, validateABN } from "@/utils/validation";
-import { Building, Save, Edit } from "lucide-react";
+import { Building, Save, Edit, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useUpdateBuilderOrganizationMutation } from "@/lib/api/services/builderOrganization";
+import { 
+  useGetBuilderOrganizationQuery, 
+  useUpdateBuilderOrganizationMutation 
+} from "@/lib/api/services/builderOrganization";
 
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required"),
@@ -46,41 +49,54 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
   const [updateOrganization, { isLoading: loading }] = useUpdateBuilderOrganizationMutation();
   
   const userData = getUserFromStorage();
-  const organizationName = userData?.builderOrganization?.name || "";
-  const organizationAddress = userData?.builderOrganization?.address || organization?.address || "";
-  const organizationEmail = userData?.builderOrganization?.email || "";
-  const organizationPhone = userData?.builderOrganization?.contact || "";
+  const builderId = userData?.builderOrganization?.id || "";
+  
+  // Fetch organization data from API
+  const { 
+    data: organizationData, 
+    isLoading: isFetchingOrganization,
+    error: fetchError,
+    refetch
+  } = useGetBuilderOrganizationQuery(builderId, {
+    skip: !builderId, // Skip the query if no builderId
+  });
+
+  // Use API data if available, otherwise fall back to organization prop
+  const apiOrganization = organizationData?.data;
+  const organizationName = apiOrganization?.name || "";
+  const organizationAddress = apiOrganization?.address || "";
+  const organizationEmail = apiOrganization?.email || "";
+  const organizationPhone = apiOrganization?.contact || "";
 
   const form = useForm<OrganizationFormData>({
     resolver: zodResolver(organizationSchema),
     defaultValues: {
-      name: userData?.builderOrganization?.name || "",
-      address: userData?.builderOrganization?.address || "",
-      contact_email: userData?.builderOrganization?.email || "",
-      contact_phone: userData?.builderOrganization?.contact || "",
-      abn: userData?.builderOrganization?.abn || "",
-      description: userData?.builderOrganization?.description || "",
+      name: "",
+      address: "",
+      contact_email: "",
+      contact_phone: "",
+      abn: "",
+      description: "",
     },
   });
 
+  // Update form when API data is loaded or when entering edit mode
   useEffect(() => {
-    if (isEditing && userData?.builderOrganization) {
+    if (apiOrganization && (isEditing || !form.formState.isDirty)) {
       form.reset({
-        name: userData.builderOrganization.name || "",
-        address: userData.builderOrganization.address || "",
-        contact_email: userData.builderOrganization.email || "",
-        contact_phone: userData.builderOrganization.contact || "",
-        abn: userData.builderOrganization.abn || "",
-        description: userData.builderOrganization.description || "",
+        name: apiOrganization.name || "",
+        address: apiOrganization.address || "",
+        contact_email: apiOrganization.email || "",
+        contact_phone: apiOrganization.contact || "",
+        abn: apiOrganization.abn || "",
+        description: apiOrganization.description || "",
       });
     }
-  }, [isEditing]);
+  }, [isEditing, apiOrganization, form]);
 
   const onSubmit = async (data: OrganizationFormData) => {
     try {
-      const organizationId = userData?.builderOrganization?.id;
-      
-      if (!organizationId) {
+      if (!builderId) {
         toast({
           title: "Error",
           description: "Organization ID not found",
@@ -90,7 +106,7 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
       }
 
       const payload = {
-        id: organizationId,
+        id: builderId,
         name: data.name,
         address: data.address,
         contact: data.contact_phone,
@@ -107,8 +123,8 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
       });
       setIsEditing(false);
       
-      // Refresh the page to show updated data
-      window.location.reload();
+      // Refetch organization data
+      refetch();
     } catch (error) {
       console.error("Error updating organization:", error);
       const errorMessage = error && typeof error === 'object' && 'data' in error 
@@ -122,6 +138,28 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
       });
     }
   };
+
+  // Show loading state
+  if (isFetchingOrganization) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">Loading organization details...</span>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (fetchError) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-destructive mb-4">Failed to load organization details</p>
+        <Button onClick={() => refetch()} variant="outline">
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   if (!isEditing) {
     return (
@@ -152,12 +190,12 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
           </div>
           <div>
             <label className="font-medium text-muted-foreground">ABN</label>
-            <p className="mt-1">{organization?.abn || "Not provided"}</p>
+            <p className="mt-1">{apiOrganization?.abn || "Not provided"}</p>
           </div>
-          {organization?.description && (
+          {apiOrganization?.description && (
             <div className="col-span-full">
               <label className="font-medium text-muted-foreground">Description</label>
-              <p className="mt-1">{organization.description}</p>
+              <p className="mt-1">{apiOrganization.description}</p>
             </div>
           )}
         </div>

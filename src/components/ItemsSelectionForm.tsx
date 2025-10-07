@@ -3,10 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
 import { useAuth } from "@/hooks/useAuth";
-import { useRegistrations } from "@/hooks/useRegistrations";
+import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
+import { useCreateCustomerItemMutation } from "@/lib/api/services/customerItem";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Home, 
@@ -20,80 +19,64 @@ import {
 interface BuilderItem {
   id: string;
   name: string;
-  category: string;
+  category: string | null;
   brand: string | null;
   model: string | null;
-  description: string | null;
-  price: number | null;
+  make: string | null;
+  note: string | null;
+  price: string | null;
+  text: string | null;
+  documentationUrl: string | null;
+  status: string;
+  purchaser: string | null;
+  mapped: boolean;
 }
 
 interface ItemsSelectionFormProps {
-  onNext: (data: any) => void;
-  initialData?: any;
+  onNext: (data: { selected_items: string[]; registrationId?: string }) => void;
+  initialData?: { selected_items?: string[]; customerId?: string; builderId?: string };
   registrationId?: string;
 }
 
 const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelectionFormProps) => {
   const { user } = useAuth();
-  const { organization } = useOrganization();
-  const { updateRegistration } = useRegistrations();
   const { toast } = useToast();
   const [selectedItems, setSelectedItems] = useState<string[]>(initialData?.selected_items || []);
-  const [availableItems, setAvailableItems] = useState<BuilderItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [createCustomerItem, { isLoading: isCreatingCustomerItem }] = useCreateCustomerItemMutation();
+  
+  // Use the customer details API with IDs from the previous step
+  const { 
+    data: customerDetails, 
+    isLoading: loading, 
+    error 
+  } = useGetCustomerDetailsQuery(
+    { 
+      builderId: initialData?.builderId || '', 
+      customerId: initialData?.customerId || registrationId || '' 
+    },
+    { 
+      skip: !initialData?.builderId || (!initialData?.customerId && !registrationId)
+    }
+  );
 
+  // Handle API errors
   useEffect(() => {
-    console.log('ItemsSelectionForm - user changed:', { user: !!user });
-    if (user) {
-      fetchAvailableItems();
-    } else {
-      console.log('ItemsSelectionForm - No user, setting loading to false');
-      setLoading(false);
-    }
-  }, [user]);
-
-  const fetchAvailableItems = async () => {
-    if (!user) {
-      console.log('ItemsSelectionForm - No user, cannot fetch items');
-      setLoading(false);
-      return;
-    }
-    
-    console.log('ItemsSelectionForm - fetchAvailableItems started for user:', user.id);
-    try {
-      const { data, error } = await supabase
-        .from('builder_items')
-        .select('*')
-        .eq('builder_id', user.id)
-        .eq('status', 'active')
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
-
-      console.log('ItemsSelectionForm - fetchAvailableItems result:', { data, error });
-      if (error) throw error;
-      setAvailableItems(data || []);
-      console.log('ItemsSelectionForm - availableItems set:', data?.length || 0, 'items');
-    } catch (error: any) {
-      console.error('ItemsSelectionForm - fetchAvailableItems error:', error);
+    if (error) {
+      console.error('ItemsSelectionForm - API error:', error);
       toast({
         title: "Error fetching items",
-        description: error.message,
+        description: "Failed to load items from server",
         variant: "destructive"
       });
-    } finally {
-      console.log('ItemsSelectionForm - setting loading to false');
-      setLoading(false);
     }
-  };
+  }, [error, toast]);
 
-  const groupedItems = availableItems.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
-    }
-    acc[item.category].push(item);
+  // Transform the API response into the grouped format
+  const groupedItems = customerDetails?.data?.dtos?.reduce((acc, categoryGroup) => {
+    acc[categoryGroup.category] = categoryGroup.items;
     return acc;
-  }, {} as Record<string, BuilderItem[]>);
+  }, {} as Record<string, BuilderItem[]>) || {};
 
   const getCategoryIcon = (category: string) => {
     const iconMap: Record<string, React.ReactNode> = {
@@ -121,16 +104,29 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   };
 
   const handleNext = async () => {
-    if (!registrationId) {
-      onNext({ selected_items: selectedItems });
-      return;
-    }
-
     setSaving(true);
     try {
-      await updateRegistration(registrationId, {
-        selected_items: selectedItems
-      });
+      // Get the customer ID from initialData
+      const customerId = initialData?.customerId || registrationId;
+      
+      if (!customerId) {
+        throw new Error('Customer ID not found');
+      }
+      
+      if (selectedItems.length === 0) {
+        throw new Error('Please select at least one item');
+      }
+      
+      // Call the customer item API
+      const customerItemData = {
+        customerId: customerId,
+        itemIds: selectedItems
+      };
+      
+      console.log('Calling customer item API with:', customerItemData);
+      
+      const response = await createCustomerItem(customerItemData).unwrap();
+      console.log('Customer item API response:', response);
       
       toast({
         title: "Items selected",
@@ -138,10 +134,10 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
       });
       
       onNext({ selected_items: selectedItems, registrationId });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error saving items",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'An error occurred',
         variant: "destructive"
       });
     } finally {
@@ -231,11 +227,11 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
         </p>
         <Button 
           onClick={handleNext}
-          disabled={selectedItems.length === 0 || saving}
+          disabled={selectedItems.length === 0 || saving || isCreatingCustomerItem}
           size="lg"
           className="min-w-32"
         >
-          {saving ? 'Saving...' : 'Continue'}
+          {(saving || isCreatingCustomerItem) ? 'Saving...' : 'Continue'}
           <ChevronRight className="ml-2 h-4 w-4" />
         </Button>
       </div>

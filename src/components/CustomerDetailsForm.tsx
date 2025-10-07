@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowRight, MapPin, Phone, Mail, User } from "lucide-react";
-import { useRegistrations } from "@/hooks/useRegistrations";
+import { useCreateBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { australianStates, validateAustralianPhone, formatAustralianPhone, validateAustralianPostcode, validateEmail } from "@/utils/validation";
 
@@ -23,6 +24,8 @@ interface CustomerFormData {
   settlementDate: string;
   notes: string;
   registrationId?: string;
+  customerId?: string;
+  builderId?: string;
 }
 
 interface CustomerDetailsFormProps {
@@ -31,7 +34,8 @@ interface CustomerDetailsFormProps {
 }
 
 const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) => {
-  const { createRegistration } = useRegistrations();
+  const [createBuilderCustomer, { isLoading }] = useCreateBuilderCustomerMutation();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -98,30 +102,59 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
       });
       return;
     }
+
+    if (!user || !('builderOrganization' in user)) {
+      toast({
+        title: "Authentication error",
+        description: "Please log in again",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setLoading(true);
     try {
-      const registrationData = {
-        customer_name: `${formData.firstName} ${formData.lastName}`,
-        customer_email: formData.email,
-        customer_phone: formData.phone,
-        property_address: formData.propertyAddress,
-        property_city: formData.city,
-        property_state: formData.state,
-        property_zip: formData.zipCode,
-        project_name: formData.projectName || null,
-        settlement_date: formData.settlementDate || null,
-        notes: formData.notes || null
+      // Call the customer API
+      const customerData = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        contact: formData.phone,
+        address: formData.propertyAddress,
+        city: formData.city,
+        state: formData.state,
+        zip: formData.zipCode,
+        projectName: formData.projectName || undefined,
+        settlementDate: formData.settlementDate || undefined,
+        notes: formData.notes || undefined,
+        builderOrganizationId: user.builderOrganization.id
       };
       
-      const registration = await createRegistration(registrationData);
+      const customerResponse = await createBuilderCustomer(customerData).unwrap();
+      console.log('Customer API Response:', customerResponse);
       
       toast({
         title: "Customer details saved",
         description: "Moving to item selection"
       });
       
-      onNext({ ...formData, registrationId: registration.id });
+      // Extract the customer ID and builder ID from the response
+      const customerId = customerResponse?.data?.id;
+      const builderId = customerResponse?.data?.builderOrganization?.id;
+      
+      if (!customerId || !builderId) {
+        throw new Error('Customer ID or Builder ID not found in response');
+      }
+      
+      console.log('Extracted IDs:', { customerId, builderId });
+      
+      // Pass both IDs to the next step
+      onNext({ 
+        ...formData, 
+        registrationId: customerId,
+        customerId: customerId,
+        builderId: builderId
+      });
     } catch (error: unknown) {
       toast({
         title: "Error saving customer details",
@@ -308,8 +341,8 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" size="lg" className="min-w-[150px]" disabled={loading}>
-            {loading ? 'Saving...' : 'Continue to Items'}
+          <Button type="submit" size="lg" className="min-w-[150px]" disabled={loading || isLoading}>
+            {loading || isLoading ? 'Saving...' : 'Continue to Items'}
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         </div>

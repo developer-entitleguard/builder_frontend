@@ -346,3 +346,90 @@ export interface VendorResponse {
   message: string;
   data: Vendor[];
 }
+
+export interface BuilderCustomer {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  contact: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  projectName?: string;
+  settlementDate?: string;
+  notes?: string;
+  builderOrganization: {
+    id: string;
+    name: string;
+    address: string;
+    contact: string;
+    email: string;
+    abn: string | null;
+    description: string;
+    isActive: boolean;
+  };
+}
+
+export interface CreateBuilderCustomerRequest {
+  firstName: string;
+  lastName: string;
+  email: string;
+  contact: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  projectName?: string;
+  settlementDate?: string;
+  notes?: string;
+  builderOrganizationId: string;
+}
+
+export interface BuilderCustomerResponse {
+  success: boolean;
+  message: string;
+  data: BuilderCustomer;
+}
+
+export interface CustomerDetailsItem {
+  id: string;
+  builderOrganizationId: string | null;
+  name: string;
+  category: string | null;
+  make: string | null;
+  brand: string | null;
+  model: string | null;
+  note: string | null;
+  price: string | null;
+  text: string | null;
+  documentationUrl: string | null;
+  status: string;
+  purchaser: string | null;
+  mapped: boolean;
+}
+
+export interface CustomerDetailsCategory {
+  category: string;
+  items: CustomerDetailsItem[];
+}
+
+export interface CustomerDetailsResponse {
+  success: boolean;
+  message: string;
+  data: {
+    customer: BuilderCustomer;
+    dtos: CustomerDetailsCategory[];
+  };
+}
+
+export interface CustomerItemRequest {
+  customerId: string;
+  itemIds: string[];
+}
+
+export interface CustomerItemResponse {
+  success: boolean;
+  message: string;
+}

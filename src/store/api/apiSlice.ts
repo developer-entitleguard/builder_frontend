@@ -54,7 +54,10 @@ export const api = createApi({
     'Auth',
     'BuilderUser',
     'BuilderOrganization',
-    'Vendor'
+    'Vendor',
+    'BuilderCustomer',
+    'CustomerDetails',
+    'CustomerItem'
   ],
   endpoints: () => ({}),
 });

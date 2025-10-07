@@ -196,6 +196,7 @@ const Onboarding = () => {
       setRegistrationId(customerData.registrationId);
     }
     setFormData(prev => ({ ...prev, customer: customerData }));
+    // Skip saveRegistrationData for customer step - only customer API is called
     handleNextStep();
   };
 
@@ -270,7 +271,7 @@ const Onboarding = () => {
       case 'customer':
         return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} />;
       case 'items':
-        return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} />;
+        return <ItemsSelectionForm onNext={handleItemsNext} initialData={{...formData.items, ...formData.customer}} registrationId={registrationId} />;
       case 'documents':
         return <DocumentUploadForm onNext={handleDocumentsNext} initialData={formData.documents} selectedItems={(formData.items as any)?.selected_items || []} />;
       case 'review':

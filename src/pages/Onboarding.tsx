@@ -19,10 +19,14 @@ const Onboarding = () => {
   const [searchParams] = useSearchParams();
   const [currentStep, setCurrentStep] = useState('customer');
   const [registrationId, setRegistrationId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    customer: Record<string, unknown>;
+    items: Record<string, unknown>;
+    documents: Record<string, unknown>;
+  }>({
     customer: {},
     items: {},
-    documents: {}
+    documents: { documents: {}, itemDetails: {} }
   });
   const [loading, setLoading] = useState(false);
 
@@ -39,6 +43,7 @@ const Onboarding = () => {
       setRegistrationId(editingId);
       loadExistingRegistration(editingId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, user]);
 
   const loadExistingRegistration = async (id: string) => {
@@ -83,7 +88,7 @@ const Onboarding = () => {
         documents: data.documents_uploaded || {}
       };
 
-      setFormData(existingFormData);
+      setFormData(existingFormData as unknown as typeof formData);
 
       // Determine which step to start on based on data completeness
       if (data.status === 'ready_for_review') {
@@ -94,10 +99,10 @@ const Onboarding = () => {
         setCurrentStep('items');
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error loading registration",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'An error occurred',
         variant: "destructive"
       });
       navigate('/dashboard');
@@ -110,7 +115,7 @@ const Onboarding = () => {
     setCurrentStep(stepId);
   };
 
-  const saveRegistrationData = async (stepData: any, step: string) => {
+  const saveRegistrationData = async (stepData: Record<string, unknown>, step: string) => {
     if (!user) return;
 
     try {
@@ -119,17 +124,16 @@ const Onboarding = () => {
       console.log('Onboarding - updatedFormData:', updatedFormData);
       setFormData(updatedFormData);
 
-      let registrationData: any = {
+      const registrationData: Record<string, unknown> = {
         builder_id: user.id,
         status: 'draft'
       };
 
       // Add customer data
       if (updatedFormData.customer) {
-        const customerData = updatedFormData.customer as any;
+        const customerData = updatedFormData.customer as Record<string, string>;
         console.log('Onboarding - Processing customer data:', customerData);
-        registrationData = {
-          ...registrationData,
+        Object.assign(registrationData, {
           customer_name: customerData.firstName && customerData.lastName 
             ? `${customerData.firstName} ${customerData.lastName}` 
             : '',
@@ -142,7 +146,7 @@ const Onboarding = () => {
           project_name: customerData.projectName || '',
           settlement_date: customerData.settlementDate || null,
           notes: customerData.notes || ''
-        };
+        });
         console.log('Onboarding - Mapped registration data:', registrationData);
       }
 
@@ -175,24 +179,24 @@ const Onboarding = () => {
         // Create new registration
         const { data, error } = await supabase
           .from('homeowner_registrations')
-          .insert(registrationData)
+          .insert(registrationData as never)
           .select()
           .single();
 
         if (error) throw error;
         setRegistrationId(data.id);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error saving data",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'An error occurred',
         variant: "destructive"
       });
     }
   };
 
-  const handleCustomerNext = async (customerData: any) => {
-    if (customerData.registrationId) {
+  const handleCustomerNext = async (customerData: Record<string, unknown>) => {
+    if (customerData.registrationId && typeof customerData.registrationId === 'string') {
       setRegistrationId(customerData.registrationId);
     }
     setFormData(prev => ({ ...prev, customer: customerData }));
@@ -200,15 +204,15 @@ const Onboarding = () => {
     handleNextStep();
   };
 
-  const handleItemsNext = async (itemsData: any) => {
-    if (itemsData.registrationId) {
+  const handleItemsNext = async (itemsData: Record<string, unknown>) => {
+    if (itemsData.registrationId && typeof itemsData.registrationId === 'string') {
       setRegistrationId(itemsData.registrationId);
     }
     setFormData(prev => ({ ...prev, items: itemsData }));
     handleNextStep();
   };
 
-  const handleDocumentsNext = async (documentsData: any) => {
+  const handleDocumentsNext = async (documentsData: Record<string, unknown>) => {
     await saveRegistrationData(documentsData, 'documents');
     handleNextStep();
   };
@@ -257,10 +261,10 @@ const Onboarding = () => {
       });
 
       handleNextStep();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error sending entitlement",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'An error occurred',
         variant: "destructive"
       });
     }
@@ -269,13 +273,13 @@ const Onboarding = () => {
   const renderCurrentStep = () => {
     switch (currentStep) {
       case 'customer':
-        return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} />;
+        return <CustomerDetailsForm onNext={handleCustomerNext as (data: unknown) => void} initialData={formData.customer} />;
       case 'items':
-        return <ItemsSelectionForm onNext={handleItemsNext} initialData={{...formData.items, ...formData.customer}} registrationId={registrationId} />;
+        return <ItemsSelectionForm onNext={handleItemsNext as (data: unknown) => void} initialData={{...formData.items, ...formData.customer}} registrationId={registrationId} />;
       case 'documents':
-        return <DocumentUploadForm onNext={handleDocumentsNext} initialData={formData.documents} selectedItems={(formData.items as any)?.selected_items || []} />;
+        return <DocumentUploadForm onNext={handleDocumentsNext as (data: unknown) => void} initialData={{...formData.documents, ...formData.items, ...formData.customer} as unknown as Parameters<typeof DocumentUploadForm>[0]['initialData']} selectedItems={(formData.items as Record<string, unknown>)?.selected_items as string[] || []} />;
       case 'review':
-        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} />;
+        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData as unknown as Parameters<typeof ReviewApprovalForm>[0]['formData']} />;
       case 'send':
         return <SendConfirmationForm />;
       default:

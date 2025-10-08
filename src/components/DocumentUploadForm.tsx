@@ -6,14 +6,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Upload, FileText, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
 
 interface BuilderItem {
   id: string;
   name: string;
-  category: string;
-  brand?: string;
-  model?: string;
+  category: string | null;
+  brand: string | null;
+  model: string | null;
+  make: string | null;
+  note: string | null;
+  price: string | null;
+  text: string | null;
+  documentationUrl: string | null;
+  status: string;
+  purchaser: string | null;
+  mapped: boolean;
 }
 
 interface FormData {
@@ -23,7 +31,7 @@ interface FormData {
 
 interface DocumentUploadFormProps {
   onNext: (data: FormData) => void;
-  initialData?: FormData;
+  initialData?: FormData & { customerId?: string; builderId?: string; selected_items?: string[] };
   selectedItems?: string[];
 }
 
@@ -31,50 +39,44 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
   const { toast } = useToast();
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>(initialData?.documents || {});
   const [itemDetails, setItemDetails] = useState<Record<string, { seller: string; serialNumber: string }>>(initialData?.itemDetails || {});
-  const [availableItems, setAvailableItems] = useState<BuilderItem[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const selectedIds = initialData?.selected_items || selectedItemIds || [];
+
+  const { 
+    data: customerDetails, 
+    isLoading: loading, 
+    error 
+  } = useGetCustomerDetailsQuery(
+    { 
+      builderId: initialData?.builderId || '', 
+      customerId: initialData?.customerId || '' 
+    },
+    { 
+      skip: !initialData?.builderId || !initialData?.customerId 
+    }
+  );
 
   useEffect(() => {
-    if (selectedItemIds?.length) {
-      fetchSelectedItems();
-    } else {
-      setLoading(false);
-    }
-  }, [selectedItemIds]);
-
-  const fetchSelectedItems = async () => {
-    if (!selectedItemIds?.length) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('builder_items')
-        .select('*')
-        .in('id', selectedItemIds);
-
-      if (error) throw error;
-      setAvailableItems(data || []);
-    } catch (error: unknown) {
+    if (error) {
+      console.error('DocumentUploadForm - API error:', error);
       toast({
-        title: "Error fetching selected items",
-        description: error instanceof Error ? error.message : 'An error occurred',
+        title: "Error fetching items",
+        description: "Failed to load items from server",
         variant: "destructive"
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [error, toast]);
 
-  // Group items by category
-  const groupedItems = availableItems.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
+  const groupedItems = customerDetails?.data?.dtos?.reduce((acc, categoryGroup) => {
+    const selectedCategoryItems = categoryGroup.items.filter(item => 
+      selectedIds.includes(item.id)
+    );
+    if (selectedCategoryItems.length > 0) {
+      acc[categoryGroup.category] = selectedCategoryItems;
     }
-    acc[item.category].push(item);
+    
     return acc;
-  }, {} as Record<string, BuilderItem[]>);
+  }, {} as Record<string, BuilderItem[]>) || {};
 
   const handleDetailChange = (itemId: string, field: 'seller' | 'serialNumber', value: string) => {
     setItemDetails(prev => ({
@@ -107,7 +109,7 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
   };
 
   const getTotalItems = () => {
-    return availableItems.length;
+    return Object.values(groupedItems).reduce((total, items) => total + items.length, 0);
   };
 
   const getDetailsCount = () => {

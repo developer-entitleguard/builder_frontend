@@ -408,6 +408,10 @@ export interface CustomerDetailsItem {
   status: string;
   purchaser: string | null;
   mapped: boolean;
+  builderCustomerMapId: string | null;
+  seller: string | null;
+  serialNumber: string | null;
+  fileId: string | null;
 }
 
 export interface CustomerDetailsCategory {

@@ -5,15 +5,27 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { User, Home, FileText, Building, CheckCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
 import { useToast } from "@/hooks/use-toast";
 
 interface BuilderItem {
   id: string;
   name: string;
-  category: string;
-  brand?: string;
-  model?: string;
+  category: string | null;
+  brand: string | null;
+  model: string | null;
+  make: string | null;
+  note: string | null;
+  price: string | null;
+  text: string | null;
+  documentationUrl: string | null;
+  status: string;
+  purchaser: string | null;
+  mapped: boolean;
+  builderCustomerMapId: string | null;
+  seller: string | null;
+  serialNumber: string | null;
+  fileId: string | null;
 }
 
 interface FormData {
@@ -30,6 +42,8 @@ interface FormData {
     settlementDate?: string;
     notes?: string;
     registrationId?: string;
+    customerId?: string;
+    builderId?: string;
   };
   items: {
     selected_items: string[];
@@ -45,43 +59,44 @@ interface ReviewApprovalFormProps {
 const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
   const [approved, setApproved] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<BuilderItem[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const { 
+    data: customerDetails, 
+    isLoading: loading, 
+    error,
+    refetch 
+  } = useGetCustomerDetailsQuery(
+    { 
+      builderId: formData?.customer?.builderId || '', 
+      customerId: formData?.customer?.customerId || '' 
+    },
+    { 
+      skip: !formData?.customer?.builderId || !formData?.customer?.customerId,
+      refetchOnMountOrArgChange: true
+    }
+  );
 
   useEffect(() => {
-    if (formData?.items?.selected_items?.length) {
-      fetchSelectedItems();
-    } else {
-      setLoading(false);
+    if (formData?.customer?.builderId && formData?.customer?.customerId) {
+      console.log('ReviewApprovalForm - Fetching customer details:', {
+        builderId: formData.customer.builderId,
+        customerId: formData.customer.customerId
+      });
     }
-  }, [formData]);
+  }, [formData?.customer?.builderId, formData?.customer?.customerId]);
 
-  const fetchSelectedItems = async () => {
-    if (!formData?.items?.selected_items?.length) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('builder_items')
-        .select('*')
-        .in('id', formData.items.selected_items);
-
-      if (error) throw error;
-      setSelectedItems(data || []);
-    } catch (error: unknown) {
+  useEffect(() => {
+    if (error) {
+      console.error('ReviewApprovalForm - API error:', error);
       toast({
-        title: "Error fetching selected items",
-        description: error instanceof Error ? error.message : 'An error occurred',
+        title: "Error fetching customer details",
+        description: "Failed to load customer and items data",
         variant: "destructive"
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [error, toast]);
 
-  const customerData = formData?.customer || {};
+  const customerData = customerDetails?.data?.customer || formData?.customer || {};
   const uploadedDocs = formData?.documents || {};
 
   // Count total uploaded documents
@@ -89,11 +104,20 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
     return Object.values(uploadedDocs).reduce((total: number, docs: string[]) => total + docs.length, 0);
   };
 
-  const groupedItems = selectedItems.reduce((acc, item) => {
-    if (!acc[item.category]) acc[item.category] = [];
-    acc[item.category].push(item);
+  const selectedItemIds = formData?.items?.selected_items || [];
+  const groupedItems = customerDetails?.data?.dtos?.reduce((acc, categoryGroup) => {
+    const selectedCategoryItems = categoryGroup.items.filter(item => 
+      selectedItemIds.includes(item.id)
+    );
+    
+    if (selectedCategoryItems.length > 0) {
+      acc[categoryGroup.category] = selectedCategoryItems;
+    }
+    
     return acc;
-  }, {} as Record<string, BuilderItem[]>);
+  }, {} as Record<string, BuilderItem[]>) || {};
+
+  const selectedItems = Object.values(groupedItems).flat();
 
   if (loading) {
     return (
@@ -133,18 +157,18 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
             </div>
             <div>
               <p className="font-medium">Phone</p>
-              <p className="text-muted-foreground">{customerData.phone || 'Not provided'}</p>
+              <p className="text-muted-foreground">{(customerData as Record<string, string>).contact || (customerData as Record<string, string>).phone || 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Settlement Date</p>
-              <p className="text-muted-foreground">{customerData.settlementDate || 'Not provided'}</p>
+              <p className="text-muted-foreground">{(customerData as Record<string, string>).settlementDate || 'Not provided'}</p>
             </div>
           </div>
           <div>
             <p className="font-medium">Property Address</p>
             <p className="text-muted-foreground">
-              {customerData.propertyAddress && customerData.city && customerData.state 
-                ? `${customerData.propertyAddress}, ${customerData.city}, ${customerData.state} ${customerData.zipCode || ''}`
+              {((customerData as Record<string, string>).address || (customerData as Record<string, string>).propertyAddress) && (customerData as Record<string, string>).city && (customerData as Record<string, string>).state 
+                ? `${(customerData as Record<string, string>).address || (customerData as Record<string, string>).propertyAddress}, ${(customerData as Record<string, string>).city}, ${(customerData as Record<string, string>).state} ${(customerData as Record<string, string>).zip || (customerData as Record<string, string>).zipCode || ''}`
                 : 'Not provided'
               }
             </p>

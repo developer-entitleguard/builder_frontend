@@ -1,0 +1,55 @@
+import { api } from '@/store/api/apiSlice';
+import type { 
+  ItemMapUpdate,
+  ItemMapUpdateResponse
+} from '@/lib/api/types';
+import { getApiBaseUrl } from '@/lib/config';
+
+export const itemMapApi = api.injectEndpoints({
+  endpoints: (build) => ({
+    updateItemMap: build.mutation<ItemMapUpdateResponse, FormData>({
+      queryFn: async (formData) => {
+        try {
+          const userData = localStorage.getItem('userData');
+          let token = '';
+          if (userData) {
+            const parsedData = JSON.parse(userData);
+            token = parsedData.jwt || '';
+          }
+
+          const response = await fetch(`${getApiBaseUrl()}/api/itemmap/update`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
+          });
+
+          if (!response.ok) {
+            return {
+              error: {
+                status: response.status,
+                data: await response.text(),
+              },
+            };
+          }
+
+          const data = await response.json();
+          return { data };
+        } catch (error) {
+          return {
+            error: {
+              status: 'FETCH_ERROR',
+              error: String(error),
+            },
+          };
+        }
+      },
+      invalidatesTags: ['ItemMap'],
+    }),
+  }),
+});
+
+export const {
+  useUpdateItemMapMutation,
+} = itemMapApi;

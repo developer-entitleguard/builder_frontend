@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Upload, FileText, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
+import { useUpdateItemMapMutation } from "@/lib/api/services/itemMap";
 
 interface BuilderItem {
   id: string;
@@ -39,6 +40,8 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
   const { toast } = useToast();
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>(initialData?.documents || {});
   const [itemDetails, setItemDetails] = useState<Record<string, { seller: string; serialNumber: string }>>(initialData?.itemDetails || {});
+  const [uploadedFiles, setUploadedFiles] = useState<Record<string, File[]>>({});
+  const [updateItemMap, { isLoading: isUpdating }] = useUpdateItemMapMutation();
 
   const selectedIds = initialData?.selected_items || selectedItemIds || [];
 
@@ -90,18 +93,36 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
     }));
   };
 
-  const handleFileUpload = (category: string, item: string) => {
-    // Mock file upload
-    const key = `${category}-${item}`;
-    setUploadedDocs(prev => ({
-      ...prev,
-      [key]: [...(prev[key] || []), `${item}_warranty.pdf`, `${item}_manual.pdf`]
-    }));
+  const handleFileUpload = (itemId: string) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
     
-    toast({
-      title: "Documents uploaded",
-      description: `Warranty and manual uploaded for ${item}`,
-    });
+    input.onchange = (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const files = Array.from(target.files || []);
+      
+      if (files.length > 0) {
+        setUploadedFiles(prev => ({
+          ...prev,
+          [itemId]: [...(prev[itemId] || []), ...files]
+        }));
+        
+        const fileNames = files.map(f => f.name);
+        setUploadedDocs(prev => ({
+          ...prev,
+          [itemId]: [...(prev[itemId] || []), ...fileNames]
+        }));
+        
+        toast({
+          title: "Files selected",
+          description: `${files.length} file(s) selected for upload`,
+        });
+      }
+    };
+    
+    input.click();
   };
 
   const getDocumentCount = () => {
@@ -119,6 +140,46 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
   };
 
   const isComplete = getDocumentCount() > 0 || getDetailsCount() > 0;
+
+  const handleContinue = async () => {
+    try {
+      const formData = new FormData();
+      
+      const itemsToUpdate = Object.entries(groupedItems).flatMap(([category, items]) => 
+        items.filter(item => itemDetails[item.id] || uploadedFiles[item.id])
+      );
+
+      itemsToUpdate.forEach((item, index) => {
+        const details = itemDetails[item.id] || { seller: '', serialNumber: '' };
+        const files = uploadedFiles[item.id] || [];
+
+        formData.append(`builderMap[${index}].id`, item.id);
+        formData.append(`builderMap[${index}].seller`, details.seller);
+        formData.append(`builderMap[${index}].serialNumber`, details.serialNumber);
+        
+        files.forEach((file) => {
+          formData.append(`builderMap[${index}].files`, file);
+        });
+      });
+
+      console.log('Calling itemmap update API with data for', itemsToUpdate.length, 'items');
+      
+      await updateItemMap(formData).unwrap();
+      
+      toast({
+        title: "Item details saved",
+        description: "Moving to review"
+      });
+      
+      onNext({ documents: uploadedDocs, itemDetails });
+    } catch (error: unknown) {
+      toast({
+        title: "Error saving item details",
+        description: error instanceof Error ? error.message : 'An error occurred',
+        variant: "destructive"
+      });
+    }
+  };
 
   if (loading) {
     return (
@@ -162,8 +223,7 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
             <CardContent>
               <div className="grid gap-6">
                 {items.map((item: BuilderItem) => {
-                  const key = `${category}-${item.name}`;
-                  const docs = uploadedDocs[key] || [];
+                  const docs = uploadedDocs[item.id] || [];
                   const hasUploads = docs.length > 0;
                   const details = itemDetails[item.id] || { seller: '', serialNumber: '' };
 
@@ -193,7 +253,7 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
                         <Button
                           variant={hasUploads ? "outline" : "default"}
                           size="sm"
-                          onClick={() => handleFileUpload(category, item.name)}
+                          onClick={() => handleFileUpload(item.id)}
                           className="flex items-center space-x-2"
                         >
                           <Upload className="w-4 h-4" />
@@ -236,11 +296,11 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
           Provide details and upload documentation for {getTotalItems()} selected items
         </p>
         <Button 
-          onClick={() => onNext({ documents: uploadedDocs, itemDetails })}
-          disabled={!isComplete}
+          onClick={handleContinue}
+          disabled={!isComplete || isUpdating}
           className="min-w-[120px]"
         >
-          Continue
+          {isUpdating ? 'Saving...' : 'Continue'}
         </Button>
       </div>
     </div>

@@ -433,3 +433,15 @@ export interface CustomerItemResponse {
   success: boolean;
   message: string;
 }
+
+export interface ItemMapUpdate {
+  seller: string;
+  id: string;
+  serialNumber: string;
+  files?: File[];
+}
+
+export interface ItemMapUpdateResponse {
+  success: boolean;
+  message: string;
+}

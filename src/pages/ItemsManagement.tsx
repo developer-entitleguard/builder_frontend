@@ -17,7 +17,7 @@ import Header from "@/components/Header";
 
 interface BuilderItem {
   id: string;
-  sourceId: string | null;
+  builderOrganizationId: string | null;
   name: string;
   category: string | null;
   make: string | null;
@@ -147,7 +147,7 @@ const ItemsManagement = () => {
         model: formData.model || undefined,
         documentationUrl: formData.documentation_url || undefined,
         purchaser: formData.purchaser || undefined,
-        sourceId: builderId || undefined,
+        builderOrganizationId: builderId || undefined,
         // status: 'ACTIVE',
         text: formData.description || undefined,
         note: formData.notes || null,

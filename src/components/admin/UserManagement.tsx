@@ -96,7 +96,7 @@ export function UserManagement({ organizationId }: UserManagementProps) {
         lastName: data.lastName || '',
         contact: data.phone || '',
         role: data.role,
-        sourceId: builderId,
+        builderOrganizationId: builderId,
         ...(editingUser && { id: editingUser.id })
       };
 

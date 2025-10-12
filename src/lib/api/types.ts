@@ -136,7 +136,7 @@ export interface SearchParams {
 
 export interface BuilderItem extends BaseEntity {
   id: string;
-  sourceId: string | null;
+  builderOrganizationId: string | null;
   name: string;
   category: string | null;
   make: string | null;
@@ -163,7 +163,7 @@ export interface CreateBuilderItemRequest {
   model?: string;
   documentationUrl?: string;
   purchaser?: string;
-  sourceId?: string;
+  builderOrganizationId?: string;
   status?: string;
   text?: string;
   note?: string | null;
@@ -263,7 +263,7 @@ export interface CreateBuilderUserRequest {
   lastName?: string;
   contact?: string;
   role: string;
-  sourceId: string;
+  builderOrganizationId: string;
 }
 
 export interface BuilderOrganization {
@@ -300,7 +300,7 @@ export interface UpdateBuilderUserRequest {
   lastName?: string;
   contact?: string;
   role: string;
-  sourceId: string;
+  builderOrganizationId: string;
 }
 
 export interface BuilderUserResponse {
@@ -317,7 +317,6 @@ export interface Vendor extends BaseEntity {
   type: string;
   description: string | null;
   builderOrganizationId: string;
-  sourceId: string;
 }
 
 export interface CreateVendorRequest {
@@ -327,7 +326,6 @@ export interface CreateVendorRequest {
   type: string;
   description?: string;
   builderOrganizationId: string;
-  sourceId: string;
 }
 
 export interface UpdateVendorRequest {
@@ -338,7 +336,6 @@ export interface UpdateVendorRequest {
   type: string;
   description?: string;
   builderOrganizationId: string;
-  sourceId: string;
 }
 
 export interface VendorResponse {

@@ -99,8 +99,7 @@ const VendorManagement = ({ organizationId: propOrganizationId }: VendorManageme
             contact: data.contact,
             type: data.type,
             description: data.description || '',
-            builderOrganizationId: organizationId,
-            sourceId: editingVendor.sourceId
+            builderOrganizationId: organizationId
           } as UpdateVendorRequest
         : {
             name: data.name,
@@ -108,8 +107,7 @@ const VendorManagement = ({ organizationId: propOrganizationId }: VendorManageme
             contact: data.contact,
             type: data.type,
             description: data.description || '',
-            builderOrganizationId: organizationId,
-            sourceId: organizationId
+            builderOrganizationId: organizationId
           } as CreateVendorRequest;
 
       const result = await createOrUpdateVendor(vendorData).unwrap();

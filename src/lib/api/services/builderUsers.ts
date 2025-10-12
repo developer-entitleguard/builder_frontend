@@ -24,7 +24,7 @@ export const builderUsersApi = api.injectEndpoints({
           lastName: data.lastName || '',
           contact: data.contact || '',
           role: data.role,
-          sourceId: data.sourceId,
+          builderOrganizationId: data.builderOrganizationId,
           ...('id' in data && { id: data.id })
         });
 

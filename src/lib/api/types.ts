@@ -457,3 +457,41 @@ export interface DashboardCountResponse {
     readyForReview: number;
   };
 }
+
+export interface CustomerStatus {
+  id: string;
+  name: string;
+  module: string;
+}
+
+export interface DashboardCustomer {
+  id: string;
+  builderOrganization: {
+    id: string;
+    name: string;
+    address: string;
+    contact: string;
+    email: string;
+    abn: string | null;
+    description: string;
+    isActive: boolean;
+  };
+  status: CustomerStatus;
+  firstName: string;
+  lastName: string;
+  email: string;
+  contact: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  projectName: string | null;
+  notes: string | null;
+  settlementDate: string | null;
+}
+
+export interface CustomerListResponse {
+  success: boolean;
+  message: string;
+  data: DashboardCustomer[];
+}

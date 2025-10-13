@@ -4,7 +4,8 @@ import type {
   DashboardStats, 
   RecentActivity, 
   FilterOptions,
-  DashboardCountResponse
+  DashboardCountResponse,
+  CustomerListResponse
 } from '@/lib/api/types';
 
 export const dashboardApi = api.injectEndpoints({
@@ -23,6 +24,16 @@ export const dashboardApi = api.injectEndpoints({
     getDashboardCount: build.query<DashboardCountResponse, { builderId: string }>({
       query: (params) => ({
         url: '/api/dashboard/count',
+        method: 'GET',
+        params,
+      }),
+      providesTags: ['Dashboard'],
+    }),
+
+    // Get customer list for dashboard
+    getCustomerList: build.query<CustomerListResponse, { builderId: string }>({
+      query: (params) => ({
+        url: '/api/dashboard/customerlist',
         method: 'GET',
         params,
       }),
@@ -121,6 +132,7 @@ export const dashboardApi = api.injectEndpoints({
 export const {
   useGetDashboardStatsQuery,
   useGetDashboardCountQuery,
+  useGetCustomerListQuery,
   useGetRecentActivitiesQuery,
   useGetFilterOptionsQuery,
   useGetRegistrationTrendsQuery,

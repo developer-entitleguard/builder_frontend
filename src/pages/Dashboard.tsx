@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { useGetDashboardCountQuery } from "@/store/api/dashboard";
+import { useGetDashboardCountQuery, useGetCustomerListQuery } from "@/store/api/dashboard";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,23 +36,27 @@ interface HomeownerRegistration {
   property_address: string;
   property_city: string;
   property_state: string;
-  project_name: string;
+  project_name: string | null;
   status: string;
-  created_at: string;
-  entitlement_sent_at: string | null;
+  created_at?: string;
+  entitlement_sent_at?: string | null;
+  settlementDate?: string | null;
 }
 
 const Dashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [registrations, setRegistrations] = useState<HomeownerRegistration[]>(
-    []
-  );
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Fetch dashboard counts from API
   const { data: dashboardCounts, isLoading: countsLoading } = useGetDashboardCountQuery(
+    { builderId: user?.id || "" },
+    { skip: !user?.id }
+  );
+
+  // Fetch customer list from API
+  const { data: customerListData, isLoading: customersLoading, error: customersError } = useGetCustomerListQuery(
     { builderId: user?.id || "" },
     { skip: !user?.id }
   );
@@ -63,41 +66,46 @@ const Dashboard = () => {
       navigate("/auth");
       return;
     }
-    fetchRegistrations();
   }, [user, navigate]);
 
-  const fetchRegistrations = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("homeowner_registrations")
-        .select("*")
-        .eq("builder_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        toast({
-          title: "Error loading registrations",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        setRegistrations(data || []);
-      }
-    } catch (error) {
+  useEffect(() => {
+    if (customersError) {
       toast({
-        title: "Error",
-        description: "Failed to load registrations",
+        title: "Error loading customers",
+        description: "Failed to load customer list",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [customersError, toast]);
+
+  // Map API data to HomeownerRegistration format
+  const registrations: HomeownerRegistration[] = customerListData?.data?.map((customer) => ({
+    id: customer.id,
+    customer_name: `${customer.firstName} ${customer.lastName}`,
+    customer_email: customer.email,
+    property_address: customer.address,
+    property_city: customer.city,
+    property_state: customer.state,
+    project_name: customer.projectName,
+    status: customer.status.name,
+    settlementDate: customer.settlementDate,
+  })) || [];
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
+      DRAFT: { label: "Draft", variant: "secondary" as const },
+      DOCUMENTS_PENDING: {
+        label: "Documents Pending",
+        variant: "outline" as const,
+      },
+      READY_FOR_REVIEW: {
+        label: "Ready for Review",
+        variant: "default" as const,
+      },
+      ENTITLEMENT: { label: "Entitlement Sent", variant: "default" as const },
+      SENT: { label: "Sent", variant: "default" as const },
+      DELIVERED: { label: "Delivered", variant: "default" as const },
+      // Legacy status mappings
       draft: { label: "Draft", variant: "secondary" as const },
       documents_pending: {
         label: "Documents Pending",
@@ -112,21 +120,23 @@ const Dashboard = () => {
     };
 
     const config =
-      statusConfig[status as keyof typeof statusConfig] || statusConfig.draft;
+      statusConfig[status as keyof typeof statusConfig] || statusConfig.DRAFT;
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "draft":
+    const statusUpper = status.toUpperCase();
+    switch (statusUpper) {
+      case "DRAFT":
         return <FileText className="h-4 w-4 text-muted-foreground" />;
-      case "documents_pending":
+      case "DOCUMENTS_PENDING":
         return <Clock className="h-4 w-4 text-orange-500" />;
-      case "ready_for_review":
+      case "READY_FOR_REVIEW":
         return <CheckCircle className="h-4 w-4 text-blue-500" />;
-      case "sent":
+      case "ENTITLEMENT":
+      case "SENT":
         return <Send className="h-4 w-4 text-green-500" />;
-      case "delivered":
+      case "DELIVERED":
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       default:
         return <FileText className="h-4 w-4 text-muted-foreground" />;
@@ -135,24 +145,24 @@ const Dashboard = () => {
 
   const filteredRegistrations = registrations.filter(
     (reg) =>
-      reg.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reg.customer_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reg.property_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reg.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reg.customer_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reg.property_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const stats = {
     totalHomeowners: dashboardCounts?.data?.totalHomeowners ?? registrations.length,
     entitlementsSent: dashboardCounts?.data?.entitlementsSent ?? registrations.filter(
-      (r) => r.status === "sent" || r.status === "delivered"
+      (r) => r.status?.toUpperCase() === "ENTITLEMENT" || r.status?.toUpperCase() === "SENT" || r.status?.toUpperCase() === "DELIVERED"
     ).length,
     pending: dashboardCounts?.data?.pending ?? registrations.filter(
-      (r) => r.status === "draft" || r.status === "documents_pending"
+      (r) => r.status?.toUpperCase() === "DRAFT" || r.status?.toUpperCase() === "DOCUMENTS_PENDING"
     ).length,
-    readyForReview: dashboardCounts?.data?.readyForReview ?? registrations.filter((r) => r.status === "ready_for_review").length,
+    readyForReview: dashboardCounts?.data?.readyForReview ?? registrations.filter((r) => r.status?.toUpperCase() === "READY_FOR_REVIEW").length,
   };
 
-  if (loading || countsLoading) {
+  if (countsLoading || customersLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -426,17 +436,11 @@ const Dashboard = () => {
                     <div className="flex items-center space-x-4">
                       {getStatusBadge(registration.status)}
                       <div className="text-right">
-                        <p className="text-sm text-muted-foreground">
-                          Created:{" "}
-                          {new Date(
-                            registration.created_at
-                          ).toLocaleDateString()}
-                        </p>
-                        {registration.entitlement_sent_at && (
+                        {registration.settlementDate && (
                           <p className="text-sm text-muted-foreground">
-                            Sent:{" "}
+                            Settlement:{" "}
                             {new Date(
-                              registration.entitlement_sent_at
+                              registration.settlementDate
                             ).toLocaleDateString()}
                           </p>
                         )}

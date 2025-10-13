@@ -3,7 +3,8 @@ import { api } from './apiSlice';
 import type { 
   DashboardStats, 
   RecentActivity, 
-  FilterOptions 
+  FilterOptions,
+  DashboardCountResponse
 } from '@/lib/api/types';
 
 export const dashboardApi = api.injectEndpoints({
@@ -12,6 +13,16 @@ export const dashboardApi = api.injectEndpoints({
     getDashboardStats: build.query<DashboardStats, { organizationId?: string }>({
       query: (params) => ({
         url: '/dashboard/stats',
+        method: 'GET',
+        params,
+      }),
+      providesTags: ['Dashboard'],
+    }),
+
+    // Get dashboard counts
+    getDashboardCount: build.query<DashboardCountResponse, { builderId: string }>({
+      query: (params) => ({
+        url: '/api/dashboard/count',
         method: 'GET',
         params,
       }),
@@ -109,6 +120,7 @@ export const dashboardApi = api.injectEndpoints({
 
 export const {
   useGetDashboardStatsQuery,
+  useGetDashboardCountQuery,
   useGetRecentActivitiesQuery,
   useGetFilterOptionsQuery,
   useGetRegistrationTrendsQuery,

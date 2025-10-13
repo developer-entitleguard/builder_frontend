@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { useGetDashboardCountQuery } from "@/store/api/dashboard";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +52,11 @@ const Dashboard = () => {
   );
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const { data: dashboardCounts, isLoading: countsLoading } = useGetDashboardCountQuery(
+    { builderId: user?.id || "" },
+    { skip: !user?.id }
+  );
 
   useEffect(() => {
     if (!user) {
@@ -136,17 +142,17 @@ const Dashboard = () => {
   );
 
   const stats = {
-    total: registrations.length,
-    sent: registrations.filter(
+    totalHomeowners: dashboardCounts?.data?.totalHomeowners ?? registrations.length,
+    entitlementsSent: dashboardCounts?.data?.entitlementsSent ?? registrations.filter(
       (r) => r.status === "sent" || r.status === "delivered"
     ).length,
-    pending: registrations.filter(
+    pending: dashboardCounts?.data?.pending ?? registrations.filter(
       (r) => r.status === "draft" || r.status === "documents_pending"
     ).length,
-    ready: registrations.filter((r) => r.status === "ready_for_review").length,
+    readyForReview: dashboardCounts?.data?.readyForReview ?? registrations.filter((r) => r.status === "ready_for_review").length,
   };
 
-  if (loading) {
+  if (loading || countsLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -174,7 +180,7 @@ const Dashboard = () => {
                     Total Homeowners
                   </p>
                   <p className="text-2xl font-bold text-foreground">
-                    {stats.total}
+                    {stats.totalHomeowners}
                   </p>
                 </div>
               </div>
@@ -190,7 +196,7 @@ const Dashboard = () => {
                     Entitlements Sent
                   </p>
                   <p className="text-2xl font-bold text-foreground">
-                    {stats.sent}
+                    {stats.entitlementsSent}
                   </p>
                 </div>
               </div>
@@ -222,7 +228,7 @@ const Dashboard = () => {
                     Ready for Review
                   </p>
                   <p className="text-2xl font-bold text-foreground">
-                    {stats.ready}
+                    {stats.readyForReview}
                   </p>
                 </div>
               </div>

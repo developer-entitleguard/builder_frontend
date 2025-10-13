@@ -446,3 +446,14 @@ export interface ItemMapUpdateResponse {
   success: boolean;
   message: string;
 }
+
+export interface DashboardCountResponse {
+  success: boolean;
+  message: string;
+  data: {
+    entitlementsSent: number;
+    totalHomeowners: number;
+    pending: number;
+    readyForReview: number;
+  };
+}

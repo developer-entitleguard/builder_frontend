@@ -250,7 +250,7 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
       )}
 
       {/* Documentation Status */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <FileText className="w-5 h-5" />
@@ -273,7 +273,7 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
             {getTotalDocuments()} document{getTotalDocuments() !== 1 ? 's' : ''} ready for delivery
           </p>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Approval */}
       <Card>

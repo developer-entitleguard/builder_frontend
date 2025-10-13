@@ -49,16 +49,20 @@ const Dashboard = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
 
+  const builderId = user && 'builderOrganization' in user 
+    ? user.builderOrganization.id 
+    : null;
+
   // Fetch dashboard counts from API
   const { data: dashboardCounts, isLoading: countsLoading } = useGetDashboardCountQuery(
-    { builderId: user?.id || "" },
-    { skip: !user?.id }
+    { builderId: builderId || "" },
+    { skip: !builderId }
   );
 
   // Fetch customer list from API
   const { data: customerListData, isLoading: customersLoading, error: customersError } = useGetCustomerListQuery(
-    { builderId: user?.id || "" },
-    { skip: !user?.id }
+    { builderId: builderId || "" },
+    { skip: !builderId }
   );
 
   useEffect(() => {
@@ -81,13 +85,13 @@ const Dashboard = () => {
   // Map API data to HomeownerRegistration format
   const registrations: HomeownerRegistration[] = customerListData?.data?.map((customer) => ({
     id: customer.id,
-    customer_name: `${customer.firstName} ${customer.lastName}`,
-    customer_email: customer.email,
-    property_address: customer.address,
-    property_city: customer.city,
-    property_state: customer.state,
+    customer_name: `${customer.firstName} ${customer.lastName || ''}`.trim(),
+    customer_email: customer.email || '',
+    property_address: customer.address || '',
+    property_city: customer.city || '',
+    property_state: customer.state || '',
     project_name: customer.projectName,
-    status: customer.status.name,
+    status: customer.status?.name || 'DRAFT',
     settlementDate: customer.settlementDate,
   })) || [];
 
@@ -162,7 +166,9 @@ const Dashboard = () => {
     readyForReview: dashboardCounts?.data?.readyForReview ?? registrations.filter((r) => r.status?.toUpperCase() === "READY_FOR_REVIEW").length,
   };
 
-  if (countsLoading || customersLoading) {
+  const isLoading = builderId && (countsLoading || customersLoading);
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">

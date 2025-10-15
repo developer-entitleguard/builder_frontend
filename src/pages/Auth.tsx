@@ -228,10 +228,17 @@ const Auth = () => {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <Building2 className="h-8 w-8 text-primary mr-2" />
+            {/* <Building2 className="h-8 w-8 text-primary mr-2" /> */}
+            <div className="p-1">
+                <img 
+                  src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
+                  alt="Entitle Guard for Builders Logo" 
+                  className="h-8 w-8 rounded-lg"
+                />
+              </div>
             <h1 className="text-2xl font-bold text-foreground">Entitle Guard for Builders</h1>
           </div>
-          <p className="text-muted-foreground">Because Your Homeowners Deserve Clarity.</p>
+          <p className="text-muted-foreground">Because Builders Deserve Clarity.</p>
         </div>
 
         <Card>
@@ -327,10 +334,10 @@ const Auth = () => {
               </div>
             ) : (
               <Tabs defaultValue="signin" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+                {/* <TabsList className="grid w-full grid-cols-1">
                   <TabsTrigger value="signin">Sign In</TabsTrigger>
                   <TabsTrigger value="signup">Sign Up</TabsTrigger>
-                </TabsList>
+                </TabsList> */}
               
               <TabsContent value="signin">
                 <form onSubmit={handleSignIn} className="space-y-4">
@@ -393,7 +400,7 @@ const Auth = () => {
                 </form>
               </TabsContent>
               
-              <TabsContent value="signup">
+              {/* <TabsContent value="signup">
                 <form onSubmit={handleSignUp} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="company-name">Company Name</Label>
@@ -471,7 +478,7 @@ const Auth = () => {
                     {isLoading ? "Creating account..." : "Create Account"}
                   </Button>
                 </form>
-              </TabsContent>
+              </TabsContent> */}
             </Tabs>
             )}
           </CardContent>

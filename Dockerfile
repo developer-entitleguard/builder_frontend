@@ -1,42 +1,31 @@
-# =========================
-# 1. Builder stage
-# =========================
-FROM node:18 AS builder
+# ---- Stage 1: Build the app ----
+FROM node:20-alpine AS builder
 
-# Set build-time environment
 WORKDIR /app
 
-# Copy package files first for caching
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies (no devDependencies in production build)
-#RUN npm ci --omit=dev
-RUN npm install
-
-# Copy source code
 COPY . .
-
-# For React / Next.js — run build step
-# Comment out if pure Node.js backend
 RUN npm run build
 
-# =========================
-# 2. Runtime stage
-# =========================
-FROM node:18-slim AS runtime
-
-ARG NODE_ENV=production
-ENV NODE_ENV=$NODE_ENV
+# ---- Stage 2: Serve the built app ----
+FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Copy only built app and production deps
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
+# Copy only what's needed
 COPY --from=builder /app/dist ./dist
-#COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
+COPY --from=builder /app/package*.json ./
+
+# Install only production dependencies (if any)
+RUN npm ci --omit=dev
+
+# Use a lightweight static server (serve or similar)
+RUN npm install -g serve
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev"]
+# Serve the production build
+CMD ["serve", "-s", "dist", "-l", "3000"]
+

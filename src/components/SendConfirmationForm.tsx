@@ -3,12 +3,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Mail, Download, Eye, ArrowLeft } from "lucide-react";
+import type { CustomerDetailsResponse } from "@/lib/api/types";
 
 interface SendConfirmationFormProps {
   onNext?: () => void;
+  customerDetailsData: CustomerDetailsResponse | null;
+  isLoading?: boolean;
+  error?: unknown;
 }
 
-const SendConfirmationForm = ({ onNext }: SendConfirmationFormProps) => {
+const SendConfirmationForm = ({ onNext, customerDetailsData, isLoading = false, error }: SendConfirmationFormProps) => {
   const [status, setStatus] = useState<'sending' | 'sent' | 'delivered'>('sending');
 
   useEffect(() => {
@@ -22,10 +26,14 @@ const SendConfirmationForm = ({ onNext }: SendConfirmationFormProps) => {
     };
   }, []);
 
-  const customerData = {
-    name: "John & Sarah Johnson",
-    email: "john.johnson@email.com",
-    propertyAddress: "123 Oak Street, Austin, TX 78701"
+  const customerData = customerDetailsData?.data?.customer ? {
+    name: `${customerDetailsData.data.customer.firstName} ${customerDetailsData.data.customer.lastName}`,
+    email: customerDetailsData.data.customer.email,
+    propertyAddress: `${customerDetailsData.data.customer.address}, ${customerDetailsData.data.customer.city}, ${customerDetailsData.data.customer.state} ${customerDetailsData.data.customer.zip}`
+  } : {
+    name: "Loading...",
+    email: "Loading...",
+    propertyAddress: "Loading..."
   };
 
   const getStatusMessage = () => {
@@ -52,6 +60,43 @@ const SendConfirmationForm = ({ onNext }: SendConfirmationFormProps) => {
   };
 
   const statusInfo = getStatusMessage();
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Loading...</h2>
+          <p className="text-muted-foreground">Fetching customer details</p>
+        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-center space-x-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <p className="text-muted-foreground">Loading customer data...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Error</h2>
+          <p className="text-muted-foreground">Failed to load customer details</p>
+        </div>
+        <Card className="border-red-200">
+          <CardContent className="pt-6">
+            <div className="text-center text-red-600">
+              <p>Unable to fetch customer data. Please try again.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -115,19 +160,27 @@ const SendConfirmationForm = ({ onNext }: SendConfirmationFormProps) => {
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">8</p>
+              <p className="text-2xl font-bold text-primary">
+                {isLoading ? "..." : customerDetailsData?.data?.totalItems || 0}
+              </p>
               <p className="text-sm text-muted-foreground">Items</p>
             </div>
             <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">16</p>
+              <p className="text-2xl font-bold text-primary">
+                {isLoading ? "..." : customerDetailsData?.data?.totalDocuments || 0}
+              </p>
               <p className="text-sm text-muted-foreground">Documents</p>
             </div>
             <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">4</p>
+              <p className="text-2xl font-bold text-primary">
+                {isLoading ? "..." : customerDetailsData?.data?.totalCategories || 0}
+              </p>
               <p className="text-sm text-muted-foreground">Categories</p>
             </div>
             <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">100%</p>
+              <p className="text-2xl font-bold text-primary">
+                {isLoading ? "..." : `${customerDetailsData?.data?.completionPercent || 0}%`}
+              </p>
               <p className="text-sm text-muted-foreground">Complete</p>
             </div>
           </div>

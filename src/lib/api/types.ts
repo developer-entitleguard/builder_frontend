@@ -421,6 +421,11 @@ export interface CustomerDetailsResponse {
   message: string;
   data: {
     customer: BuilderCustomer;
+    totalItems: number;
+    totalCategories: number;
+    mappedItems: unknown;
+    completionPercent: number;
+    totalDocuments: number;
     dtos: CustomerDetailsCategory[];
   };
 }

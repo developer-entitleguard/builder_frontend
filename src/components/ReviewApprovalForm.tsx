@@ -8,6 +8,7 @@ import { User, Home, FileText, Building, CheckCircle } from "lucide-react";
 import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
 import { useCreateCustomerEntitlementMutation } from "@/lib/api/services/customerEntitlement";
 import { useToast } from "@/hooks/use-toast";
+import type { CustomerDetailsResponse } from "@/lib/api/types";
 
 interface BuilderItem {
   id: string;
@@ -55,9 +56,10 @@ interface FormData {
 interface ReviewApprovalFormProps {
   onNext: () => void;
   formData?: FormData;
+  onCustomerDetailsLoaded?: (data: CustomerDetailsResponse) => void;
 }
 
-const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
+const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
   const [approved, setApproved] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -101,6 +103,12 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
       });
     }
   }, [error, toast]);
+
+  useEffect(() => {
+    if (customerDetails && onCustomerDetailsLoaded) {
+      onCustomerDetailsLoaded(customerDetails);
+    }
+  }, [customerDetails, onCustomerDetailsLoaded]);
 
   const customerData = customerDetails?.data?.customer || formData?.customer || {};
   const uploadedDocs = formData?.documents || {};

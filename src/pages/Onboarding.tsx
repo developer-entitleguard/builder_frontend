@@ -11,6 +11,7 @@ import ItemsSelectionForm from "@/components/ItemsSelectionForm";
 import DocumentUploadForm from "@/components/DocumentUploadForm";
 import ReviewApprovalForm from "@/components/ReviewApprovalForm";
 import SendConfirmationForm from "@/components/SendConfirmationForm";
+import type { CustomerDetailsResponse } from "@/lib/api/types";
 
 const Onboarding = () => {
   const { user } = useAuth();
@@ -28,6 +29,7 @@ const Onboarding = () => {
     items: {},
     documents: { documents: {}, itemDetails: {} }
   });
+  const [customerDetailsData, setCustomerDetailsData] = useState<CustomerDetailsResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -279,9 +281,9 @@ const Onboarding = () => {
       case 'documents':
         return <DocumentUploadForm onNext={handleDocumentsNext as (data: unknown) => void} initialData={{...formData.documents, ...formData.items, ...formData.customer} as unknown as Parameters<typeof DocumentUploadForm>[0]['initialData']} selectedItems={(formData.items as Record<string, unknown>)?.selected_items as string[] || []} />;
       case 'review':
-        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData as unknown as Parameters<typeof ReviewApprovalForm>[0]['formData']} />;
+        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData as unknown as Parameters<typeof ReviewApprovalForm>[0]['formData']} onCustomerDetailsLoaded={setCustomerDetailsData} />;
       case 'send':
-        return <SendConfirmationForm />;
+        return <SendConfirmationForm customerDetailsData={customerDetailsData} isLoading={loading} />;
       default:
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
     }

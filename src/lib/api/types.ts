@@ -495,3 +495,13 @@ export interface CustomerListResponse {
   message: string;
   data: DashboardCustomer[];
 }
+
+export interface CustomerEntitlementResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    entitlementId: string;
+    builderCustomerId: string;
+    createdAt: string;
+  };
+}

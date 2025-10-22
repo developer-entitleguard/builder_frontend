@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { User, Home, FileText, Building, CheckCircle } from "lucide-react";
 import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
+import { useCreateCustomerEntitlementMutation } from "@/lib/api/services/customerEntitlement";
 import { useToast } from "@/hooks/use-toast";
 
 interface BuilderItem {
@@ -59,6 +60,7 @@ interface ReviewApprovalFormProps {
 const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
   const [approved, setApproved] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { 
     data: customerDetails, 
@@ -75,6 +77,10 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
       refetchOnMountOrArgChange: true
     }
   );
+
+  const [createCustomerEntitlement, { 
+    isLoading: isCreatingEntitlement 
+  }] = useCreateCustomerEntitlementMutation();
 
   useEffect(() => {
     if (formData?.customer?.builderId && formData?.customer?.customerId) {
@@ -118,6 +124,48 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
   }, {} as Record<string, BuilderItem[]>) || {};
 
   const selectedItems = Object.values(groupedItems).flat();
+
+  const handleSendToHomeowner = async () => {
+    if (!formData?.customer?.customerId) {
+      toast({
+        title: "Error",
+        description: "Customer ID is required to send entitlement",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      const result = await createCustomerEntitlement({
+        builderCustomerId: formData.customer.customerId
+      }).unwrap();
+
+      toast({
+        title: "Success",
+        description: "Customer entitlement created successfully",
+        variant: "default"
+      });
+
+      // Call the original onNext function to proceed to next step
+      onNext();
+    } catch (error: unknown) {
+      console.error('Error creating customer entitlement:', error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error && 
+        error.data && typeof error.data === 'object' && 'message' in error.data
+        ? (error.data as { message: string }).message
+        : "Failed to create customer entitlement";
+      
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -301,11 +349,11 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
           {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} • {getTotalDocuments() as number} document{(getTotalDocuments() as number) !== 1 ? 's' : ''} • Ready to send
         </p>
         <Button 
-          onClick={onNext}
-          disabled={!approved}
+          onClick={handleSendToHomeowner}
+          disabled={!approved || isSubmitting || isCreatingEntitlement}
           className="min-w-[120px]"
         >
-          Send to Homeowner
+          {isSubmitting || isCreatingEntitlement ? "Sending..." : "Send to Homeowner"}
         </Button>
       </div>
     </div>

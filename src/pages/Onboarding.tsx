@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
@@ -31,6 +32,17 @@ const Onboarding = () => {
   });
   const [customerDetailsData, setCustomerDetailsData] = useState<CustomerDetailsResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [recentSelectedItemIds, setRecentSelectedItemIds] = useState<string[] | null>(null);
+
+  const editingId = searchParams.get('id');
+  const builderId = user && 'builderOrganization' in user 
+    ? user.builderOrganization.id 
+    : null;
+
+  const { data: customerDetailsResponse, isLoading: isFetchingDetails } = useGetCustomerDetailsQuery(
+    { builderId: builderId || '', customerId: editingId || '' },
+    { skip: !builderId || !editingId }
+  );
 
   useEffect(() => {
     if (!user) {
@@ -38,83 +50,122 @@ const Onboarding = () => {
     }
   }, [user, navigate]);
 
-  // Check for existing registration ID in URL params and load data
   useEffect(() => {
-    const editingId = searchParams.get('id');
     if (editingId && user) {
       setRegistrationId(editingId);
-      loadExistingRegistration(editingId);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, user]);
+  }, [editingId, user]);
 
-  const loadExistingRegistration = async (id: string) => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('homeowner_registrations')
-        .select('*')
-        .eq('id', id)
-        .eq('builder_id', user?.id)
-        .single();
+  useEffect(() => {
+    if (customerDetailsResponse?.data && editingId) {
+      setLoading(true);
+      try {
+        const customer = customerDetailsResponse.data.customer;
+        const dtos = customerDetailsResponse.data.dtos;
+        const customerFormData = {
+          firstName: customer.firstName || '',
+          lastName: customer.lastName || '',
+          email: customer.email || '',
+          phone: customer.contact || '',
+          propertyAddress: customer.address || '',
+          city: customer.city || '',
+          state: customer.state || '',
+          zipCode: customer.zip || '',
+          projectName: customer.projectName || '',
+          settlementDate: customer.settlementDate || '',
+          notes: customer.notes || ''
+        };
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          toast({
-            title: "Registration not found",
-            description: "This registration doesn't exist or you don't have access to it.",
-            variant: "destructive"
+        const itemsFormData: Record<string, unknown> = {};
+        if (dtos && dtos.length > 0) {
+          dtos.forEach(categoryData => {
+            if (categoryData.items && categoryData.items.length > 0) {
+              itemsFormData[categoryData.category] = categoryData.items.map(item => ({
+                id: item.id,
+                name: item.name,
+                mapped: item.mapped
+              }));
+            }
           });
-          navigate('/dashboard');
-          return;
         }
-        throw error;
+
+        setFormData({
+          customer: customerFormData,
+          items: itemsFormData,
+          documents: { documents: {}, itemDetails: {} }
+        });
+        setCustomerDetailsData(customerDetailsResponse);
+        let initialStep = 'customer';
+        let savedFormData = null;
+        const savedData = getSavedStep(editingId);
+        if (savedData.step) {
+          initialStep = savedData.step;
+          savedFormData = savedData.savedFormData;
+        }
+        if (dtos && dtos.length > 0) {
+          const hasMappedItems = dtos.some(cat => 
+            cat.items.some(item => item.mapped)
+          );
+          if (hasMappedItems) {
+            initialStep = 'documents';
+          } else if (initialStep === 'customer') {
+            initialStep = 'items';
+          }
+        } else if (customer.firstName && customer.email && initialStep === 'customer') {
+          initialStep = 'items';
+        }
+        if (savedFormData) {
+          setFormData(savedFormData);
+        }
+        setCurrentStep(initialStep);
+
+      } catch (error: unknown) {
+        toast({
+          title: "Error loading registration",
+          description: error instanceof Error ? error.message : 'An error occurred',
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
       }
-
-      // Parse the existing data and populate form
-      const existingFormData = {
-        customer: {
-          firstName: data.customer_name?.split(' ')[0] || '',
-          lastName: data.customer_name?.split(' ').slice(1).join(' ') || '',
-          email: data.customer_email || '',
-          phone: data.customer_phone || '',
-          propertyAddress: data.property_address || '',
-          city: data.property_city || '',
-          state: data.property_state || '',
-          zipCode: data.property_zip || '',
-          projectName: data.project_name || '',
-          settlementDate: data.settlement_date || '',
-          notes: data.notes || ''
-        },
-        items: data.selected_items || {},
-        documents: data.documents_uploaded || {}
-      };
-
-      setFormData(existingFormData as unknown as typeof formData);
-
-      // Determine which step to start on based on data completeness
-      if (data.status === 'ready_for_review') {
-        setCurrentStep('review');
-      } else if (data.selected_items && Object.keys(data.selected_items).length > 0) {
-        setCurrentStep('documents');
-      } else if (data.customer_name && data.customer_email) {
-        setCurrentStep('items');
-      }
-
-    } catch (error: unknown) {
-      toast({
-        title: "Error loading registration",
-        description: error instanceof Error ? error.message : 'An error occurred',
-        variant: "destructive"
-      });
-      navigate('/dashboard');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [customerDetailsResponse, editingId, user, toast]);
 
   const handleStepClick = (stepId: string) => {
     setCurrentStep(stepId);
+    saveCurrentStep(stepId);
+  };
+
+  const saveCurrentStep = (step: string) => {
+    if (!editingId) return;
+    
+    try {
+      const stepData = {
+        currentStep: step,
+        lastUpdated: new Date().toISOString(),
+        customerId: editingId,
+        formData: formData // Save the entire form data
+      };
+      localStorage.setItem(`onboarding_step_${editingId}`, JSON.stringify(stepData));
+    } catch (error) {
+      console.error('Failed to save current step:', error);
+    }
+  };
+
+  const getSavedStep = (customerId: string): { step: string | null; savedFormData: Record<string, unknown> | null } => {
+    try {
+      const savedData = localStorage.getItem(`onboarding_step_${customerId}`);
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        return {
+          step: parsed.currentStep || null,
+          savedFormData: parsed.formData || null
+        };
+      }
+    } catch (error) {
+      console.error('Failed to get saved step:', error);
+    }
+    return { step: null, savedFormData: null };
   };
 
   const saveRegistrationData = async (stepData: Record<string, unknown>, step: string) => {
@@ -210,6 +261,8 @@ const Onboarding = () => {
     if (itemsData.registrationId && typeof itemsData.registrationId === 'string') {
       setRegistrationId(itemsData.registrationId);
     }
+    const justSelected = (itemsData as { selected_items?: string[] }).selected_items || [];
+    setRecentSelectedItemIds(justSelected);
     setFormData(prev => ({ ...prev, items: itemsData }));
     handleNextStep();
   };
@@ -231,7 +284,9 @@ const Onboarding = () => {
     const steps = ['customer', 'items', 'documents', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex < steps.length - 1) {
-      setCurrentStep(steps[currentIndex + 1]);
+      const nextStep = steps[currentIndex + 1];
+      setCurrentStep(nextStep);
+      saveCurrentStep(nextStep);
     }
   };
 
@@ -239,7 +294,9 @@ const Onboarding = () => {
     const steps = ['customer', 'items', 'documents', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex > 0) {
-      setCurrentStep(steps[currentIndex - 1]);
+      const prevStep = steps[currentIndex - 1];
+      setCurrentStep(prevStep);
+      saveCurrentStep(prevStep);
     }
   };
 
@@ -256,6 +313,10 @@ const Onboarding = () => {
         .eq('id', registrationId);
 
       if (error) throw error;
+
+      if (editingId) {
+        localStorage.removeItem(`onboarding_step_${editingId}`);
+      }
 
       toast({
         title: "Entitlement sent!",
@@ -277,9 +338,33 @@ const Onboarding = () => {
       case 'customer':
         return <CustomerDetailsForm onNext={handleCustomerNext as (data: unknown) => void} initialData={formData.customer} />;
       case 'items':
-        return <ItemsSelectionForm onNext={handleItemsNext as (data: unknown) => void} initialData={{...formData.items, ...formData.customer}} registrationId={registrationId} />;
-      case 'documents':
-        return <DocumentUploadForm onNext={handleDocumentsNext as (data: unknown) => void} initialData={{...formData.documents, ...formData.items, ...formData.customer} as unknown as Parameters<typeof DocumentUploadForm>[0]['initialData']} selectedItems={(formData.items as Record<string, unknown>)?.selected_items as string[] || []} />;
+        return <ItemsSelectionForm 
+          onNext={handleItemsNext as (data: unknown) => void} 
+          initialData={{
+            ...formData.items, 
+            ...formData.customer,
+            builderId: builderId,
+            customerId: editingId || (formData.customer as Record<string, unknown>)?.customerId as string
+          }} 
+          registrationId={registrationId} 
+        />;
+      case 'documents': {
+        const selectedItems = recentSelectedItemIds && recentSelectedItemIds.length > 0
+          ? recentSelectedItemIds
+          : ((formData.items as Record<string, unknown>)?.selected_items as string[] || []);
+        return <DocumentUploadForm 
+          onNext={handleDocumentsNext as (data: unknown) => void} 
+          initialData={{
+            ...formData.documents, 
+            ...formData.items, 
+            ...formData.customer,
+            builderId: builderId,
+            customerId: editingId || (formData.customer as Record<string, unknown>)?.customerId as string,
+            selected_items: selectedItems
+          } as unknown as Parameters<typeof DocumentUploadForm>[0]['initialData']} 
+          selectedItems={selectedItems} 
+        />;
+      }
       case 'review':
         return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData as unknown as Parameters<typeof ReviewApprovalForm>[0]['formData']} onCustomerDetailsLoaded={setCustomerDetailsData} />;
       case 'send':
@@ -293,7 +378,7 @@ const Onboarding = () => {
     return null;
   }
 
-  if (loading) {
+  if (loading || isFetchingDetails) {
     return (
       <div className="min-h-screen bg-background">
         <Header />

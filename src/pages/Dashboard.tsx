@@ -27,7 +27,14 @@ import {
   Package,
   MessageSquare,
   Settings,
+  MoreVertical,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface HomeownerRegistration {
   id: string;
@@ -416,7 +423,7 @@ const Dashboard = () => {
                   <div
                     key={registration.id}
                     className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/registration/${registration.id}`)}
+                    onClick={() => navigate(`/onboarding?id=${registration.id}`)}
                   >
                     <div className="flex items-center space-x-4 flex-1">
                       {getStatusIcon(registration.status)}
@@ -451,6 +458,21 @@ const Dashboard = () => {
                           </p>
                         )}
                       </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/registration/${registration.id}`);
+                          }}>
+                            View Details
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 ))}

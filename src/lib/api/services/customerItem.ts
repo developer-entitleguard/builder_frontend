@@ -12,7 +12,7 @@ export const customerItemApi = api.injectEndpoints({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['CustomerItem'],
+      invalidatesTags: ['CustomerItem', 'CustomerDetails'],
     }),
   }),
 });

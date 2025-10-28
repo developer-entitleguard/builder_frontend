@@ -1,15 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { useGetCustomerDetailsQuery } from '@/lib/api/services/customerDetails';
 import { 
   ArrowLeft,
   Edit,
-  Send,
   User,
   Home,
   Calendar,
@@ -22,124 +21,43 @@ import {
 } from 'lucide-react';
 import Header from '@/components/Header';
 
-interface RegistrationData {
-  id: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string | null;
-  property_address: string;
-  property_city: string;
-  property_state: string;
-  property_zip: string;
-  project_name: string | null;
-  settlement_date: string | null;
-  notes: string | null;
-  status: string;
-  selected_items: any;
-  documents_uploaded: any;
-  created_at: string;
-  updated_at: string;
-  entitlement_sent_at: string | null;
-}
-
 const RegistrationDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [registration, setRegistration] = useState<RegistrationData | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  const builderId = user && 'builderOrganization' in user 
+    ? user.builderOrganization.id 
+    : null;
+
+  const { data: customerDetailsData, isLoading: loading, error } = useGetCustomerDetailsQuery(
+    { builderId: builderId || '', customerId: id || '' },
+    { skip: !builderId || !id }
+  );
 
   useEffect(() => {
-    if (!user || !id) {
+    if (!user) {
       navigate('/dashboard');
       return;
     }
-    fetchRegistration();
-  }, [user, id, navigate]);
+  }, [user, navigate]);
 
-  const fetchRegistration = async () => {
-    if (!user || !id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('homeowner_registrations')
-        .select('*')
-        .eq('id', id)
-        .eq('builder_id', user.id)
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') {
-          toast({
-            title: "Registration not found",
-            description: "This registration doesn't exist or you don't have access to it.",
-            variant: "destructive"
-          });
-          navigate('/dashboard');
-          return;
-        }
-        throw error;
-      }
-
-      setRegistration(data);
-    } catch (error: any) {
+  useEffect(() => {
+    if (error) {
       toast({
         title: "Error loading registration",
-        description: error.message,
+        description: "Failed to load customer details. Please try again.",
         variant: "destructive"
       });
-      navigate('/dashboard');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [error, toast]);
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      draft: { label: 'Draft', variant: 'secondary' as const },
-      documents_pending: { label: 'Documents Pending', variant: 'outline' as const },
-      ready_for_review: { label: 'Ready for Review', variant: 'default' as const },
-      sent: { label: 'Sent', variant: 'default' as const },
-      delivered: { label: 'Delivered', variant: 'default' as const }
-    };
-    
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.draft;
-    return <Badge variant={config.variant}>{config.label}</Badge>;
-  };
+  const customer = customerDetailsData?.data?.customer;
 
   const handleContinueOnboarding = () => {
-    // Navigate to onboarding with the registration ID to continue editing
+    // Navigate to onboarding with the customer ID to continue editing
     navigate(`/onboarding?id=${id}`);
-  };
-
-  const handleSendEntitlement = async () => {
-    if (!registration) return;
-
-    try {
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .update({ 
-          status: 'sent',
-          entitlement_sent_at: new Date().toISOString()
-        })
-        .eq('id', registration.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Entitlement sent!",
-        description: "The warranty entitlement has been sent to the homeowner."
-      });
-
-      fetchRegistration(); // Refresh data
-    } catch (error: any) {
-      toast({
-        title: "Error sending entitlement",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
   };
 
   if (loading) {
@@ -155,7 +73,7 @@ const RegistrationDetail = () => {
     );
   }
 
-  if (!registration) {
+  if (!customer) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
@@ -184,24 +102,15 @@ const RegistrationDetail = () => {
               Back to Dashboard
             </Button>
             <div>
-              <h1 className="text-3xl font-bold text-foreground">{registration.customer_name}</h1>
-              <p className="text-muted-foreground">{registration.customer_email}</p>
+              <h1 className="text-3xl font-bold text-foreground">{customer.firstName} {customer.lastName}</h1>
+              <p className="text-muted-foreground">{customer.email}</p>
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            {getStatusBadge(registration.status)}
-            {registration.status !== 'sent' && registration.status !== 'delivered' && (
-              <Button variant="outline" onClick={handleContinueOnboarding}>
-                <Edit className="h-4 w-4 mr-2" />
-                Continue Editing
-              </Button>
-            )}
-            {registration.status === 'ready_for_review' && (
-              <Button onClick={handleSendEntitlement}>
-                <Send className="h-4 w-4 mr-2" />
-                Send Entitlement
-              </Button>
-            )}
+            <Button variant="outline" onClick={handleContinueOnboarding}>
+              <Edit className="h-4 w-4 mr-2" />
+              Continue Editing
+            </Button>
           </div>
         </div>
 
@@ -220,32 +129,32 @@ const RegistrationDetail = () => {
                   <p className="text-sm font-medium text-muted-foreground">Email</p>
                   <div className="flex items-center space-x-2">
                     <Mail className="h-4 w-4 text-muted-foreground" />
-                    <p className="text-sm">{registration.customer_email}</p>
+                    <p className="text-sm">{customer.email}</p>
                   </div>
                 </div>
-                {registration.customer_phone && (
+                {customer.contact && (
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Phone</p>
                     <div className="flex items-center space-x-2">
                       <Phone className="h-4 w-4 text-muted-foreground" />
-                      <p className="text-sm">{registration.customer_phone}</p>
+                      <p className="text-sm">{customer.contact}</p>
                     </div>
                   </div>
                 )}
               </div>
-              {registration.settlement_date && (
+              {customer.settlementDate && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Settlement Date</p>
                   <div className="flex items-center space-x-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <p className="text-sm">{new Date(registration.settlement_date).toLocaleDateString()}</p>
+                    <p className="text-sm">{new Date(customer.settlementDate).toLocaleDateString()}</p>
                   </div>
                 </div>
               )}
-              {registration.notes && (
+              {customer.notes && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Notes</p>
-                  <p className="text-sm bg-muted p-2 rounded">{registration.notes}</p>
+                  <p className="text-sm bg-muted p-2 rounded">{customer.notes}</p>
                 </div>
               )}
             </CardContent>
@@ -265,27 +174,17 @@ const RegistrationDetail = () => {
                 <div className="flex items-center space-x-2">
                   <MapPin className="h-4 w-4 text-muted-foreground" />
                   <p className="text-sm">
-                    {registration.property_address}, {registration.property_city}, {registration.property_state} {registration.property_zip}
+                    {customer.address}, {customer.city}, {customer.state} {customer.zip}
                   </p>
                 </div>
               </div>
-              {registration.project_name && (
+              {customer.projectName && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Project</p>
                   <div className="flex items-center space-x-2">
                     <Building className="h-4 w-4 text-muted-foreground" />
-                    <p className="text-sm">{registration.project_name}</p>
+                    <p className="text-sm">{customer.projectName}</p>
                   </div>
-                </div>
-              )}
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Created</p>
-                <p className="text-sm">{new Date(registration.created_at).toLocaleDateString()}</p>
-              </div>
-              {registration.entitlement_sent_at && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Entitlement Sent</p>
-                  <p className="text-sm">{new Date(registration.entitlement_sent_at).toLocaleDateString()}</p>
                 </div>
               )}
             </CardContent>
@@ -300,20 +199,29 @@ const RegistrationDetail = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {registration.selected_items && Object.keys(registration.selected_items).length > 0 ? (
+              {customerDetailsData?.data?.dtos && customerDetailsData.data.dtos.length > 0 ? (
                 <div className="space-y-4">
-                  {Object.entries(registration.selected_items).map(([category, items]: [string, any]) => (
-                    <div key={category}>
-                      <h4 className="font-medium text-sm mb-2">{category}</h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        {Array.isArray(items) && items.map((item: string, index: number) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {item}
-                          </Badge>
-                        ))}
+                  {customerDetailsData.data.dtos
+                    .map((categoryData) => ({
+                      category: categoryData.category,
+                      items: categoryData.items.filter((item) => item.mapped),
+                    }))
+                    .filter((categoryData) => categoryData.items.length > 0)
+                    .map((categoryData) => (
+                      <div key={categoryData.category}>
+                        <h4 className="font-medium text-sm mb-2">{categoryData.category}</h4>
+                        <div className="grid grid-cols-2 gap-2">
+                          {categoryData.items.map((item) => (
+                            <Badge key={item.id} variant="outline" className="text-xs">
+                              {item.name}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  {customerDetailsData.data.dtos.every((c) => !c.items.some((i) => i.mapped)) && (
+                    <p className="text-muted-foreground text-sm">No items mapped yet.</p>
+                  )}
                 </div>
               ) : (
                 <p className="text-muted-foreground text-sm">No items selected yet.</p>
@@ -330,16 +238,32 @@ const RegistrationDetail = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {registration.documents_uploaded && Object.keys(registration.documents_uploaded).length > 0 ? (
+              {customerDetailsData?.data?.totalDocuments && customerDetailsData.data.totalDocuments > 0 ? (
                 <div className="space-y-2">
-                  {Object.entries(registration.documents_uploaded).map(([docType, files]: [string, any]) => (
-                    <div key={docType} className="flex items-center justify-between">
-                      <span className="text-sm">{docType}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {Array.isArray(files) ? files.length : 0} files
-                      </Badge>
-                    </div>
-                  ))}
+                  <p className="text-sm text-muted-foreground">
+                    Total Documents: {customerDetailsData.data.totalDocuments}
+                  </p>
+                  {customerDetailsData.data.dtos.map((categoryData) => {
+                    const itemsWithFiles = categoryData.items.filter(item => item.fileId);
+                    if (itemsWithFiles.length > 0) {
+                      return (
+                        <div key={categoryData.category}>
+                          <h4 className="font-medium text-sm mb-2">{categoryData.category}</h4>
+                          <div className="space-y-1">
+                            {itemsWithFiles.map((item) => (
+                              <div key={item.id} className="flex items-center justify-between">
+                                <span className="text-sm">{item.name}</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {item.serialNumber || 'No serial'}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })}
                 </div>
               ) : (
                 <p className="text-muted-foreground text-sm">No documents uploaded yet.</p>

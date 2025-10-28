@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +43,10 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, File[]>>({});
   const [updateItemMap, { isLoading: isUpdating }] = useUpdateItemMapMutation();
 
-  const selectedIds = initialData?.selected_items || selectedItemIds || [];
+  const selectedIds = useMemo(() => 
+    initialData?.selected_items || selectedItemIds || [], 
+    [initialData?.selected_items, selectedItemIds]
+  );
 
   const { 
     data: customerDetails, 
@@ -55,9 +58,32 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
       customerId: initialData?.customerId || '' 
     },
     { 
-      skip: !initialData?.builderId || !initialData?.customerId 
+      skip: !initialData?.builderId || !initialData?.customerId,
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
     }
   );
+
+  const effectiveSelectedIds = useMemo((): string[] => {
+    if (selectedIds.length > 0) return selectedIds;
+    if (selectedItemIds && selectedItemIds.length > 0) return selectedItemIds;
+    
+    const ids: string[] = [];
+    if (customerDetails?.data?.dtos) {
+      customerDetails.data.dtos.forEach((categoryGroup) => {
+        categoryGroup.items.forEach((item) => {
+          if (item.mapped || item.builderCustomerMapId) {
+            ids.push(item.id);
+          }
+        });
+      });
+    }
+    console.log('DocumentUploadForm - selectedIds:', selectedIds);
+    console.log('DocumentUploadForm - selectedItemIds:', selectedItemIds);
+    console.log('DocumentUploadForm - effectiveSelectedIds:', ids);
+    return ids;
+  }, [selectedIds, selectedItemIds, customerDetails]);
 
   useEffect(() => {
     if (error) {
@@ -70,9 +96,30 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
     }
   }, [error, toast]);
 
+  useEffect(() => {
+    if (customerDetails?.data?.dtos && Object.keys(itemDetails).length === 0) {
+      const existingDetails: Record<string, { seller: string; serialNumber: string }> = {};
+      
+      customerDetails.data.dtos.forEach(categoryGroup => {
+        categoryGroup.items.forEach(item => {
+          if (effectiveSelectedIds.includes(item.id)) {
+            existingDetails[item.id] = {
+              seller: item.seller || '',
+              serialNumber: item.serialNumber || ''
+            };
+          }
+        });
+      });
+      
+      if (Object.keys(existingDetails).length > 0) {
+        setItemDetails(existingDetails);
+      }
+    }
+  }, [customerDetails, effectiveSelectedIds, itemDetails]);
+
   const groupedItems = customerDetails?.data?.dtos?.reduce((acc, categoryGroup) => {
     const selectedCategoryItems = categoryGroup.items.filter(item => 
-      selectedIds.includes(item.id)
+      effectiveSelectedIds.includes(item.id)
     );
     if (selectedCategoryItems.length > 0) {
       acc[categoryGroup.category] = selectedCategoryItems;
@@ -238,9 +285,14 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
                           </div>
                           <div>
                             <h4 className="font-medium">{item.name}</h4>
-                            {(item.brand || item.model) && (
+                            {(item.brand || item.model || item.make) && (
                               <p className="text-xs text-muted-foreground">
-                                {[item.brand, item.model].filter(Boolean).join(' - ')}
+                                {[item.brand, item.model, item.make].filter(Boolean).join(' - ')}
+                              </p>
+                            )}
+                            {item.text && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {item.text}
                               </p>
                             )}
                             {hasUploads && (

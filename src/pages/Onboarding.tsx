@@ -13,6 +13,8 @@ import DocumentUploadForm from "@/components/DocumentUploadForm";
 import ReviewApprovalForm from "@/components/ReviewApprovalForm";
 import SendConfirmationForm from "@/components/SendConfirmationForm";
 import type { CustomerDetailsResponse } from "@/lib/api/types";
+import { dashboardApi } from "@/store/api/dashboard";
+import { useDispatch } from "react-redux";
 
 const Onboarding = () => {
   const { user } = useAuth();
@@ -33,6 +35,7 @@ const Onboarding = () => {
   const [customerDetailsData, setCustomerDetailsData] = useState<CustomerDetailsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [recentSelectedItemIds, setRecentSelectedItemIds] = useState<string[] | null>(null);
+  const dispatch = useDispatch();
 
   const editingId = searchParams.get('id');
   const builderId = user && 'builderOrganization' in user 
@@ -273,6 +276,7 @@ const Onboarding = () => {
   };
 
   const handleSaveAndExit = async () => {
+    dispatch(dashboardApi.util.invalidateTags(['Dashboard']));
     toast({
       title: "Registration saved",
       description: "You can continue this registration later from your dashboard."

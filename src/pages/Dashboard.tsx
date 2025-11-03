@@ -80,14 +80,14 @@ const Dashboard = () => {
   }, [user, navigate]);
 
   useEffect(() => {
-    if (customersError) {
+    if (customersError && builderId) {
       toast({
         title: "Error loading customers",
         description: "Failed to load customer list",
         variant: "destructive",
       });
     }
-  }, [customersError, toast]);
+  }, [customersError, toast, builderId]);
 
   // Map API data to HomeownerRegistration format
   const registrations: HomeownerRegistration[] = customerListData?.data?.map((customer) => ({

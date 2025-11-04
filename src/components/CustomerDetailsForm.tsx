@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,9 +31,12 @@ interface CustomerFormData {
 interface CustomerDetailsFormProps {
   onNext: (data: CustomerFormData) => void;
   initialData?: Partial<CustomerFormData>;
+  onSaveExit?: () => void;
+  customerId?: string;
+  isSaving?: boolean;
 }
 
-const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) => {
+const CustomerDetailsForm = ({ onNext, initialData, onSaveExit, customerId, isSaving = false }: CustomerDetailsFormProps) => {
   const [createBuilderCustomer, { isLoading }] = useCreateBuilderCustomerMutation();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -52,6 +55,24 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
     notes: initialData?.notes || ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData(prev => ({
+        firstName: initialData.firstName ?? prev.firstName,
+        lastName: initialData.lastName ?? prev.lastName,
+        email: initialData.email ?? prev.email,
+        phone: initialData.phone ?? prev.phone,
+        propertyAddress: initialData.propertyAddress ?? prev.propertyAddress,
+        city: initialData.city ?? prev.city,
+        state: initialData.state ?? prev.state,
+        zipCode: initialData.zipCode ?? prev.zipCode,
+        projectName: initialData.projectName ?? prev.projectName,
+        settlementDate: initialData.settlementDate ?? prev.settlementDate,
+        notes: initialData.notes ?? prev.notes
+      }));
+    }
+  }, [initialData]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -114,8 +135,9 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
     
     setLoading(true);
     try {
-      // Call the customer API
+      // Call the customer API - include id in payload if updating existing customer
       const customerData = {
+        ...(customerId && { id: customerId }),
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
@@ -139,20 +161,20 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
       });
       
       // Extract the customer ID and builder ID from the response
-      const customerId = customerResponse?.data?.id;
-      const builderId = customerResponse?.data?.builderOrganization?.id;
+      const finalCustomerId = customerId || customerResponse?.data?.id;
+      const builderId = customerResponse?.data?.builderOrganization?.id || user.builderOrganization.id;
       
-      if (!customerId || !builderId) {
+      if (!finalCustomerId || !builderId) {
         throw new Error('Customer ID or Builder ID not found in response');
       }
       
-      console.log('Extracted IDs:', { customerId, builderId });
+      console.log('Extracted IDs:', { customerId: finalCustomerId, builderId });
       
       // Pass both IDs to the next step
       onNext({ 
         ...formData, 
-        registrationId: customerId,
-        customerId: customerId,
+        registrationId: finalCustomerId,
+        customerId: finalCustomerId,
         builderId: builderId
       });
     } catch (error: unknown) {
@@ -340,9 +362,12 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
           </CardContent>
         </Card>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end items-center gap-3">
+          <Button variant="outline" onClick={onSaveExit} disabled={loading || isLoading || isSaving}>
+            {isSaving ? 'Saving...' : 'Save & Exit'}
+          </Button>
           <Button type="submit" size="lg" className="min-w-[150px]" disabled={loading || isLoading}>
-            {loading || isLoading ? 'Saving...' : 'Continue to Items'}
+            {loading || isLoading ? 'Saving...' : 'Save Continue to Items'}
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         </div>

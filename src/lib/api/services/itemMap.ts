@@ -26,10 +26,22 @@ export const itemMapApi = api.injectEndpoints({
           });
 
           if (!response.ok) {
+            let errorData;
+            const contentType = response.headers.get('content-type');
+            try {
+              if (contentType && contentType.includes('application/json')) {
+                errorData = await response.json();
+              } else {
+                errorData = await response.text();
+              }
+            } catch {
+              errorData = `HTTP ${response.status}: ${response.statusText}`;
+            }
+            
             return {
               error: {
                 status: response.status,
-                data: await response.text(),
+                data: errorData,
               },
             };
           }
@@ -45,7 +57,7 @@ export const itemMapApi = api.injectEndpoints({
           };
         }
       },
-      invalidatesTags: ['ItemMap'],
+      invalidatesTags: ['ItemMap', 'CustomerDetails'],
     }),
   }),
 });

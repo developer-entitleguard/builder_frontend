@@ -370,6 +370,7 @@ export interface BuilderCustomer {
 }
 
 export interface CreateBuilderCustomerRequest {
+  id?: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -409,6 +410,8 @@ export interface CustomerDetailsItem {
   seller: string | null;
   serialNumber: string | null;
   fileId: string | null;
+  documentCount?: number | null;
+  fileResponseDto?: Array<{ id: string; fileName: string; fileUrl: string }> | null;
 }
 
 export interface CustomerDetailsCategory {

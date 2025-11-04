@@ -13,7 +13,7 @@ export const builderCustomerApi = api.injectEndpoints({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['BuilderCustomer'],
+      invalidatesTags: ['BuilderCustomer', 'CustomerDetails'],
     }),
   }),
 });

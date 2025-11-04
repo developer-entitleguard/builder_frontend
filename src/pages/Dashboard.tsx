@@ -60,16 +60,26 @@ const Dashboard = () => {
     ? user.builderOrganization.id 
     : null;
 
-  // Fetch dashboard counts from API
+  // Fetch dashboard counts from API - called when navigating to /dashboard
   const { data: dashboardCounts, isLoading: countsLoading } = useGetDashboardCountQuery(
     { builderId: builderId || "" },
-    { skip: !builderId }
+    { 
+      skip: !builderId,
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: false,
+      refetchOnReconnect: false
+    }
   );
 
-  // Fetch customer list from API
+  // Fetch customer list from API - called when navigating to /dashboard
   const { data: customerListData, isLoading: customersLoading, error: customersError } = useGetCustomerListQuery(
     { builderId: builderId || "" },
-    { skip: !builderId }
+    { 
+      skip: !builderId,
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: false,
+      refetchOnReconnect: false
+    }
   );
 
   useEffect(() => {
@@ -77,7 +87,12 @@ const Dashboard = () => {
       navigate("/auth");
       return;
     }
-  }, [user, navigate]);
+    
+    // Ensure APIs are called when navigating to dashboard
+    if (builderId) {
+      console.log('Dashboard: Calling getDashboardCount and getCustomerList APIs with builderId:', builderId);
+    }
+  }, [user, navigate, builderId]);
 
   useEffect(() => {
     if (customersError && builderId) {

@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
+import { useCreateBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
@@ -36,13 +37,16 @@ const Onboarding = () => {
   const [loading, setLoading] = useState(false);
   const [recentSelectedItemIds, setRecentSelectedItemIds] = useState<string[] | null>(null);
   const dispatch = useDispatch();
+  const [createBuilderCustomer, { isLoading: isSavingCustomer }] = useCreateBuilderCustomerMutation();
+  const initialLoadComplete = useRef(false);
+  const userNavigated = useRef(false);
 
   const editingId = searchParams.get('id');
   const builderId = user && 'builderOrganization' in user 
     ? user.builderOrganization.id 
     : null;
 
-  const { data: customerDetailsResponse, isLoading: isFetchingDetails } = useGetCustomerDetailsQuery(
+  const { data: customerDetailsResponse, isLoading: isFetchingDetails, refetch: refetchCustomerDetails } = useGetCustomerDetailsQuery(
     { builderId: builderId || '', customerId: editingId || '' },
     { skip: !builderId || !editingId }
   );
@@ -59,44 +63,95 @@ const Onboarding = () => {
     }
   }, [editingId, user]);
 
+  const updateFormDataFromApiResponse = (response: CustomerDetailsResponse | undefined) => {
+    if (!response?.data) return;
+
+    const customer = response.data.customer;
+    const dtos = response.data.dtos;
+
+    // Update customer form data
+    const customerFormData = {
+      firstName: customer.firstName || '',
+      lastName: customer.lastName || '',
+      email: customer.email || '',
+      phone: customer.contact || '',
+      propertyAddress: customer.address || '',
+      city: customer.city || '',
+      state: customer.state || '',
+      zipCode: customer.zip || '',
+      projectName: customer.projectName || '',
+      settlementDate: customer.settlementDate || '',
+      notes: customer.notes || '',
+      customerId: customer.id,
+      builderId: customer.builderOrganization?.id
+    };
+
+    // Update items form data - get selected items from mapped items
+    const selectedItemIds: string[] = [];
+    const itemsFormData: Record<string, unknown> = {};
+    
+    if (dtos && dtos.length > 0) {
+      dtos.forEach(categoryData => {
+        if (categoryData.items && categoryData.items.length > 0) {
+          const categoryItems = categoryData.items.map(item => {
+            if (item.mapped) {
+              selectedItemIds.push(item.id);
+            }
+            return {
+              id: item.id,
+              name: item.name,
+              mapped: item.mapped
+            };
+          });
+          itemsFormData[categoryData.category] = categoryItems;
+        }
+      });
+    }
+
+    // Update documents form data - extract seller, serialNumber, and document info from API
+    const documents: Record<string, string[]> = {};
+    const itemDetails: Record<string, { seller: string; serialNumber: string }> = {};
+
+    if (dtos && dtos.length > 0) {
+      dtos.forEach(categoryData => {
+        categoryData.items.forEach(item => {
+          if (item.mapped && item.builderCustomerMapId) {
+            // Extract seller and serialNumber
+            if (item.seller || item.serialNumber) {
+              itemDetails[item.id] = {
+                seller: item.seller || '',
+                serialNumber: item.serialNumber || ''
+              };
+            }
+
+            // Extract document file names from fileResponseDto
+            if (item.fileResponseDto && item.fileResponseDto.length > 0) {
+              documents[item.id] = item.fileResponseDto.map(file => file.fileName || file.fileUrl || '');
+            }
+          }
+        });
+      });
+    }
+
+    setFormData(prev => ({
+      customer: customerFormData,
+      items: {
+        ...itemsFormData,
+        selected_items: selectedItemIds
+      },
+      documents: {
+        documents: documents,
+        itemDetails: itemDetails
+      }
+    }));
+  };
+
   useEffect(() => {
-    if (customerDetailsResponse?.data && editingId) {
+    // Only auto-advance steps on initial load, not after user navigation
+    if (customerDetailsResponse?.data && editingId && !initialLoadComplete.current) {
       setLoading(true);
       try {
-        const customer = customerDetailsResponse.data.customer;
-        const dtos = customerDetailsResponse.data.dtos;
-        const customerFormData = {
-          firstName: customer.firstName || '',
-          lastName: customer.lastName || '',
-          email: customer.email || '',
-          phone: customer.contact || '',
-          propertyAddress: customer.address || '',
-          city: customer.city || '',
-          state: customer.state || '',
-          zipCode: customer.zip || '',
-          projectName: customer.projectName || '',
-          settlementDate: customer.settlementDate || '',
-          notes: customer.notes || ''
-        };
-
-        const itemsFormData: Record<string, unknown> = {};
-        if (dtos && dtos.length > 0) {
-          dtos.forEach(categoryData => {
-            if (categoryData.items && categoryData.items.length > 0) {
-              itemsFormData[categoryData.category] = categoryData.items.map(item => ({
-                id: item.id,
-                name: item.name,
-                mapped: item.mapped
-              }));
-            }
-          });
-        }
-
-        setFormData({
-          customer: customerFormData,
-          items: itemsFormData,
-          documents: { documents: {}, itemDetails: {} }
-        });
+        updateFormDataFromApiResponse(customerDetailsResponse);
         setCustomerDetailsData(customerDetailsResponse);
         let initialStep = 'customer';
         let savedFormData = null;
@@ -105,22 +160,28 @@ const Onboarding = () => {
           initialStep = savedData.step;
           savedFormData = savedData.savedFormData;
         }
-        if (dtos && dtos.length > 0) {
-          const hasMappedItems = dtos.some(cat => 
-            cat.items.some(item => item.mapped)
-          );
-          if (hasMappedItems) {
-            initialStep = 'documents';
-          } else if (initialStep === 'customer') {
+        
+        const dtos = customerDetailsResponse.data.dtos;
+        // Only auto-advance if no saved step exists and user hasn't navigated
+        if (!savedData.step && !userNavigated.current) {
+          if (dtos && dtos.length > 0) {
+            const hasMappedItems = dtos.some(cat => 
+              cat.items.some(item => item.mapped)
+            );
+            if (hasMappedItems) {
+              initialStep = 'documents';
+            } else if (customerDetailsResponse.data.customer.firstName && customerDetailsResponse.data.customer.email) {
+              initialStep = 'items';
+            }
+          } else if (customerDetailsResponse.data.customer.firstName && customerDetailsResponse.data.customer.email) {
             initialStep = 'items';
           }
-        } else if (customer.firstName && customer.email && initialStep === 'customer') {
-          initialStep = 'items';
         }
         if (savedFormData) {
           setFormData(savedFormData);
         }
         setCurrentStep(initialStep);
+        initialLoadComplete.current = true;
 
       } catch (error: unknown) {
         toast({
@@ -131,6 +192,10 @@ const Onboarding = () => {
       } finally {
         setLoading(false);
       }
+    } else if (customerDetailsResponse?.data && editingId && initialLoadComplete.current) {
+      // After initial load, just update form data without changing step
+      updateFormDataFromApiResponse(customerDetailsResponse);
+      setCustomerDetailsData(customerDetailsResponse);
     }
   }, [customerDetailsResponse, editingId, user, toast]);
 
@@ -256,6 +321,8 @@ const Onboarding = () => {
       setRegistrationId(customerData.registrationId);
     }
     setFormData(prev => ({ ...prev, customer: customerData }));
+    // Mark user navigation and ensure we go to 'items' step sequentially
+    userNavigated.current = true;
     // Skip saveRegistrationData for customer step - only customer API is called
     handleNextStep();
   };
@@ -267,21 +334,71 @@ const Onboarding = () => {
     const justSelected = (itemsData as { selected_items?: string[] }).selected_items || [];
     setRecentSelectedItemIds(justSelected);
     setFormData(prev => ({ ...prev, items: itemsData }));
+    // Mark user navigation
+    userNavigated.current = true;
     handleNextStep();
   };
 
   const handleDocumentsNext = async (documentsData: Record<string, unknown>) => {
     await saveRegistrationData(documentsData, 'documents');
+    // Mark user navigation
+    userNavigated.current = true;
     handleNextStep();
   };
 
   const handleSaveAndExit = async () => {
-    dispatch(dashboardApi.util.invalidateTags(['Dashboard']));
-    toast({
-      title: "Registration saved",
-      description: "You can continue this registration later from your dashboard."
-    });
-    navigate('/dashboard');
+    if (!user || !('builderOrganization' in user)) {
+      toast({
+        title: "Authentication error",
+        description: "Please log in again",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Get customer ID from the response or use editingId
+    const customerId = customerDetailsResponse?.data?.customer?.id || editingId || undefined;
+
+    try {
+      // Get customer data from formData or fallback to API response
+      const customerData = formData.customer as Record<string, string> || {};
+      const apiCustomer = customerDetailsResponse?.data?.customer;
+      
+      // Build customer payload - prefer formData, fallback to API response
+      const customerPayload = {
+        ...(customerId && { id: customerId }),
+        firstName: customerData.firstName || apiCustomer?.firstName || '',
+        lastName: customerData.lastName || apiCustomer?.lastName || '',
+        email: customerData.email || apiCustomer?.email || '',
+        contact: customerData.phone || apiCustomer?.contact || '',
+        address: customerData.propertyAddress || apiCustomer?.address || '',
+        city: customerData.city || apiCustomer?.city || '',
+        state: customerData.state || apiCustomer?.state || '',
+        zip: customerData.zipCode || apiCustomer?.zip || '',
+        projectName: customerData.projectName || apiCustomer?.projectName || undefined,
+        settlementDate: customerData.settlementDate || apiCustomer?.settlementDate || undefined,
+        notes: customerData.notes || apiCustomer?.notes || undefined,
+        builderOrganizationId: user.builderOrganization.id
+      };
+
+      // Call API if we have at least basic customer data (firstName, lastName, email)
+      if (customerPayload.firstName || customerPayload.lastName || customerPayload.email || customerId) {
+        await createBuilderCustomer(customerPayload).unwrap();
+      }
+
+      dispatch(dashboardApi.util.invalidateTags(['Dashboard']));
+      toast({
+        title: "Registration saved",
+        description: "You can continue this registration later from your dashboard."
+      });
+      navigate('/dashboard');
+    } catch (error: unknown) {
+      toast({
+        title: "Error saving customer details",
+        description: error instanceof Error ? error.message : 'An error occurred',
+        variant: "destructive"
+      });
+    }
   };
 
   const handleNextStep = () => {
@@ -289,16 +406,36 @@ const Onboarding = () => {
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex < steps.length - 1) {
       const nextStep = steps[currentIndex + 1];
+      userNavigated.current = true; // Mark that user is navigating
       setCurrentStep(nextStep);
       saveCurrentStep(nextStep);
     }
   };
 
-  const handlePreviousStep = () => {
+  const handlePreviousStep = async () => {
     const steps = ['customer', 'items', 'documents', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex > 0) {
       const prevStep = steps[currentIndex - 1];
+      
+      // Mark that user is navigating
+      userNavigated.current = true;
+      
+      // Call getCustomerDetails API when going to previous step
+      if (builderId && (editingId || formData.customer?.customerId)) {
+        const customerId = editingId || (formData.customer?.customerId as string);
+        try {
+          console.log('Calling getCustomerDetails when navigating to previous step');
+          const result = await refetchCustomerDetails();
+          if (result.data) {
+            updateFormDataFromApiResponse(result.data);
+            setCustomerDetailsData(result.data);
+          }
+        } catch (error) {
+          console.error('Error fetching customer details:', error);
+        }
+      }
+      
       setCurrentStep(prevStep);
       saveCurrentStep(prevStep);
     }
@@ -338,9 +475,18 @@ const Onboarding = () => {
   };
 
   const renderCurrentStep = () => {
+    // Get customer ID from the response or use editingId
+    const customerId = customerDetailsResponse?.data?.customer?.id || editingId || undefined;
+    
     switch (currentStep) {
       case 'customer':
-        return <CustomerDetailsForm onNext={handleCustomerNext as (data: unknown) => void} initialData={formData.customer} />;
+        return <CustomerDetailsForm 
+          onNext={handleCustomerNext as (data: unknown) => void} 
+          initialData={formData.customer} 
+          onSaveExit={handleSaveAndExit}
+          customerId={customerId}
+          isSaving={isSavingCustomer}
+        />;
       case 'items':
         return <ItemsSelectionForm 
           onNext={handleItemsNext as (data: unknown) => void} 
@@ -350,7 +496,9 @@ const Onboarding = () => {
             builderId: builderId,
             customerId: editingId || (formData.customer as Record<string, unknown>)?.customerId as string
           }} 
-          registrationId={registrationId} 
+          registrationId={registrationId}
+          onSaveExit={handleSaveAndExit}
+          isSaving={isSavingCustomer}
         />;
       case 'documents': {
         const selectedItems = recentSelectedItemIds && recentSelectedItemIds.length > 0
@@ -366,7 +514,9 @@ const Onboarding = () => {
             customerId: editingId || (formData.customer as Record<string, unknown>)?.customerId as string,
             selected_items: selectedItems
           } as unknown as Parameters<typeof DocumentUploadForm>[0]['initialData']} 
-          selectedItems={selectedItems} 
+          selectedItems={selectedItems}
+          onSaveExit={handleSaveAndExit}
+          isSaving={isSavingCustomer}
         />;
       }
       case 'review':
@@ -408,14 +558,14 @@ const Onboarding = () => {
                 <h1 className="text-3xl font-bold text-foreground">Buyer Onboarding Form</h1>
                 <p className="text-muted-foreground mt-1">Create comprehensive documentation packages for your homebuyers</p>
               </div>
-              <div className="flex items-center space-x-4">
-                <Button variant="outline" onClick={handleSaveAndExit}>
+              {/* <div className="flex items-center space-x-4"> */}
+                {/* <Button variant="outline" onClick={handleSaveAndExit}>
                   Save & Exit
-                </Button>
+                </Button> */}
                 <div className="text-sm text-muted-foreground">
                   Step {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) + 1} of 5
                 </div>
-              </div>
+              {/* </div> */}
             </div>
             
             {/* Navigation */}

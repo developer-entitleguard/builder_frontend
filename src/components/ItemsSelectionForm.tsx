@@ -51,12 +51,16 @@ interface ItemsSelectionFormProps {
     builderId?: string;
   };
   registrationId?: string;
+  onSaveExit?: () => void;
+  isSaving?: boolean;
 }
 
 const ItemsSelectionForm = ({
   onNext,
   initialData,
   registrationId,
+  onSaveExit,
+  isSaving = false,
 }: ItemsSelectionFormProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -85,9 +89,9 @@ const ItemsSelectionForm = ({
     },
     {
       skip: !initialData?.builderId || !initialData?.customerId,
-      refetchOnMountOrArgChange: true,
-      refetchOnFocus: true,
-      refetchOnReconnect: true,
+      refetchOnMountOrArgChange: false,
+      refetchOnFocus: false,
+      refetchOnReconnect: false,
     }
   );
 
@@ -340,17 +344,26 @@ const ItemsSelectionForm = ({
         <p className="text-sm text-muted-foreground">
           Select items to proceed to document upload
         </p>
-        <Button
-          onClick={handleNext}
-          disabled={
-            selectedItems.length === 0 || saving || isCreatingCustomerItem
-          }
-          size="lg"
-          className="min-w-32"
-        >
-          {saving || isCreatingCustomerItem ? "Saving..." : "Continue"}
-          <ChevronRight className="ml-2 h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={onSaveExit}
+            disabled={saving || isCreatingCustomerItem || isSaving}
+          >
+            {isSaving ? 'Saving...' : 'Save & Exit'}
+          </Button>
+          <Button
+            onClick={handleNext}
+            disabled={
+              selectedItems.length === 0 || saving || isCreatingCustomerItem
+            }
+            size="lg"
+            className="min-w-32"
+          >
+            {saving || isCreatingCustomerItem ? "Saving..." : "Continue"}
+            <ChevronRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );

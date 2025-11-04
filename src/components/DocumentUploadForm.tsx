@@ -23,6 +23,7 @@ interface BuilderItem {
   status: string;
   purchaser: string | null;
   mapped: boolean;
+  builderCustomerMapId?: string | null;
 }
 
 interface FormData {
@@ -34,9 +35,11 @@ interface DocumentUploadFormProps {
   onNext: (data: FormData) => void;
   initialData?: FormData & { customerId?: string; builderId?: string; selected_items?: string[] };
   selectedItems?: string[];
+  onSaveExit?: () => void;
+  isSaving?: boolean;
 }
 
-const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemIds }: DocumentUploadFormProps) => {
+const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemIds, onSaveExit, isSaving = false }: DocumentUploadFormProps) => {
   const { toast } = useToast();
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>(initialData?.documents || {});
   const [itemDetails, setItemDetails] = useState<Record<string, { seller: string; serialNumber: string }>>(initialData?.itemDetails || {});
@@ -51,7 +54,8 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
   const { 
     data: customerDetails, 
     isLoading: loading, 
-    error 
+    error,
+    refetch: refetchCustomerDetails
   } = useGetCustomerDetailsQuery(
     { 
       builderId: initialData?.builderId || '', 
@@ -59,9 +63,9 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
     },
     { 
       skip: !initialData?.builderId || !initialData?.customerId,
-      refetchOnMountOrArgChange: true,
-      refetchOnFocus: true,
-      refetchOnReconnect: true,
+      refetchOnMountOrArgChange: false,
+      refetchOnFocus: false,
+      refetchOnReconnect: false,
     }
   );
 
@@ -97,12 +101,12 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
   }, [error, toast]);
 
   useEffect(() => {
-    if (customerDetails?.data?.dtos && Object.keys(itemDetails).length === 0) {
+    if (customerDetails?.data?.dtos) {
       const existingDetails: Record<string, { seller: string; serialNumber: string }> = {};
       
       customerDetails.data.dtos.forEach(categoryGroup => {
         categoryGroup.items.forEach(item => {
-          if (effectiveSelectedIds.includes(item.id)) {
+          if (effectiveSelectedIds.includes(item.id) && (item.seller || item.serialNumber)) {
             existingDetails[item.id] = {
               seller: item.seller || '',
               serialNumber: item.serialNumber || ''
@@ -111,11 +115,24 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
         });
       });
       
+      // Update itemDetails with API data, preserving any user edits
       if (Object.keys(existingDetails).length > 0) {
-        setItemDetails(existingDetails);
+        setItemDetails(prev => {
+          const updated = { ...prev };
+          Object.keys(existingDetails).forEach(itemId => {
+            // Only update if we don't have user-entered data, or if API has new data
+            if (!prev[itemId] || (existingDetails[itemId].seller || existingDetails[itemId].serialNumber)) {
+              updated[itemId] = {
+                seller: existingDetails[itemId].seller || prev[itemId]?.seller || '',
+                serialNumber: existingDetails[itemId].serialNumber || prev[itemId]?.serialNumber || ''
+              };
+            }
+          });
+          return updated;
+        });
       }
     }
-  }, [customerDetails, effectiveSelectedIds, itemDetails]);
+  }, [customerDetails?.data?.dtos, effectiveSelectedIds]);
 
   const groupedItems = customerDetails?.data?.dtos?.reduce((acc, categoryGroup) => {
     const selectedCategoryItems = categoryGroup.items.filter(item => 
@@ -200,18 +217,35 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
         const details = itemDetails[item.id] || { seller: '', serialNumber: '' };
         const files = uploadedFiles[item.id] || [];
 
-        formData.append(`builderMap[${index}].id`, item.id);
-        formData.append(`builderMap[${index}].seller`, details.seller);
-        formData.append(`builderMap[${index}].serialNumber`, details.serialNumber);
+        // Use builderCustomerMapId if available (for mapped items), otherwise use item.id (for new mappings)
+        const mapId = item.builderCustomerMapId || item.id;
+        formData.append(`builderMap[${index}].id`, mapId);
+        formData.append(`builderMap[${index}].seller`, details.seller || '');
+        formData.append(`builderMap[${index}].serialNumber`, details.serialNumber || '');
         
         files.forEach((file) => {
           formData.append(`builderMap[${index}].files`, file);
         });
       });
 
+      // Log payload for debugging
       console.log('Calling itemmap update API with data for', itemsToUpdate.length, 'items');
+      console.log('Items to update:', itemsToUpdate.map(item => ({
+        itemId: item.id,
+        builderCustomerMapId: item.builderCustomerMapId || 'N/A (new mapping)',
+        mapId: item.builderCustomerMapId || item.id,
+        seller: itemDetails[item.id]?.seller || '',
+        serialNumber: itemDetails[item.id]?.serialNumber || '',
+        filesCount: uploadedFiles[item.id]?.length || 0
+      })));
       
       await updateItemMap(formData).unwrap();
+      
+      // Call getCustomerDetails API after itemMap update succeeds
+      if (initialData?.builderId && initialData?.customerId) {
+        console.log('Calling getCustomerDetails after itemMap update');
+        await refetchCustomerDetails();
+      }
       
       toast({
         title: "Item details saved",
@@ -220,9 +254,39 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
       
       onNext({ documents: uploadedDocs, itemDetails });
     } catch (error: unknown) {
+      console.error('Error saving item details:', error);
+      
+      let errorMessage = 'An error occurred while saving item details';
+      
+      if (error && typeof error === 'object') {
+        // Handle RTK Query error format
+        if ('data' in error) {
+          const errorData = error.data;
+          if (typeof errorData === 'string') {
+            errorMessage = errorData;
+          } else if (errorData && typeof errorData === 'object') {
+            if ('message' in errorData) {
+              errorMessage = String(errorData.message);
+            } else if ('error' in errorData) {
+              errorMessage = String(errorData.error);
+            } else if ('data' in errorData) {
+              errorMessage = String(errorData.data);
+            }
+          }
+        } else if ('status' in error) {
+          const status = error.status;
+          const statusText = 'statusText' in error ? error.statusText : 'Request failed';
+          errorMessage = `Error ${status}: ${statusText}`;
+        } else if ('message' in error) {
+          errorMessage = String(error.message);
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error saving item details",
-        description: error instanceof Error ? error.message : 'An error occurred',
+        description: errorMessage,
         variant: "destructive"
       });
     }
@@ -347,13 +411,22 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
         <p className="text-sm text-muted-foreground">
           Provide details and upload documentation for {getTotalItems()} selected items
         </p>
-        <Button 
-          onClick={handleContinue}
-          disabled={!isComplete || isUpdating}
-          className="min-w-[120px]"
-        >
-          {isUpdating ? 'Saving...' : 'Continue'}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={onSaveExit}
+            disabled={isUpdating || isSaving}
+          >
+            {isSaving ? 'Saving...' : 'Save & Exit'}
+          </Button>
+          <Button 
+            onClick={handleContinue}
+            disabled={!isComplete || isUpdating}
+            className="min-w-[120px]"
+          >
+            {isUpdating ? 'Saving...' : 'Continue'}
+          </Button>
+        </div>
       </div>
     </div>
   );

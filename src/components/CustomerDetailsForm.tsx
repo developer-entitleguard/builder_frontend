@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowRight, MapPin, Phone, Mail, User } from "lucide-react";
 import { useCreateBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
+import { useCreateCustomerItemMutation } from "@/lib/api/services/customerItem";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { australianStates, validateAustralianPhone, formatAustralianPhone, validateAustralianPostcode, validateEmail } from "@/utils/validation";
@@ -38,9 +39,11 @@ interface CustomerDetailsFormProps {
 
 const CustomerDetailsForm = ({ onNext, initialData, onSaveExit, customerId, isSaving = false }: CustomerDetailsFormProps) => {
   const [createBuilderCustomer, { isLoading }] = useCreateBuilderCustomerMutation();
+  const [createCustomerItem, { isLoading: isCreatingCustomerItem }] = useCreateCustomerItemMutation();
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [savingAndExiting, setSavingAndExiting] = useState(false);
   const [formData, setFormData] = useState({
     firstName: initialData?.firstName || '',
     lastName: initialData?.lastName || '',
@@ -108,8 +111,87 @@ const CustomerDetailsForm = ({ onNext, initialData, onSaveExit, customerId, isSa
       newErrors.zipCode = `Please enter a valid postcode for ${formData.state}`;
     }
     
+    if (!formData.projectName.trim()) newErrors.projectName = 'Project/Community Name is required';
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSaveAndExit = async () => {
+    if (!validateForm()) {
+      toast({
+        title: "Please fix the errors",
+        description: "Check the highlighted fields and try again",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!user || !('builderOrganization' in user)) {
+      toast({
+        title: "Authentication error",
+        description: "Please log in again",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSavingAndExiting(true);
+    try {
+      // Call the customer API - include id in payload if updating existing customer
+      const customerData = {
+        ...(customerId && { id: customerId }),
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        contact: formData.phone,
+        address: formData.propertyAddress,
+        city: formData.city,
+        state: formData.state,
+        zip: formData.zipCode,
+        projectName: formData.projectName || undefined,
+        settlementDate: formData.settlementDate || undefined,
+        notes: formData.notes || undefined,
+        builderOrganizationId: user.builderOrganization.id
+      };
+      
+      const customerResponse = await createBuilderCustomer(customerData).unwrap();
+      console.log('Customer API Response:', customerResponse);
+      
+      // Extract the customer ID from the response
+      const finalCustomerId = customerId || customerResponse?.data?.id;
+      
+      if (!finalCustomerId) {
+        throw new Error('Customer ID not found in response');
+      }
+
+      // Call createCustomerItem API with empty itemIds array (since no items selected yet)
+      const customerItemData = {
+        customerId: finalCustomerId,
+        itemIds: []
+      };
+
+      console.log('Calling createCustomerItem API with:', customerItemData);
+      await createCustomerItem(customerItemData).unwrap();
+
+      toast({
+        title: "Registration saved",
+        description: "You can continue this registration later from your dashboard."
+      });
+
+      // Call the parent onSaveExit handler if provided
+      if (onSaveExit) {
+        onSaveExit();
+      }
+    } catch (error: unknown) {
+      toast({
+        title: "Error saving customer details",
+        description: error instanceof Error ? error.message : 'An error occurred',
+        variant: "destructive"
+      });
+    } finally {
+      setSavingAndExiting(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -331,13 +413,16 @@ const CustomerDetailsForm = ({ onNext, initialData, onSaveExit, customerId, isSa
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="projectName">Project/Community Name</Label>
+                <Label htmlFor="projectName">Project/Community Name *</Label>
                 <Input
                   id="projectName"
                   value={formData.projectName}
                   onChange={(e) => handleInputChange('projectName', e.target.value)}
                   placeholder="e.g., Sunset Ridge Community"
+                  className={errors.projectName ? 'border-destructive' : ''}
+                  required
                 />
+                {errors.projectName && <p className="text-sm text-destructive">{errors.projectName}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="settlementDate">Settlement Date</Label>
@@ -363,8 +448,12 @@ const CustomerDetailsForm = ({ onNext, initialData, onSaveExit, customerId, isSa
         </Card>
 
         <div className="flex justify-end items-center gap-3">
-          <Button variant="outline" onClick={onSaveExit} disabled={loading || isLoading || isSaving}>
-            {isSaving ? 'Saving...' : 'Save & Exit'}
+          <Button 
+            variant="outline" 
+            onClick={handleSaveAndExit} 
+            disabled={loading || isLoading || isSaving || savingAndExiting || isCreatingCustomerItem}
+          >
+            {savingAndExiting || isCreatingCustomerItem ? 'Saving...' : 'Save & Exit'}
           </Button>
           <Button type="submit" size="lg" className="min-w-[150px]" disabled={loading || isLoading}>
             {loading || isLoading ? 'Saving...' : 'Save Continue to Items'}

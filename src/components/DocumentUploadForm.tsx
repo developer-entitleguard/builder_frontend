@@ -24,6 +24,10 @@ interface BuilderItem {
   purchaser: string | null;
   mapped: boolean;
   builderCustomerMapId?: string | null;
+  seller?: string | null;
+  serialNumber?: string | null;
+  documentCount?: number | null;
+  fileResponseDto?: Array<{ id: string; fileName: string; fileUrl: string }> | null;
 }
 
 interface FormData {
@@ -106,7 +110,8 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
       
       customerDetails.data.dtos.forEach(categoryGroup => {
         categoryGroup.items.forEach(item => {
-          if (effectiveSelectedIds.includes(item.id) && (item.seller || item.serialNumber)) {
+          // Only process mapped items
+          if (item.mapped === true && (item.seller || item.serialNumber)) {
             existingDetails[item.id] = {
               seller: item.seller || '',
               serialNumber: item.serialNumber || ''
@@ -132,11 +137,12 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
         });
       }
     }
-  }, [customerDetails?.data?.dtos, effectiveSelectedIds]);
+  }, [customerDetails?.data?.dtos]);
 
   const groupedItems = customerDetails?.data?.dtos?.reduce((acc, categoryGroup) => {
+    // Only show items where mapped: true
     const selectedCategoryItems = categoryGroup.items.filter(item => 
-      effectiveSelectedIds.includes(item.id)
+      item.mapped === true
     );
     if (selectedCategoryItems.length > 0) {
       acc[categoryGroup.category] = selectedCategoryItems;

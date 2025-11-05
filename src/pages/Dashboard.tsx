@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useGetDashboardCountQuery, useGetCustomerListQuery } from "@/store/api/dashboard";
+import { useDeleteBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +29,8 @@ import {
   MessageSquare,
   Settings,
   MoreVertical,
+  Trash2,
+  Eye,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -55,6 +58,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [deleteBuilderCustomer, { isLoading: isDeleting }] = useDeleteBuilderCustomerMutation();
 
   const builderId = user && 'builderOrganization' in user 
     ? user.builderOrganization.id 
@@ -166,6 +170,50 @@ const Dashboard = () => {
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       default:
         return <FileText className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
+
+  const handleDeleteCustomer = async (id: string, customerName: string) => {
+    if (!confirm(`Are you sure you want to delete ${customerName}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const result = await deleteBuilderCustomer(id).unwrap() as unknown;
+      // Use the message from API response if available
+      let successMessage = "Customer deleted successfully";
+      if (result && typeof result === 'object' && result !== null && 'message' in result) {
+        successMessage = String((result as { message: string }).message);
+      } else if (result && typeof result === 'string') {
+        successMessage = result;
+      }
+      toast({ title: successMessage });
+    } catch (error: unknown) {
+      let errorMessage = "Failed to delete customer";
+      
+      // Handle RTK Query error format
+      if (error && typeof error === 'object') {
+        // Check if error has data property (RTK Query standard error format)
+        if ('data' in error) {
+          const errorData = error.data;
+          // Check if errorData is an object with message property
+          if (errorData && typeof errorData === 'object' && 'message' in errorData) {
+            errorMessage = String(errorData.message);
+          } else if (typeof errorData === 'string') {
+            errorMessage = errorData;
+          }
+        } else if ('message' in error) {
+          errorMessage = String(error.message);
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      toast({
+        title: "Error deleting customer",
+        description: errorMessage,
+        variant: "destructive"
+      });
     }
   };
 
@@ -484,7 +532,19 @@ const Dashboard = () => {
                             e.stopPropagation();
                             navigate(`/registration/${registration.id}`);
                           }}>
+                            <Eye className="h-4 w-4 mr-2" />
                             View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCustomer(registration.id, registration.customer_name);
+                            }}
+                            className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                            disabled={isDeleting}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

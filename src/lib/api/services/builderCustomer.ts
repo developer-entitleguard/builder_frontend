@@ -15,9 +15,17 @@ export const builderCustomerApi = api.injectEndpoints({
       }),
       invalidatesTags: ['BuilderCustomer', 'CustomerDetails'],
     }),
+    deleteBuilderCustomer: build.mutation<{ success: boolean; message: string }, string>({
+      query: (id) => ({
+        url: `/api/builder/customer/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['BuilderCustomer', 'CustomerDetails', 'Dashboard'],
+    }),
   }),
 });
 
 export const {
   useCreateBuilderCustomerMutation,
+  useDeleteBuilderCustomerMutation,
 } = builderCustomerApi;

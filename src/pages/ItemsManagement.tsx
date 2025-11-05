@@ -197,12 +197,36 @@ const ItemsManagement = () => {
     if (!confirm("Are you sure you want to delete this item?")) return;
 
     try {
-      await deleteItem(id).unwrap();
-      toast({ title: "Item deleted successfully" });
+      const result = await deleteItem(id).unwrap() as unknown;
+      // Use the message from API response if available
+      let successMessage = "Item deleted successfully";
+      if (result && typeof result === 'object' && result !== null && 'message' in result) {
+        successMessage = String((result as { message: string }).message);
+      } else if (result && typeof result === 'string') {
+        successMessage = result;
+      }
+      toast({ title: successMessage });
     } catch (error: unknown) {
-      const errorMessage = error && typeof error === 'object' && 'message' in error 
-        ? String(error.message) 
-        : "Failed to delete item";
+      let errorMessage = "Failed to delete item";
+      
+      // Handle RTK Query error format
+      if (error && typeof error === 'object') {
+        // Check if error has data property (RTK Query standard error format)
+        if ('data' in error) {
+          const errorData = error.data;
+          // Check if errorData is an object with message property
+          if (errorData && typeof errorData === 'object' && 'message' in errorData) {
+            errorMessage = String(errorData.message);
+          } else if (typeof errorData === 'string') {
+            errorMessage = errorData;
+          }
+        } else if ('message' in error) {
+          errorMessage = String(error.message);
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error deleting item",
         description: errorMessage,

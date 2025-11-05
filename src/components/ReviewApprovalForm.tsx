@@ -359,11 +359,13 @@ const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: Revie
                       const serialNumber = item.serialNumber || formItemDetails?.serialNumber || '';
                       
                       // Check documents from API response or formData
-                      const documentCount = item.documentCount ?? 0;
+                      // Prioritize documentCount from API, even if 0
+                      const apiDocumentCount = item.documentCount !== null && item.documentCount !== undefined ? item.documentCount : null;
                       const apiFiles = item.fileResponseDto || [];
                       const formDocsCount = Array.isArray(formDocs) ? formDocs.length : 0;
-                      const hasDocuments = documentCount > 0 || apiFiles.length > 0 || formDocsCount > 0;
-                      const totalDocCount = documentCount || apiFiles.length || formDocsCount;
+                      // Use documentCount from API if available, otherwise fall back to file counts
+                      const totalDocCount = apiDocumentCount !== null ? apiDocumentCount : (apiFiles.length > 0 ? apiFiles.length : formDocsCount);
+                      const hasDocuments = totalDocCount > 0;
                       
                       return (
                         <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
@@ -394,11 +396,11 @@ const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: Revie
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
-                            {hasDocuments ? (
-                              <Badge className="bg-green-100 text-green-800">Documents Ready</Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-yellow-600 border-yellow-600">No Documents</Badge>
-                            )}
+                            <Badge 
+                              className={hasDocuments ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
+                            >
+                              {totalDocCount} Document{totalDocCount !== 1 ? 's' : ''}
+                            </Badge>
                           </div>
                         </div>
                       );

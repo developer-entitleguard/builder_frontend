@@ -427,7 +427,6 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
           </Button>
           <Button 
             onClick={handleContinue}
-            disabled={!isComplete || isUpdating}
             className="min-w-[120px]"
           >
             {isUpdating ? 'Saving...' : 'Continue'}

@@ -198,14 +198,20 @@ const ItemsManagement = () => {
 
     try {
       const result = await deleteItem(id).unwrap() as unknown;
-      // Use the message from API response if available
-      let successMessage = "Item deleted successfully";
-      if (result && typeof result === 'object' && result !== null && 'message' in result) {
-        successMessage = String((result as { message: string }).message);
+      let message = "Item deleted successfully";
+      let variant: "destructive" | undefined;
+      if (result && typeof result === 'object' && result !== null) {
+        const maybeObj = result as { success?: boolean; message?: string };
+        if (typeof maybeObj.message === 'string') {
+          message = maybeObj.message;
+        }
+        if (typeof maybeObj.success === 'boolean') {
+          variant = maybeObj.success ? undefined : "destructive";
+        }
       } else if (result && typeof result === 'string') {
-        successMessage = result;
+        message = result;
       }
-      toast({ title: successMessage });
+      toast({ title: message, ...(variant ? { variant } : {}) });
     } catch (error: unknown) {
       let errorMessage = "Failed to delete item";
       

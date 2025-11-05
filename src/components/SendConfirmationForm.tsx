@@ -158,7 +158,7 @@ const SendConfirmationForm = ({ onNext, customerDetailsData, isLoading = false, 
           <CardDescription>Documentation included in this delivery</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+          <div className="grid grid-cols-3 md:grid-cols-3 gap-4 text-center">
             <div className="p-4 border rounded-lg">
               <p className="text-2xl font-bold text-primary">
                 {isLoading ? "..." : customerDetailsData?.data?.totalItems || 0}
@@ -177,17 +177,17 @@ const SendConfirmationForm = ({ onNext, customerDetailsData, isLoading = false, 
               </p>
               <p className="text-sm text-muted-foreground">Categories</p>
             </div>
-            <div className="p-4 border rounded-lg">
+            {/* <div className="p-4 border rounded-lg">
               <p className="text-2xl font-bold text-primary">
                 {isLoading ? "..." : `${customerDetailsData?.data?.completionPercent || 0}%`}
               </p>
               <p className="text-sm text-muted-foreground">Complete</p>
-            </div>
+            </div> */}
           </div>
         </CardContent>
       </Card>
 
-      {status === 'delivered' && (
+      {/* {status === 'delivered' && (
         <Card>
           <CardHeader>
             <CardTitle>Next Steps</CardTitle>
@@ -210,7 +210,7 @@ const SendConfirmationForm = ({ onNext, customerDetailsData, isLoading = false, 
             </div>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       <div className="flex justify-between items-center pt-6 border-t">
         <Button 
@@ -219,7 +219,7 @@ const SendConfirmationForm = ({ onNext, customerDetailsData, isLoading = false, 
           className="flex items-center space-x-2"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Create New Package</span>
+          <span>Create New Registration</span>
         </Button>
         {status === 'delivered' && (
           <Badge className="bg-green-100 text-green-800 px-4 py-2">

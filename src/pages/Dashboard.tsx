@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useGetDashboardCountQuery, useGetCustomerListQuery } from "@/store/api/dashboard";
 import { useDeleteBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
+import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
+import type { SerializedError } from '@reduxjs/toolkit';
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,7 +67,7 @@ const Dashboard = () => {
     : null;
 
   // Fetch dashboard counts from API - called when navigating to /dashboard
-  const { data: dashboardCounts, isLoading: countsLoading } = useGetDashboardCountQuery(
+  const { data: dashboardCounts, isLoading: countsLoading, error: countsError } = useGetDashboardCountQuery(
     { builderId: builderId || "" },
     { 
       skip: !builderId,
@@ -98,15 +100,64 @@ const Dashboard = () => {
     }
   }, [user, navigate, builderId]);
 
+  // Redirect to auth page when API errors occur (especially connection errors)
   useEffect(() => {
-    if (customersError && builderId) {
-      toast({
-        title: "Error loading customers",
-        description: "Failed to load customer list",
-        variant: "destructive",
-      });
+    if (builderId && (countsError || customersError)) {
+      // Check if it's a connection error or other critical error
+      // RTK Query errors can be FetchBaseQueryError or SerializedError
+      const isConnectionError = (error: FetchBaseQueryError | SerializedError | undefined) => {
+        if (!error) return false;
+        
+        // Check for FetchBaseQueryError (network/HTTP errors)
+        if ('status' in error) {
+          const fetchError = error as FetchBaseQueryError;
+          // Check for network/connection errors
+          if (fetchError.status === 'FETCH_ERROR' || fetchError.status === 'PARSING_ERROR') {
+            return true;
+          }
+          // Check for connection refused errors in the error message
+          // The 'error' property exists on TIMEOUT_ERROR and CUSTOM_ERROR types
+          if ('error' in fetchError && typeof fetchError.error === 'string') {
+            const errorMessage = fetchError.error.toLowerCase();
+            if (errorMessage.includes('econnrefused') || 
+                errorMessage.includes('network error') ||
+                errorMessage.includes('failed to fetch')) {
+              return true;
+            }
+          }
+        }
+        
+        // Check for SerializedError (other errors)
+        if ('message' in error) {
+          const serializedError = error as SerializedError;
+          if (serializedError.message) {
+            const errorMessage = serializedError.message.toLowerCase();
+            if (errorMessage.includes('econnrefused') || 
+                errorMessage.includes('network error') ||
+                errorMessage.includes('failed to fetch')) {
+              return true;
+            }
+          }
+        }
+        
+        return false;
+      };
+      
+      const hasConnectionError = isConnectionError(countsError) || isConnectionError(customersError);
+      
+      if (hasConnectionError) {
+        console.warn('Dashboard API connection error detected, redirecting to auth');
+        toast({
+          title: "Connection Error",
+          description: "Unable to connect to the server. Please try again later.",
+          variant: "destructive",
+        });
+        // Clear user data and redirect to auth
+        localStorage.removeItem('userData');
+        navigate("/auth", { replace: true });
+      }
     }
-  }, [customersError, toast, builderId]);
+  }, [countsError, customersError, builderId, navigate, toast]);
 
   // Map API data to HomeownerRegistration format
   const registrations: HomeownerRegistration[] = customerListData?.data?.map((customer) => ({

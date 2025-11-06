@@ -111,7 +111,6 @@ const CustomerDetailsForm = ({ onNext, initialData, onSaveExit, customerId, isSa
       newErrors.zipCode = `Please enter a valid postcode for ${formData.state}`;
     }
     
-    if (!formData.projectName.trim()) newErrors.projectName = 'Project/Community Name is required';
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -413,16 +412,13 @@ const CustomerDetailsForm = ({ onNext, initialData, onSaveExit, customerId, isSa
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="projectName">Project/Community Name *</Label>
+                <Label htmlFor="projectName">Project/Community Name</Label>
                 <Input
                   id="projectName"
                   value={formData.projectName}
                   onChange={(e) => handleInputChange('projectName', e.target.value)}
                   placeholder="e.g., Sunset Ridge Community"
-                  className={errors.projectName ? 'border-destructive' : ''}
-                  required
                 />
-                {errors.projectName && <p className="text-sm text-destructive">{errors.projectName}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="settlementDate">Settlement Date</Label>

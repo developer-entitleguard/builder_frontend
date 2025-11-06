@@ -533,11 +533,16 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredRegistrations.map((registration) => (
+                {filteredRegistrations.map((registration) => {
+                  const isEntitlementSent = registration.status?.toUpperCase() === "ENTITLEMENT" || registration.status?.toUpperCase() === "SENT" || registration.status?.toUpperCase() === "DELIVERED";
+                  return (
                   <div
                     key={registration.id}
                     className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/onboarding?id=${registration.id}`)}
+                    onClick={() => isEntitlementSent 
+                      ? navigate(`/registration/${registration.id}`)
+                      : navigate(`/onboarding?id=${registration.id}`)
+                    }
                   >
                     <div className="flex items-center space-x-4 flex-1">
                       {getStatusIcon(registration.status)}
@@ -586,22 +591,25 @@ const Dashboard = () => {
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteCustomer(registration.id, registration.customer_name);
-                            }}
-                            className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                            disabled={isDeleting}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
+                          {!(registration.status?.toUpperCase() === "ENTITLEMENT" || registration.status?.toUpperCase() === "SENT" || registration.status?.toUpperCase() === "DELIVERED") && (
+                            <DropdownMenuItem 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCustomer(registration.id, registration.customer_name);
+                              }}
+                              className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                              disabled={isDeleting}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

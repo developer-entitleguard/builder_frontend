@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
 import { useCreateBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
+import { useGetCustomerListQuery } from "@/store/api/dashboard";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
@@ -51,11 +52,33 @@ const Onboarding = () => {
     { skip: !builderId || !editingId }
   );
 
+  const { data: customerListData } = useGetCustomerListQuery(
+    { builderId: builderId || '' },
+    { skip: !builderId || !editingId }
+  );
+
   useEffect(() => {
     if (!user) {
       navigate('/auth');
     }
   }, [user, navigate]);
+
+  useEffect(() => {
+    if (editingId && customerListData?.data) {
+      const customer = customerListData.data.find(c => c.id === editingId);
+      if (customer) {
+        const status = customer.status?.name?.toUpperCase();
+        if (status === "ENTITLEMENT" || status === "SENT" || status === "DELIVERED") {
+          toast({
+            title: "View Only",
+            description: "This registration has been sent and cannot be edited.",
+            variant: "default"
+          });
+          navigate(`/registration/${editingId}`);
+        }
+      }
+    }
+  }, [editingId, customerListData, navigate, toast]);
 
   useEffect(() => {
     if (editingId && user) {

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useGetCustomerDetailsQuery } from '@/lib/api/services/customerDetails';
+import { useGetCustomerListQuery } from '@/store/api/dashboard';
 import { 
   ArrowLeft,
   Edit,
@@ -35,6 +36,14 @@ const RegistrationDetail = () => {
     { builderId: builderId || '', customerId: id || '' },
     { skip: !builderId || !id }
   );
+
+  const { data: customerListData } = useGetCustomerListQuery(
+    { builderId: builderId || '' },
+    { skip: !builderId || !id }
+  );
+
+  const customerStatus = customerListData?.data?.find(c => c.id === id)?.status?.name?.toUpperCase();
+  const isEntitlementSent = customerStatus === "ENTITLEMENT" || customerStatus === "SENT" || customerStatus === "DELIVERED";
 
   useEffect(() => {
     if (!user) {
@@ -106,12 +115,14 @@ const RegistrationDetail = () => {
               <p className="text-muted-foreground">{customer.email}</p>
             </div>
           </div>
-          <div className="flex items-center space-x-4">
-            <Button variant="outline" onClick={handleContinueOnboarding}>
-              <Edit className="h-4 w-4 mr-2" />
-              Continue Editing
-            </Button>
-          </div>
+          {!isEntitlementSent && (
+            <div className="flex items-center space-x-4">
+              <Button variant="outline" onClick={handleContinueOnboarding}>
+                <Edit className="h-4 w-4 mr-2" />
+                Continue Editing
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

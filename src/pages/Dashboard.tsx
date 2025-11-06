@@ -173,36 +173,25 @@ const Dashboard = () => {
   })) || [];
 
   const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      DRAFT: { label: "Draft", variant: "secondary" as const },
-      DOCUMENTS_PENDING: {
-        label: "Documents Pending",
-        variant: "outline" as const,
-      },
-      READY_FOR_REVIEW: {
-        label: "Ready for Review",
-        variant: "default" as const,
-      },
-      ENTITLEMENT: { label: "Entitlement Sent", variant: "default" as const },
-      SENT: { label: "Sent", variant: "default" as const },
-      DELIVERED: { label: "Delivered", variant: "default" as const },
-      // Legacy status mappings
-      draft: { label: "Draft", variant: "secondary" as const },
-      documents_pending: {
-        label: "Documents Pending",
-        variant: "outline" as const,
-      },
-      ready_for_review: {
-        label: "Ready for Review",
-        variant: "default" as const,
-      },
-      sent: { label: "Sent", variant: "default" as const },
-      delivered: { label: "Delivered", variant: "default" as const },
+    const formatStatusName = (statusName: string): string => {
+      if (!statusName) return 'DRAFT';
+      return statusName
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
     };
 
-    const config =
-      statusConfig[status as keyof typeof statusConfig] || statusConfig.DRAFT;
-    return <Badge variant={config.variant}>{config.label}</Badge>;
+    const getStatusVariant = (statusName: string): "default" | "secondary" | "outline" => {
+      const statusUpper = statusName?.toUpperCase() || '';
+      if (statusUpper === 'DRAFT') return 'secondary';
+      if (statusUpper === 'DOCUMENTS_PENDING') return 'outline';
+      return 'default';
+    };
+
+    const formattedStatus = formatStatusName(status || 'DRAFT');
+    const variant = getStatusVariant(status || 'DRAFT');
+
+    return <Badge variant={variant}>{formattedStatus}</Badge>;
   };
 
   const getStatusIcon = (status: string) => {

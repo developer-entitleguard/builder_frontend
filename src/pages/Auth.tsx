@@ -57,6 +57,15 @@ const Auth = () => {
         password: signInData.password
       }).unwrap();
       
+      if (!result.success) {
+        toast({
+          title: "Sign in failed",
+          description: result.message || "Invalid credentials. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
       // Set the user in auth context for navigation
       if (result.data?.userInfo) {
         setApiUser(result.data.userInfo);
@@ -69,16 +78,20 @@ const Auth = () => {
       }
       
       toast({
-        title: "Welcome back!",
-        description: "You have been signed in successfully."
+        title: result.message || "Welcome back!",
+        description: result.message || "You have been signed in successfully."
       });
       navigate('/dashboard');
     } catch (error: unknown) {
       let errorMessage = "An unexpected error occurred.";
       
       if (error && typeof error === 'object') {
-        if ('data' in error && error.data && typeof error.data === 'object' && 'message' in error.data) {
-          errorMessage = String(error.data.message);
+        if ('data' in error && error.data && typeof error.data === 'object') {
+          if ('message' in error.data) {
+            errorMessage = String(error.data.message);
+          } else if ('data' in error.data && error.data.data && typeof error.data.data === 'object' && 'message' in error.data.data) {
+            errorMessage = String(error.data.data.message);
+          }
         } else if ('message' in error) {
           errorMessage = String(error.message);
         }

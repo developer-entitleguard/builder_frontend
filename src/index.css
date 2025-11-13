@@ -31,10 +31,10 @@ All colors MUST be HSL.
     --muted: 220 13% 95%;
     --muted-foreground: 220 13% 50%;
 
-    /* Teal accent for highlights */
-    --accent: 180 100% 45%;
-    --accent-foreground: 0 0% 100%;
-    --accent-light: 180 100% 95%;
+    /* Subtle gray-blue accent for highlights */
+    --accent: 220 15% 92%;
+    --accent-foreground: 220 13% 18%;
+    --accent-light: 220 15% 96%;
 
     /* Success and warning colors */
     --success: 142 76% 36%;
@@ -50,9 +50,9 @@ All colors MUST be HSL.
     --ring: 210 100% 50%;
 
     /* Professional gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(210 100% 50%), hsl(180 100% 45%));
+    --gradient-primary: linear-gradient(135deg, hsl(210 100% 50%), hsl(210 100% 60%));
     --gradient-subtle: linear-gradient(135deg, hsl(220 14% 96%), hsl(220 13% 91%));
-    --gradient-hero: linear-gradient(135deg, hsl(210 100% 50%) 0%, hsl(180 100% 45%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(210 100% 50%) 0%, hsl(210 100% 60%) 100%);
 
     /* Professional shadows */
     --shadow-soft: 0 2px 8px -2px hsl(220 13% 18% / 0.1);

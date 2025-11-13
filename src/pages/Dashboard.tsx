@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useGetDashboardCountQuery, useGetCustomerListQuery } from "@/store/api/dashboard";
 import { useDeleteBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
+import { useGetBuilderOrganizationQuery } from "@/lib/api/services/builderOrganization";
 import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 import type { SerializedError } from '@reduxjs/toolkit';
 import Header from "@/components/Header";
@@ -81,6 +82,16 @@ const Dashboard = () => {
   const { data: customerListData, isLoading: customersLoading, error: customersError } = useGetCustomerListQuery(
     { builderId: builderId || "" },
     { 
+      skip: !builderId,
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: false,
+      refetchOnReconnect: false
+    }
+  );
+
+  const { data: organizationData, isLoading: organizationLoading } = useGetBuilderOrganizationQuery(
+    builderId || "",
+    {
       skip: !builderId,
       refetchOnMountOrArgChange: true,
       refetchOnFocus: false,
@@ -295,6 +306,15 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Organization Welcome Message */}
+        {organizationData?.data?.name && (
+          <div className="mb-6">
+            <p className="text-lg font-semibold text-foreground">
+               <span className="text-primary">{organizationData.data.name}</span>
+            </p>
+          </div>
+        )}
+        
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>

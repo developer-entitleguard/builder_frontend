@@ -8,7 +8,6 @@ import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
 import CustomerDetailsForm from "@/components/CustomerDetailsForm";
 import ItemsSelectionForm from "@/components/ItemsSelectionForm";
-import DocumentUploadForm from "@/components/DocumentUploadForm";
 import ReviewApprovalForm from "@/components/ReviewApprovalForm";
 import SendConfirmationForm from "@/components/SendConfirmationForm";
 

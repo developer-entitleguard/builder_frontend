@@ -4,11 +4,14 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import { RegistrationTypeDialog } from '@/components/RegistrationTypeDialog';
+import { BulkActionsBar } from '@/components/BulkActionsBar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Plus, 
@@ -23,7 +26,8 @@ import {
   Package,
   MessageSquare,
   Settings,
-  FolderKanban
+  FolderKanban,
+  Filter
 } from 'lucide-react';
 
 interface HomeownerRegistration {
@@ -46,6 +50,8 @@ const Dashboard = () => {
   const [registrations, setRegistrations] = useState<HomeownerRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedRegistrations, setSelectedRegistrations] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -117,12 +123,32 @@ const Dashboard = () => {
     }
   };
 
-  const filteredRegistrations = registrations.filter(reg =>
-    reg.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    reg.customer_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    reg.property_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredRegistrations = registrations.filter(reg => {
+    const matchesSearch = reg.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reg.customer_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reg.property_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'all' || reg.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedRegistrations(filteredRegistrations.map(r => r.id));
+    } else {
+      setSelectedRegistrations([]);
+    }
+  };
+
+  const handleSelectRegistration = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedRegistrations(prev => [...prev, id]);
+    } else {
+      setSelectedRegistrations(prev => prev.filter(regId => regId !== id));
+    }
+  };
 
   // Group registrations by project
   const projectGroups = filteredRegistrations.reduce((acc, reg) => {
@@ -281,7 +307,7 @@ const Dashboard = () => {
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
@@ -290,6 +316,22 @@ const Dashboard = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="documents_pending">Documents Pending</SelectItem>
+                <SelectItem value="ready_for_review">Ready for Review</SelectItem>
+                <SelectItem value="sent">Sent</SelectItem>
+                <SelectItem value="delivered">Delivered</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <Button onClick={() => setDialogOpen(true)} className="whitespace-nowrap">
             <Plus className="h-4 w-4 mr-2" />
@@ -334,29 +376,46 @@ const Dashboard = () => {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {filteredRegistrations.length > 0 && (
+                      <div className="flex items-center gap-2 p-2 border-b">
+                        <Checkbox
+                          checked={selectedRegistrations.length === filteredRegistrations.length}
+                          onCheckedChange={handleSelectAll}
+                        />
+                        <span className="text-sm text-muted-foreground">Select All</span>
+                      </div>
+                    )}
                     {filteredRegistrations.map((registration) => (
                       <div
                         key={registration.id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                        onClick={() => navigate(`/registration/${registration.id}`)}
+                        className="flex items-center gap-4 p-4 border rounded-lg hover:bg-accent/50 transition-colors"
                       >
-                        <div className="flex items-center space-x-4 flex-1">
-                          {getStatusIcon(registration.status)}
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2 mb-1">
-                              <h4 className="font-semibold text-lg text-foreground">{registration.customer_name}</h4>
-                              <Badge variant="outline" className="text-xs">
-                                {registration.project_name || 'No Project'}
-                              </Badge>
+                        <Checkbox
+                          checked={selectedRegistrations.includes(registration.id)}
+                          onCheckedChange={(checked) => handleSelectRegistration(registration.id, checked as boolean)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div 
+                          className="flex items-center justify-between flex-1 cursor-pointer"
+                          onClick={() => navigate(`/registration/${registration.id}`)}
+                        >
+                          <div className="flex items-center space-x-4 flex-1">
+                            {getStatusIcon(registration.status)}
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <h4 className="font-semibold text-lg text-foreground">{registration.customer_name}</h4>
+                                <Badge variant="outline" className="text-xs">
+                                  {registration.project_name || 'No Project'}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground mb-1">{registration.customer_email}</p>
+                              <p className="text-sm text-muted-foreground">
+                                📍 {registration.property_address}, {registration.property_city}, {registration.property_state}
+                              </p>
                             </div>
-                            <p className="text-sm text-muted-foreground mb-1">{registration.customer_email}</p>
-                            <p className="text-sm text-muted-foreground">
-                              📍 {registration.property_address}, {registration.property_city}, {registration.property_state}
-                            </p>
                           </div>
-                        </div>
-                        <div className="flex items-center space-x-4">
-                          {getStatusBadge(registration.status)}
+                          <div className="flex items-center space-x-4">
+                            {getStatusBadge(registration.status)}
                           <div className="text-right">
                             <p className="text-sm text-muted-foreground">
                               Created: {new Date(registration.created_at).toLocaleDateString()}
@@ -366,6 +425,7 @@ const Dashboard = () => {
                                 Sent: {new Date(registration.entitlement_sent_at).toLocaleDateString()}
                               </p>
                             )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -454,6 +514,13 @@ const Dashboard = () => {
       <RegistrationTypeDialog 
         open={dialogOpen} 
         onOpenChange={setDialogOpen}
+        onSuccess={fetchRegistrations}
+      />
+
+      <BulkActionsBar
+        selectedCount={selectedRegistrations.length}
+        selectedIds={selectedRegistrations}
+        onClearSelection={() => setSelectedRegistrations([])}
         onSuccess={fetchRegistrations}
       />
     </div>

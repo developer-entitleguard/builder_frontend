@@ -221,7 +221,7 @@ const Onboarding = () => {
   };
 
   const handleNextStep = () => {
-    const steps = ['customer', 'items', 'documents', 'review', 'send'];
+    const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex < steps.length - 1) {
       setCurrentStep(steps[currentIndex + 1]);
@@ -229,7 +229,7 @@ const Onboarding = () => {
   };
 
   const handlePreviousStep = () => {
-    const steps = ['customer', 'items', 'documents', 'review', 'send'];
+    const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex > 0) {
       setCurrentStep(steps[currentIndex - 1]);
@@ -271,8 +271,6 @@ const Onboarding = () => {
         return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} />;
       case 'items':
         return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} />;
-      case 'documents':
-        return <DocumentUploadForm onNext={handleDocumentsNext} initialData={formData.documents} selectedItems={(formData.items as any)?.selected_items || []} />;
       case 'review':
         return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} />;
       case 'send':

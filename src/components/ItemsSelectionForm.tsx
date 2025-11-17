@@ -19,7 +19,9 @@ import {
   ChevronRight,
   Trash2,
   Plus,
-  Edit2
+  Edit2,
+  FileText,
+  X
 } from "lucide-react";
 
 interface BuilderItem {
@@ -38,6 +40,12 @@ interface RegistrationItem extends BuilderItem {
   color?: string;
   custom_notes?: string;
   is_custom?: boolean;
+  serial_number?: string;
+  documents?: Array<{
+    name: string;
+    url: string;
+    path: string;
+  }>;
 }
 
 interface BillOfMaterials {
@@ -65,6 +73,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   const [saving, setSaving] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showCustomItemModal, setShowCustomItemModal] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
   const [newCustomItem, setNewCustomItem] = useState<RegistrationItem>({
     id: '',
     name: '',
@@ -77,7 +86,9 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     bom_id: null,
     color: '',
     custom_notes: '',
-    is_custom: true
+    is_custom: true,
+    serial_number: '',
+    documents: []
   });
 
   useEffect(() => {
@@ -127,11 +138,12 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
 
       if (error) throw error;
       
-      // Auto-select all items from BOM
       const items: RegistrationItem[] = (data || []).map(item => ({
         ...item,
         color: '',
-        custom_notes: ''
+        custom_notes: '',
+        serial_number: '',
+        documents: []
       }));
       
       setSelectedItems(items);
@@ -163,6 +175,87 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     ));
   };
 
+  const handleFileUpload = async (itemId: string, file: File) => {
+    if (!user || !registrationId) return;
+
+    setUploadingFiles(prev => ({ ...prev, [itemId]: true }));
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${registrationId}/${itemId}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('item-documents')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('item-documents')
+        .getPublicUrl(filePath);
+
+      setSelectedItems(prev => prev.map(item => {
+        if (item.id === itemId) {
+          const documents = item.documents || [];
+          return {
+            ...item,
+            documents: [...documents, {
+              name: file.name,
+              url: publicUrl,
+              path: filePath
+            }]
+          };
+        }
+        return item;
+      }));
+
+      toast({
+        title: "Document uploaded",
+        description: "The document has been uploaded successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Upload failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setUploadingFiles(prev => ({ ...prev, [itemId]: false }));
+    }
+  };
+
+  const handleRemoveDocument = async (itemId: string, documentPath: string) => {
+    try {
+      const { error } = await supabase.storage
+        .from('item-documents')
+        .remove([documentPath]);
+
+      if (error) throw error;
+
+      setSelectedItems(prev => prev.map(item => {
+        if (item.id === itemId) {
+          return {
+            ...item,
+            documents: (item.documents || []).filter(doc => doc.path !== documentPath)
+          };
+        }
+        return item;
+      }));
+
+      toast({
+        title: "Document removed",
+        description: "The document has been removed successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Remove failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleOpenCustomItemModal = () => {
     setNewCustomItem({
       id: `custom_${Date.now()}`,
@@ -176,7 +269,9 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
       bom_id: null,
       color: '',
       custom_notes: '',
-      is_custom: true
+      is_custom: true,
+      serial_number: '',
+      documents: []
     });
     setShowCustomItemModal(true);
   };
@@ -221,17 +316,6 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   }, {} as Record<string, RegistrationItem[]>);
 
   const handleNext = async () => {
-    // Validate that all custom items have names
-    const invalidCustomItems = selectedItems.filter(item => item.is_custom && !item.name.trim());
-    if (invalidCustomItems.length > 0) {
-      toast({
-        title: "Missing item names",
-        description: "Please provide names for all custom items",
-        variant: "destructive"
-      });
-      return;
-    }
-
     if (!registrationId) {
       onNext({ selected_items: selectedItems });
       return;
@@ -265,7 +349,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
       <div>
         <h2 className="text-2xl font-bold mb-2">Select Warranty Items</h2>
         <p className="text-muted-foreground">
-          Choose a Bill of Materials and customize items for this homeowner
+          Choose a Bill of Materials and add details for each item
         </p>
       </div>
 
@@ -303,7 +387,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
-                    <span>Selected Items ({selectedItems.length})</span>
+                    <span>Items ({selectedItems.length})</span>
                     <Button onClick={handleOpenCustomItemModal} variant="outline" size="sm">
                       <Plus className="h-4 w-4 mr-2" />
                       Add Custom Item
@@ -327,6 +411,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                           <div className="space-y-4 pt-2">
                             {items.map((item) => {
                               const isEditing = editingItemId === item.id;
+                              const isUploading = uploadingFiles[item.id];
                               
                               return (
                                 <div key={item.id} className="border rounded-lg p-4 space-y-3">
@@ -395,25 +480,78 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                                           placeholder="e.g., White"
                                         />
                                       </div>
-                                      <div className="col-span-2">
+                                      <div>
+                                        <Label htmlFor={`serial-${item.id}`}>Serial Number</Label>
+                                        <Input
+                                          id={`serial-${item.id}`}
+                                          value={item.serial_number || ''}
+                                          onChange={(e) => handleUpdateItem(item.id, 'serial_number', e.target.value)}
+                                          placeholder="Enter serial number"
+                                        />
+                                      </div>
+                                      <div>
                                         <Label htmlFor={`notes-${item.id}`}>Notes</Label>
                                         <Input
                                           id={`notes-${item.id}`}
                                           value={item.custom_notes || ''}
                                           onChange={(e) => handleUpdateItem(item.id, 'custom_notes', e.target.value)}
-                                          placeholder="Additional notes specific to this homeowner"
+                                          placeholder="Additional notes"
                                         />
+                                      </div>
+                                      <div className="col-span-2">
+                                        <Label htmlFor={`doc-${item.id}`}>Documents</Label>
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            id={`doc-${item.id}`}
+                                            type="file"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) handleFileUpload(item.id, file);
+                                            }}
+                                            disabled={isUploading}
+                                            className="flex-1"
+                                          />
+                                          {isUploading && (
+                                            <span className="text-sm text-muted-foreground">Uploading...</span>
+                                          )}
+                                        </div>
+                                        {item.documents && item.documents.length > 0 && (
+                                          <div className="mt-2 space-y-1">
+                                            {item.documents.map((doc, idx) => (
+                                              <div key={idx} className="flex items-center gap-2 text-sm">
+                                                <FileText className="h-4 w-4" />
+                                                <span className="flex-1">{doc.name}</span>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() => handleRemoveDocument(item.id, doc.path)}
+                                                >
+                                                  <X className="h-3 w-3" />
+                                                </Button>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   ) : (
-                                    <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                                      {item.make && <span>Make: {item.make}</span>}
-                                      {item.brand && <span>• Brand: {item.brand}</span>}
-                                      {item.model && <span>• Model: {item.model}</span>}
-                                      {item.color && <span>• Color: {item.color}</span>}
+                                    <div className="space-y-2">
+                                      <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                                        {item.make && <span>Make: {item.make}</span>}
+                                        {item.brand && <span>• Brand: {item.brand}</span>}
+                                        {item.model && <span>• Model: {item.model}</span>}
+                                        {item.color && <span>• Color: {item.color}</span>}
+                                        {item.serial_number && <span>• Serial: {item.serial_number}</span>}
+                                      </div>
                                       {item.custom_notes && (
-                                        <div className="w-full mt-1 text-xs">
+                                        <div className="text-xs text-muted-foreground">
                                           Notes: {item.custom_notes}
+                                        </div>
+                                      )}
+                                      {item.documents && item.documents.length > 0 && (
+                                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                          <FileText className="h-3 w-3" />
+                                          <span>{item.documents.length} document(s) attached</span>
                                         </div>
                                       )}
                                     </div>
@@ -435,7 +573,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                   disabled={selectedItems.length === 0 || saving}
                   size="lg"
                 >
-                  {saving ? "Saving..." : "Continue"}
+                  {saving ? "Saving..." : "Continue to Review"}
                   <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -518,6 +656,15 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                   placeholder="e.g., White"
                 />
               </div>
+            </div>
+            <div>
+              <Label htmlFor="custom-serial">Serial Number</Label>
+              <Input
+                id="custom-serial"
+                value={newCustomItem.serial_number || ''}
+                onChange={(e) => setNewCustomItem({ ...newCustomItem, serial_number: e.target.value })}
+                placeholder="Enter serial number"
+              />
             </div>
             <div>
               <Label htmlFor="custom-notes">Notes</Label>

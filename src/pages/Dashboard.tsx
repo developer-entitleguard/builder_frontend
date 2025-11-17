@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Plus, 
@@ -20,7 +21,8 @@ import {
   Home,
   Package,
   MessageSquare,
-  Settings
+  Settings,
+  FolderKanban
 } from 'lucide-react';
 
 interface HomeownerRegistration {
@@ -119,6 +121,16 @@ const Dashboard = () => {
     reg.property_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
     reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Group registrations by project
+  const projectGroups = filteredRegistrations.reduce((acc, reg) => {
+    const projectName = reg.project_name || 'No Project';
+    if (!acc[projectName]) {
+      acc[projectName] = [];
+    }
+    acc[projectName].push(reg);
+    return acc;
+  }, {} as Record<string, HomeownerRegistration[]>);
 
   const stats = {
     total: registrations.length,
@@ -292,58 +304,147 @@ const Dashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {filteredRegistrations.length === 0 ? (
-              <div className="text-center py-12">
-                <Home className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-foreground mb-2">No registrations yet</h3>
-                <p className="text-muted-foreground mb-4">
-                  Start by creating your first homeowner registration
-                </p>
-                <Button onClick={() => navigate('/onboarding')}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create First Registration
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredRegistrations.map((registration) => (
-                  <div
-                    key={registration.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/registration/${registration.id}`)}
-                  >
-                    <div className="flex items-center space-x-4 flex-1">
-                      {getStatusIcon(registration.status)}
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <h4 className="font-semibold text-lg text-foreground">{registration.customer_name}</h4>
-                          <Badge variant="outline" className="text-xs">
-                            {registration.project_name || 'No Project'}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-1">{registration.customer_email}</p>
-                        <p className="text-sm text-muted-foreground">
-                          📍 {registration.property_address}, {registration.property_city}, {registration.property_state}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      {getStatusBadge(registration.status)}
-                      <div className="text-right">
-                        <p className="text-sm text-muted-foreground">
-                          Created: {new Date(registration.created_at).toLocaleDateString()}
-                        </p>
-                        {registration.entitlement_sent_at && (
-                          <p className="text-sm text-muted-foreground">
-                            Sent: {new Date(registration.entitlement_sent_at).toLocaleDateString()}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+            <Tabs defaultValue="by-owner" className="w-full">
+              <TabsList className="grid w-full max-w-md grid-cols-2 mb-6">
+                <TabsTrigger value="by-owner" className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  By Owner
+                </TabsTrigger>
+                <TabsTrigger value="by-project" className="flex items-center gap-2">
+                  <FolderKanban className="h-4 w-4" />
+                  By Project
+                </TabsTrigger>
+              </TabsList>
+
+              {/* By Owner Tab */}
+              <TabsContent value="by-owner" className="mt-0">
+                {filteredRegistrations.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Home className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-foreground mb-2">No registrations yet</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Start by creating your first homeowner registration
+                    </p>
+                    <Button onClick={() => navigate('/onboarding')}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create First Registration
+                    </Button>
                   </div>
-                ))}
-              </div>
-            )}
+                ) : (
+                  <div className="space-y-4">
+                    {filteredRegistrations.map((registration) => (
+                      <div
+                        key={registration.id}
+                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                        onClick={() => navigate(`/registration/${registration.id}`)}
+                      >
+                        <div className="flex items-center space-x-4 flex-1">
+                          {getStatusIcon(registration.status)}
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <h4 className="font-semibold text-lg text-foreground">{registration.customer_name}</h4>
+                              <Badge variant="outline" className="text-xs">
+                                {registration.project_name || 'No Project'}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-1">{registration.customer_email}</p>
+                            <p className="text-sm text-muted-foreground">
+                              📍 {registration.property_address}, {registration.property_city}, {registration.property_state}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          {getStatusBadge(registration.status)}
+                          <div className="text-right">
+                            <p className="text-sm text-muted-foreground">
+                              Created: {new Date(registration.created_at).toLocaleDateString()}
+                            </p>
+                            {registration.entitlement_sent_at && (
+                              <p className="text-sm text-muted-foreground">
+                                Sent: {new Date(registration.entitlement_sent_at).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* By Project Tab */}
+              <TabsContent value="by-project" className="mt-0">
+                {Object.keys(projectGroups).length === 0 ? (
+                  <div className="text-center py-12">
+                    <FolderKanban className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-foreground mb-2">No projects yet</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Registrations will be grouped by project name
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {Object.entries(projectGroups)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([projectName, projectRegs]) => (
+                        <Card key={projectName} className="border-2">
+                          <CardHeader>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Building2 className="h-6 w-6 text-primary" />
+                                <div>
+                                  <CardTitle className="text-xl">{projectName}</CardTitle>
+                                  <CardDescription>
+                                    {projectRegs.length} homeowner{projectRegs.length !== 1 ? 's' : ''}
+                                  </CardDescription>
+                                </div>
+                              </div>
+                              <Badge variant="secondary" className="text-sm">
+                                {projectRegs.filter(r => r.status === 'sent' || r.status === 'delivered').length} sent
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-3">
+                              {projectRegs.map((registration) => (
+                                <div
+                                  key={registration.id}
+                                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                                  onClick={() => navigate(`/registration/${registration.id}`)}
+                                >
+                                  <div className="flex items-center space-x-3 flex-1">
+                                    {getStatusIcon(registration.status)}
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-foreground">{registration.customer_name}</h4>
+                                      <p className="text-sm text-muted-foreground">{registration.property_address}</p>
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        {registration.customer_email}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center space-x-3">
+                                    {getStatusBadge(registration.status)}
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate(`/onboarding?id=${registration.id}`);
+                                      }}
+                                    >
+                                      Edit
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </main>

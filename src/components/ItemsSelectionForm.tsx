@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRegistrations } from "@/hooks/useRegistrations";
@@ -62,6 +64,21 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [showCustomItemModal, setShowCustomItemModal] = useState(false);
+  const [newCustomItem, setNewCustomItem] = useState<RegistrationItem>({
+    id: '',
+    name: '',
+    category: 'Other',
+    brand: '',
+    model: '',
+    make: '',
+    description: '',
+    price: null,
+    bom_id: null,
+    color: '',
+    custom_notes: '',
+    is_custom: true
+  });
 
   useEffect(() => {
     if (user) {
@@ -146,8 +163,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     ));
   };
 
-  const handleAddCustomItem = () => {
-    const newItem: RegistrationItem = {
+  const handleOpenCustomItemModal = () => {
+    setNewCustomItem({
       id: `custom_${Date.now()}`,
       name: '',
       category: 'Other',
@@ -160,9 +177,26 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
       color: '',
       custom_notes: '',
       is_custom: true
-    };
-    setSelectedItems(prev => [...prev, newItem]);
-    setEditingItemId(newItem.id);
+    });
+    setShowCustomItemModal(true);
+  };
+
+  const handleSaveCustomItem = () => {
+    if (!newCustomItem.name.trim()) {
+      toast({
+        title: "Missing item name",
+        description: "Please provide a name for the custom item",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSelectedItems(prev => [...prev, newCustomItem]);
+    setShowCustomItemModal(false);
+    toast({
+      title: "Custom item added",
+      description: "The custom item has been added to the selection",
+    });
   };
 
   const getCategoryIcon = (category: string) => {
@@ -177,6 +211,14 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     };
     return iconMap[category] || <Building className="h-5 w-5" />;
   };
+
+  const groupedItems = selectedItems.reduce((acc, item) => {
+    if (!acc[item.category]) {
+      acc[item.category] = [];
+    }
+    acc[item.category].push(item);
+    return acc;
+  }, {} as Record<string, RegistrationItem[]>);
 
   const handleNext = async () => {
     // Validate that all custom items have names
@@ -242,10 +284,10 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
             </CardHeader>
             <CardContent>
               <Select value={selectedBomId} onValueChange={handleBOMSelect}>
-                <SelectTrigger>
+                <SelectTrigger className="bg-background">
                   <SelectValue placeholder="Select a Bill of Materials" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-background z-50">
                   {boms.map((bom) => (
                     <SelectItem key={bom.id} value={bom.id}>
                       {bom.name} {bom.project_name && `(${bom.project_name})`}
@@ -262,121 +304,128 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <span>Selected Items ({selectedItems.length})</span>
-                    <Button onClick={handleAddCustomItem} variant="outline" size="sm">
+                    <Button onClick={handleOpenCustomItemModal} variant="outline" size="sm">
                       <Plus className="h-4 w-4 mr-2" />
                       Add Custom Item
                     </Button>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {selectedItems.map((item) => {
-                    const isEditing = editingItemId === item.id;
-                    
-                    return (
-                      <div key={item.id} className="border rounded-lg p-4 space-y-3">
-                        <div className="flex items-start justify-between">
+                <CardContent>
+                  <Accordion type="multiple" className="w-full">
+                    {Object.entries(groupedItems).map(([category, items]) => (
+                      <AccordionItem key={category} value={category}>
+                        <AccordionTrigger className="hover:no-underline">
                           <div className="flex items-center gap-2">
-                            {getCategoryIcon(item.category)}
-                            <div>
-                              {isEditing || item.is_custom ? (
-                                <Input
-                                  value={item.name}
-                                  onChange={(e) => handleUpdateItem(item.id, 'name', e.target.value)}
-                                  placeholder="Item name"
-                                  className="mb-2"
-                                />
-                              ) : (
-                                <h4 className="font-semibold">{item.name}</h4>
-                              )}
-                              <Badge variant="secondary" className="text-xs">
-                                {item.category}
-                              </Badge>
-                            </div>
+                            {getCategoryIcon(category)}
+                            <span className="font-semibold">{category}</span>
+                            <Badge variant="secondary" className="ml-2">
+                              {items.length}
+                            </Badge>
                           </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setEditingItemId(isEditing ? null : item.id)}
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveItem(item.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-4 pt-2">
+                            {items.map((item) => {
+                              const isEditing = editingItemId === item.id;
+                              
+                              return (
+                                <div key={item.id} className="border rounded-lg p-4 space-y-3">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold">{item.name}</h4>
+                                      {item.is_custom && (
+                                        <Badge variant="outline" className="text-xs mt-1">
+                                          Custom Item
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setEditingItemId(isEditing ? null : item.id)}
+                                      >
+                                        <Edit2 className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleRemoveItem(item.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
 
-                        {(isEditing || item.is_custom) && (
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <Label htmlFor={`make-${item.id}`}>Make</Label>
-                              <Input
-                                id={`make-${item.id}`}
-                                value={item.make || ''}
-                                onChange={(e) => handleUpdateItem(item.id, 'make', e.target.value)}
-                                placeholder="e.g., Samsung"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor={`brand-${item.id}`}>Brand</Label>
-                              <Input
-                                id={`brand-${item.id}`}
-                                value={item.brand || ''}
-                                onChange={(e) => handleUpdateItem(item.id, 'brand', e.target.value)}
-                                placeholder="e.g., SmartThings"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor={`model-${item.id}`}>Model</Label>
-                              <Input
-                                id={`model-${item.id}`}
-                                value={item.model || ''}
-                                onChange={(e) => handleUpdateItem(item.id, 'model', e.target.value)}
-                                placeholder="e.g., XYZ-123"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor={`color-${item.id}`}>Color</Label>
-                              <Input
-                                id={`color-${item.id}`}
-                                value={item.color || ''}
-                                onChange={(e) => handleUpdateItem(item.id, 'color', e.target.value)}
-                                placeholder="e.g., White"
-                              />
-                            </div>
-                            <div className="col-span-2">
-                              <Label htmlFor={`notes-${item.id}`}>Notes</Label>
-                              <Input
-                                id={`notes-${item.id}`}
-                                value={item.custom_notes || ''}
-                                onChange={(e) => handleUpdateItem(item.id, 'custom_notes', e.target.value)}
-                                placeholder="Additional notes specific to this homeowner"
-                              />
-                            </div>
+                                  {isEditing ? (
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <Label htmlFor={`make-${item.id}`}>Make</Label>
+                                        <Input
+                                          id={`make-${item.id}`}
+                                          value={item.make || ''}
+                                          onChange={(e) => handleUpdateItem(item.id, 'make', e.target.value)}
+                                          placeholder="e.g., Samsung"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label htmlFor={`brand-${item.id}`}>Brand</Label>
+                                        <Input
+                                          id={`brand-${item.id}`}
+                                          value={item.brand || ''}
+                                          onChange={(e) => handleUpdateItem(item.id, 'brand', e.target.value)}
+                                          placeholder="e.g., SmartThings"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label htmlFor={`model-${item.id}`}>Model</Label>
+                                        <Input
+                                          id={`model-${item.id}`}
+                                          value={item.model || ''}
+                                          onChange={(e) => handleUpdateItem(item.id, 'model', e.target.value)}
+                                          placeholder="e.g., XYZ-123"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label htmlFor={`color-${item.id}`}>Color</Label>
+                                        <Input
+                                          id={`color-${item.id}`}
+                                          value={item.color || ''}
+                                          onChange={(e) => handleUpdateItem(item.id, 'color', e.target.value)}
+                                          placeholder="e.g., White"
+                                        />
+                                      </div>
+                                      <div className="col-span-2">
+                                        <Label htmlFor={`notes-${item.id}`}>Notes</Label>
+                                        <Input
+                                          id={`notes-${item.id}`}
+                                          value={item.custom_notes || ''}
+                                          onChange={(e) => handleUpdateItem(item.id, 'custom_notes', e.target.value)}
+                                          placeholder="Additional notes specific to this homeowner"
+                                        />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                                      {item.make && <span>Make: {item.make}</span>}
+                                      {item.brand && <span>• Brand: {item.brand}</span>}
+                                      {item.model && <span>• Model: {item.model}</span>}
+                                      {item.color && <span>• Color: {item.color}</span>}
+                                      {item.custom_notes && (
+                                        <div className="w-full mt-1 text-xs">
+                                          Notes: {item.custom_notes}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
-                        )}
-
-                        {!isEditing && !item.is_custom && (
-                          <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                            {item.make && <span>Make: {item.make}</span>}
-                            {item.brand && <span>• Brand: {item.brand}</span>}
-                            {item.model && <span>• Model: {item.model}</span>}
-                            {item.color && <span>• Color: {item.color}</span>}
-                            {item.custom_notes && (
-                              <div className="w-full mt-1 text-xs">
-                                Notes: {item.custom_notes}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
                 </CardContent>
               </Card>
 
@@ -394,6 +443,102 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
           )}
         </>
       )}
+
+      <Dialog open={showCustomItemModal} onOpenChange={setShowCustomItemModal}>
+        <DialogContent className="sm:max-w-[500px] bg-background">
+          <DialogHeader>
+            <DialogTitle>Add Custom Item</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div>
+              <Label htmlFor="custom-name">Item Name *</Label>
+              <Input
+                id="custom-name"
+                value={newCustomItem.name}
+                onChange={(e) => setNewCustomItem({ ...newCustomItem, name: e.target.value })}
+                placeholder="Enter item name"
+              />
+            </div>
+            <div>
+              <Label htmlFor="custom-category">Category</Label>
+              <Select 
+                value={newCustomItem.category} 
+                onValueChange={(value) => setNewCustomItem({ ...newCustomItem, category: value })}
+              >
+                <SelectTrigger id="custom-category" className="bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-background z-50">
+                  <SelectItem value="Appliances">Appliances</SelectItem>
+                  <SelectItem value="Kitchen">Kitchen</SelectItem>
+                  <SelectItem value="Bathroom">Bathroom</SelectItem>
+                  <SelectItem value="Electrical">Electrical</SelectItem>
+                  <SelectItem value="Flooring">Flooring</SelectItem>
+                  <SelectItem value="Trim">Trim</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="custom-make">Make</Label>
+                <Input
+                  id="custom-make"
+                  value={newCustomItem.make || ''}
+                  onChange={(e) => setNewCustomItem({ ...newCustomItem, make: e.target.value })}
+                  placeholder="e.g., Samsung"
+                />
+              </div>
+              <div>
+                <Label htmlFor="custom-brand">Brand</Label>
+                <Input
+                  id="custom-brand"
+                  value={newCustomItem.brand || ''}
+                  onChange={(e) => setNewCustomItem({ ...newCustomItem, brand: e.target.value })}
+                  placeholder="e.g., SmartThings"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="custom-model">Model</Label>
+                <Input
+                  id="custom-model"
+                  value={newCustomItem.model || ''}
+                  onChange={(e) => setNewCustomItem({ ...newCustomItem, model: e.target.value })}
+                  placeholder="e.g., XYZ-123"
+                />
+              </div>
+              <div>
+                <Label htmlFor="custom-color">Color</Label>
+                <Input
+                  id="custom-color"
+                  value={newCustomItem.color || ''}
+                  onChange={(e) => setNewCustomItem({ ...newCustomItem, color: e.target.value })}
+                  placeholder="e.g., White"
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="custom-notes">Notes</Label>
+              <Input
+                id="custom-notes"
+                value={newCustomItem.custom_notes || ''}
+                onChange={(e) => setNewCustomItem({ ...newCustomItem, custom_notes: e.target.value })}
+                placeholder="Additional notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCustomItemModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveCustomItem}>
+              Add Item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -39,25 +39,17 @@ const WorkflowSteps = ({ currentStep, onStepClick }: WorkflowStepsProps) => {
     {
       id: 'items',
       title: 'Select Items',
-      description: 'Choose appliances, fittings, and structural components',
+      description: 'Choose items and add details, warranties, and manuals',
       icon: <Home className="h-5 w-5" />,
       status: currentStep === 'items' ? 'current' : currentStep === 'customer' ? 'pending' : 'completed',
       action: 'Select Items'
-    },
-    {
-      id: 'documents',
-      title: 'Upload Documents',
-      description: 'Attach warranties, manuals, and certificates',
-      icon: <Upload className="h-5 w-5" />,
-      status: currentStep === 'documents' ? 'current' : ['customer', 'items'].includes(currentStep) ? 'pending' : 'completed',
-      action: 'Upload Files'
     },
     {
       id: 'review',
       title: 'Review & Approve',
       description: 'Verify brands, warranties, and coverage details',
       icon: <Eye className="h-5 w-5" />,
-      status: currentStep === 'review' ? 'current' : ['customer', 'items', 'documents'].includes(currentStep) ? 'pending' : 'completed',
+      status: currentStep === 'review' ? 'current' : ['customer', 'items'].includes(currentStep) ? 'pending' : 'completed',
       action: 'Review Details'
     },
     {

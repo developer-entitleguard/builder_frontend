@@ -41,7 +41,12 @@ interface RegistrationItem extends BuilderItem {
   custom_notes?: string;
   is_custom?: boolean;
   serial_number?: string;
-  documents?: Array<{
+  warranty_documents?: Array<{
+    name: string;
+    url: string;
+    path: string;
+  }>;
+  manual_documents?: Array<{
     name: string;
     url: string;
     path: string;
@@ -88,7 +93,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     custom_notes: '',
     is_custom: true,
     serial_number: '',
-    documents: []
+    warranty_documents: [],
+    manual_documents: []
   });
 
   useEffect(() => {
@@ -143,7 +149,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
         color: '',
         custom_notes: '',
         serial_number: '',
-        documents: []
+        warranty_documents: [],
+        manual_documents: []
       }));
       
       setSelectedItems(items);
@@ -175,14 +182,15 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     ));
   };
 
-  const handleFileUpload = async (itemId: string, file: File) => {
+  const handleFileUpload = async (itemId: string, file: File, documentType: 'warranty' | 'manual') => {
     if (!user || !registrationId) return;
 
-    setUploadingFiles(prev => ({ ...prev, [itemId]: true }));
+    const uploadKey = `${itemId}_${documentType}`;
+    setUploadingFiles(prev => ({ ...prev, [uploadKey]: true }));
 
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
+      const fileName = `${Date.now()}_${documentType}.${fileExt}`;
       const filePath = `${user.id}/${registrationId}/${itemId}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -197,21 +205,33 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
 
       setSelectedItems(prev => prev.map(item => {
         if (item.id === itemId) {
-          const documents = item.documents || [];
-          return {
-            ...item,
-            documents: [...documents, {
-              name: file.name,
-              url: publicUrl,
-              path: filePath
-            }]
-          };
+          if (documentType === 'warranty') {
+            const warranty_documents = item.warranty_documents || [];
+            return {
+              ...item,
+              warranty_documents: [...warranty_documents, {
+                name: file.name,
+                url: publicUrl,
+                path: filePath
+              }]
+            };
+          } else {
+            const manual_documents = item.manual_documents || [];
+            return {
+              ...item,
+              manual_documents: [...manual_documents, {
+                name: file.name,
+                url: publicUrl,
+                path: filePath
+              }]
+            };
+          }
         }
         return item;
       }));
 
       toast({
-        title: "Document uploaded",
+        title: `${documentType === 'warranty' ? 'Warranty' : 'Manual'} uploaded`,
         description: "The document has been uploaded successfully",
       });
     } catch (error: any) {
@@ -221,11 +241,11 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
         variant: "destructive"
       });
     } finally {
-      setUploadingFiles(prev => ({ ...prev, [itemId]: false }));
+      setUploadingFiles(prev => ({ ...prev, [uploadKey]: false }));
     }
   };
 
-  const handleRemoveDocument = async (itemId: string, documentPath: string) => {
+  const handleRemoveDocument = async (itemId: string, documentPath: string, documentType: 'warranty' | 'manual') => {
     try {
       const { error } = await supabase.storage
         .from('item-documents')
@@ -235,10 +255,17 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
 
       setSelectedItems(prev => prev.map(item => {
         if (item.id === itemId) {
-          return {
-            ...item,
-            documents: (item.documents || []).filter(doc => doc.path !== documentPath)
-          };
+          if (documentType === 'warranty') {
+            return {
+              ...item,
+              warranty_documents: (item.warranty_documents || []).filter(doc => doc.path !== documentPath)
+            };
+          } else {
+            return {
+              ...item,
+              manual_documents: (item.manual_documents || []).filter(doc => doc.path !== documentPath)
+            };
+          }
         }
         return item;
       }));
@@ -271,7 +298,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
       custom_notes: '',
       is_custom: true,
       serial_number: '',
-      documents: []
+      warranty_documents: [],
+      manual_documents: []
     });
     setShowCustomItemModal(true);
   };
@@ -498,33 +526,68 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                                           placeholder="Additional notes"
                                         />
                                       </div>
-                                      <div className="col-span-2">
-                                        <Label htmlFor={`doc-${item.id}`}>Documents</Label>
+                                      <div>
+                                        <Label htmlFor={`warranty-${item.id}`}>Upload Warranty</Label>
                                         <div className="flex items-center gap-2">
                                           <Input
-                                            id={`doc-${item.id}`}
+                                            id={`warranty-${item.id}`}
                                             type="file"
                                             onChange={(e) => {
                                               const file = e.target.files?.[0];
-                                              if (file) handleFileUpload(item.id, file);
+                                              if (file) handleFileUpload(item.id, file, 'warranty');
                                             }}
-                                            disabled={isUploading}
+                                            disabled={uploadingFiles[`${item.id}_warranty`]}
                                             className="flex-1"
                                           />
-                                          {isUploading && (
+                                          {uploadingFiles[`${item.id}_warranty`] && (
                                             <span className="text-sm text-muted-foreground">Uploading...</span>
                                           )}
                                         </div>
-                                        {item.documents && item.documents.length > 0 && (
+                                        {item.warranty_documents && item.warranty_documents.length > 0 && (
                                           <div className="mt-2 space-y-1">
-                                            {item.documents.map((doc, idx) => (
+                                            {item.warranty_documents.map((doc, idx) => (
                                               <div key={idx} className="flex items-center gap-2 text-sm">
                                                 <FileText className="h-4 w-4" />
                                                 <span className="flex-1">{doc.name}</span>
                                                 <Button
                                                   variant="ghost"
                                                   size="sm"
-                                                  onClick={() => handleRemoveDocument(item.id, doc.path)}
+                                                  onClick={() => handleRemoveDocument(item.id, doc.path, 'warranty')}
+                                                >
+                                                  <X className="h-3 w-3" />
+                                                </Button>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <Label htmlFor={`manual-${item.id}`}>Upload Manual</Label>
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            id={`manual-${item.id}`}
+                                            type="file"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) handleFileUpload(item.id, file, 'manual');
+                                            }}
+                                            disabled={uploadingFiles[`${item.id}_manual`]}
+                                            className="flex-1"
+                                          />
+                                          {uploadingFiles[`${item.id}_manual`] && (
+                                            <span className="text-sm text-muted-foreground">Uploading...</span>
+                                          )}
+                                        </div>
+                                        {item.manual_documents && item.manual_documents.length > 0 && (
+                                          <div className="mt-2 space-y-1">
+                                            {item.manual_documents.map((doc, idx) => (
+                                              <div key={idx} className="flex items-center gap-2 text-sm">
+                                                <FileText className="h-4 w-4" />
+                                                <span className="flex-1">{doc.name}</span>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() => handleRemoveDocument(item.id, doc.path, 'manual')}
                                                 >
                                                   <X className="h-3 w-3" />
                                                 </Button>
@@ -548,12 +611,20 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                                           Notes: {item.custom_notes}
                                         </div>
                                       )}
-                                      {item.documents && item.documents.length > 0 && (
-                                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                          <FileText className="h-3 w-3" />
-                                          <span>{item.documents.length} document(s) attached</span>
-                                        </div>
-                                      )}
+                                      <div className="flex gap-3 text-xs text-muted-foreground">
+                                        {item.warranty_documents && item.warranty_documents.length > 0 && (
+                                          <div className="flex items-center gap-1">
+                                            <FileText className="h-3 w-3" />
+                                            <span>{item.warranty_documents.length} warranty doc(s)</span>
+                                          </div>
+                                        )}
+                                        {item.manual_documents && item.manual_documents.length > 0 && (
+                                          <div className="flex items-center gap-1">
+                                            <FileText className="h-3 w-3" />
+                                            <span>{item.manual_documents.length} manual doc(s)</span>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                   )}
                                 </div>

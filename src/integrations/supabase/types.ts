@@ -357,14 +357,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      ensure_user_profile: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      get_user_organization: {
-        Args: { _user_id: string }
-        Returns: string
-      }
+      ensure_user_profile: { Args: never; Returns: undefined }
+      get_user_organization: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

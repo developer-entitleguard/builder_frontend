@@ -1,13 +1,16 @@
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
+import { RegistrationTypeDialog } from "@/components/RegistrationTypeDialog";
 import { Building2, LogOut, LayoutDashboard } from "lucide-react";
 
 const Header = () => {
   const { user, signOut } = useAuth();
   const { isAdmin } = useOrganization();
   const location = useLocation();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
     <header className="bg-card border-b border-border shadow-soft">
@@ -44,9 +47,9 @@ const Header = () => {
                 <Button 
                   variant={location.pathname === '/onboarding' ? "default" : "ghost"} 
                   size="sm" 
-                  asChild
+                  onClick={() => setDialogOpen(true)}
                 >
-                  <Link to="/onboarding">New Registration</Link>
+                  New Registration
                 </Button>
                 <Button 
                   variant={location.pathname === '/items' ? "default" : "ghost"} 
@@ -81,6 +84,11 @@ const Header = () => {
           )}
         </div>
       </div>
+
+      <RegistrationTypeDialog 
+        open={dialogOpen} 
+        onOpenChange={setDialogOpen}
+      />
     </header>
   );
 };

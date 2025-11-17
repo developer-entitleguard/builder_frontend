@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
+import { RegistrationTypeDialog } from '@/components/RegistrationTypeDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -45,6 +46,7 @@ const Dashboard = () => {
   const [registrations, setRegistrations] = useState<HomeownerRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -260,7 +262,7 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/onboarding')}>
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setDialogOpen(true)}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
@@ -289,7 +291,7 @@ const Dashboard = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button onClick={() => navigate('/onboarding')} className="whitespace-nowrap">
+          <Button onClick={() => setDialogOpen(true)} className="whitespace-nowrap">
             <Plus className="h-4 w-4 mr-2" />
             New Registration
           </Button>
@@ -325,7 +327,7 @@ const Dashboard = () => {
                     <p className="text-muted-foreground mb-4">
                       Start by creating your first homeowner registration
                     </p>
-                    <Button onClick={() => navigate('/onboarding')}>
+                    <Button onClick={() => setDialogOpen(true)}>
                       <Plus className="h-4 w-4 mr-2" />
                       Create First Registration
                     </Button>
@@ -448,6 +450,12 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </main>
+
+      <RegistrationTypeDialog 
+        open={dialogOpen} 
+        onOpenChange={setDialogOpen}
+        onSuccess={fetchRegistrations}
+      />
     </div>
   );
 };

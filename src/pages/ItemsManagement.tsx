@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2 } from "lucide-react";
 import Header from "@/components/Header";
+import { BOMUpload } from "@/components/BOMUpload";
 
 interface BuilderItem {
   id: string;
@@ -27,6 +28,13 @@ interface BuilderItem {
   documentation_url: string | null;
   notes: string | null;
   purchaser: string | null;
+  bom_id: string | null;
+}
+
+interface BillOfMaterials {
+  id: string;
+  name: string;
+  project_name: string | null;
 }
 
 const categories = [
@@ -48,6 +56,8 @@ const ItemsManagement = () => {
   const { organization, loading: orgLoading } = useOrganization();
   const { toast } = useToast();
   const [items, setItems] = useState<BuilderItem[]>([]);
+  const [boms, setBoms] = useState<BillOfMaterials[]>([]);
+  const [selectedBomId, setSelectedBomId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BuilderItem | null>(null);
@@ -67,12 +77,40 @@ const ItemsManagement = () => {
   useEffect(() => {
     console.log('ItemsManagement - user/organization changed:', { user: !!user, organization: !!organization, orgLoading });
     if (user) {
+      fetchBOMs();
       fetchItems();
     } else if (!user) {
       console.log('ItemsManagement - No user, setting loading to false');
       setLoading(false);
     }
-  }, [user, organization, orgLoading]);
+  }, [user, organization, orgLoading, selectedBomId]);
+
+  const fetchBOMs = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('bill_of_materials')
+        .select('*')
+        .eq('builder_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setBoms(data || []);
+      
+      // Auto-select first BOM if available
+      if (data && data.length > 0 && !selectedBomId) {
+        setSelectedBomId(data[0].id);
+      }
+    } catch (error: any) {
+      console.error('Error fetching BOMs:', error);
+      toast({
+        title: "Error fetching Bill of Materials",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
 
   const fetchItems = async () => {
     if (!user) {
@@ -83,10 +121,17 @@ const ItemsManagement = () => {
     
     console.log('ItemsManagement - fetchItems started for user:', user.id);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('builder_items')
         .select('*')
-        .eq('builder_id', user.id)
+        .eq('builder_id', user.id);
+      
+      // Filter by selected BOM if one is selected
+      if (selectedBomId) {
+        query = query.eq('bom_id', selectedBomId);
+      }
+      
+      const { data, error } = await query
         .order('category', { ascending: true })
         .order('name', { ascending: true });
 
@@ -267,13 +312,18 @@ const ItemsManagement = () => {
             <h1 className="text-3xl font-bold text-foreground">Items Management</h1>
             <p className="text-muted-foreground mt-1">Manage your master list of items for homeowner registrations</p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={resetForm}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Item
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <BOMUpload onSuccess={() => {
+              fetchBOMs();
+              fetchItems();
+            }} />
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={resetForm} disabled={!selectedBomId}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Item
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>{editingItem ? 'Edit Item' : 'Add New Item'}</DialogTitle>
@@ -394,17 +444,48 @@ const ItemsManagement = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
-        <div className="space-y-6">
-          {Object.keys(groupedItems).length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <p className="text-muted-foreground">No items added yet. Click "Add Item" to get started.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            Object.entries(groupedItems).map(([category, categoryItems]) => (
+        {boms.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <p className="text-muted-foreground text-center">
+                No Bill of Materials found. Upload a BOM to get started.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <div className="mb-6">
+              <Label htmlFor="bomSelect">Select Bill of Materials</Label>
+              <Select value={selectedBomId} onValueChange={(value) => {
+                setSelectedBomId(value);
+              }}>
+                <SelectTrigger className="w-full max-w-md">
+                  <SelectValue placeholder="Select a Bill of Materials" />
+                </SelectTrigger>
+                <SelectContent>
+                  {boms.map((bom) => (
+                    <SelectItem key={bom.id} value={bom.id}>
+                      {bom.name} {bom.project_name && `- ${bom.project_name}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {items.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <p className="text-muted-foreground text-center">
+                    No items found in this Bill of Materials.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-6">
+                {Object.entries(groupedItems).map(([category, categoryItems]) => (
               <Card key={category}>
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
@@ -443,14 +524,16 @@ const ItemsManagement = () => {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                       ))}
                     </TableBody>
                   </Table>
                 </CardContent>
               </Card>
-            ))
-          )}
-        </div>
+            ))}
+              </div>
+            )}
+          </>
+        )}
       </main>
     </div>
   );

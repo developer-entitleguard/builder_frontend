@@ -10,6 +10,16 @@ import CustomerDetailsForm from "@/components/CustomerDetailsForm";
 import ItemsSelectionForm from "@/components/ItemsSelectionForm";
 import ReviewApprovalForm from "@/components/ReviewApprovalForm";
 import SendConfirmationForm from "@/components/SendConfirmationForm";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const Onboarding = () => {
   const { user } = useAuth();
@@ -24,6 +34,10 @@ const Onboarding = () => {
     documents: {}
   });
   const [loading, setLoading] = useState(false);
+  const [originalEmail, setOriginalEmail] = useState<string | null>(null);
+  const [originalStatus, setOriginalStatus] = useState<string | null>(null);
+  const [emailChangeDialogOpen, setEmailChangeDialogOpen] = useState(false);
+  const [pendingCustomerData, setPendingCustomerData] = useState<any>(null);
 
   useEffect(() => {
     if (!user) {
@@ -64,6 +78,9 @@ const Onboarding = () => {
       }
 
       // Parse the existing data and populate form
+      setOriginalEmail(data.customer_email);
+      setOriginalStatus(data.status);
+      
       const existingFormData = {
         customer: {
           firstName: data.customer_name?.split(' ')[0] || '',
@@ -191,10 +208,29 @@ const Onboarding = () => {
   };
 
   const handleCustomerNext = async (customerData: any) => {
+    // Check if email changed for sent registrations
+    if (originalStatus === 'sent' && originalEmail && customerData.email !== originalEmail) {
+      setPendingCustomerData(customerData);
+      setEmailChangeDialogOpen(true);
+      return;
+    }
+    
     if (customerData.registrationId) {
       setRegistrationId(customerData.registrationId);
     }
     setFormData(prev => ({ ...prev, customer: customerData }));
+    handleNextStep();
+  };
+
+  const confirmEmailChange = async () => {
+    if (!pendingCustomerData) return;
+    
+    setEmailChangeDialogOpen(false);
+    if (pendingCustomerData.registrationId) {
+      setRegistrationId(pendingCustomerData.registrationId);
+    }
+    setFormData(prev => ({ ...prev, customer: pendingCustomerData }));
+    setPendingCustomerData(null);
     handleNextStep();
   };
 
@@ -346,6 +382,23 @@ const Onboarding = () => {
           </div>
         )}
       </main>
+
+      <AlertDialog open={emailChangeDialogOpen} onOpenChange={setEmailChangeDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Email Change</AlertDialogTitle>
+            <AlertDialogDescription>
+              This registration has already been sent to the homeowner. Changing the email address will require resending the entitlement to the new email. Do you want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingCustomerData(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmEmailChange}>
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

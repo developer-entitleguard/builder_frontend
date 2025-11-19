@@ -18,9 +18,20 @@ import {
   MapPin,
   Building,
   Package,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 import Header from '@/components/Header';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface RegistrationData {
   id: string;
@@ -49,6 +60,7 @@ const RegistrationDetail = () => {
   const { toast } = useToast();
   const [registration, setRegistration] = useState<RegistrationData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!user || !id) {
@@ -142,6 +154,34 @@ const RegistrationDetail = () => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!registration) return;
+
+    try {
+      const { error } = await supabase
+        .from('homeowner_registrations')
+        .delete()
+        .eq('id', registration.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Registration deleted",
+        description: registration.status === 'sent' 
+          ? "The property has been removed from the homeowner's entitlements."
+          : "The registration has been deleted successfully."
+      });
+
+      navigate('/dashboard');
+    } catch (error: any) {
+      toast({
+        title: "Error deleting registration",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -190,18 +230,18 @@ const RegistrationDetail = () => {
           </div>
           <div className="flex items-center space-x-4">
             {getStatusBadge(registration.status)}
-            {registration.status !== 'sent' && registration.status !== 'delivered' && (
-              <Button variant="outline" onClick={handleContinueOnboarding}>
-                <Edit className="h-4 w-4 mr-2" />
-                Continue Editing
-              </Button>
-            )}
-            {registration.status === 'ready_for_review' && (
-              <Button onClick={handleSendEntitlement}>
-                <Send className="h-4 w-4 mr-2" />
-                Send Entitlement
-              </Button>
-            )}
+            <Button variant="outline" onClick={handleContinueOnboarding}>
+              <Edit className="h-4 w-4 mr-2" />
+              {registration.status === 'sent' ? 'Update Details' : 'Continue Editing'}
+            </Button>
+            <Button onClick={handleSendEntitlement}>
+              <Send className="h-4 w-4 mr-2" />
+              {registration.status === 'sent' ? 'Resend Entitlement' : 'Send Entitlement'}
+            </Button>
+            <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
           </div>
         </div>
 
@@ -348,6 +388,25 @@ const RegistrationDetail = () => {
           </Card>
         </div>
       </main>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Registration</AlertDialogTitle>
+            <AlertDialogDescription>
+              {registration?.status === 'sent' 
+                ? "This will remove the property from the homeowner's entitlements. This action cannot be undone."
+                : "Are you sure you want to delete this registration? This action cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
   Search,
+  Filter,
   Building2,
   FileText,
   Clock,
@@ -41,6 +42,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface HomeownerRegistration {
   id: string;
@@ -61,6 +69,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [deleteBuilderCustomer, { isLoading: isDeleting }] = useDeleteBuilderCustomerMutation();
 
   const builderId = user && 'builderOrganization' in user 
@@ -268,13 +277,19 @@ const Dashboard = () => {
     }
   };
 
-  const filteredRegistrations = registrations.filter(
-    (reg) =>
-      reg.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reg.customer_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reg.property_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredRegistrations = registrations.filter((reg) => {
+    const normalizedSearch = searchTerm.toLowerCase();
+    const searchMatch =
+      reg.customer_name?.toLowerCase().includes(normalizedSearch) ||
+      reg.customer_email?.toLowerCase().includes(normalizedSearch) ||
+      reg.property_address?.toLowerCase().includes(normalizedSearch) ||
+      reg.project_name?.toLowerCase().includes(normalizedSearch);
+
+    const statusMatch =
+      statusFilter === "all" || reg.status?.toLowerCase() === statusFilter;
+
+    return searchMatch && statusMatch;
+  });
 
   const stats = {
     totalHomeowners: dashboardCounts?.data?.totalHomeowners ?? registrations.length,
@@ -498,7 +513,7 @@ const Dashboard = () => {
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div className="flex items-center mb-6 gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
@@ -507,6 +522,22 @@ const Dashboard = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="documents_pending">Documents Pending</SelectItem>
+                <SelectItem value="ready_for_review">Ready for Review</SelectItem>
+                <SelectItem value="sent">Sent</SelectItem>
+                <SelectItem value="delivered">Delivered</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <Button
             onClick={() => navigate("/onboarding")}

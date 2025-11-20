@@ -10,7 +10,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useGetBuilderUsersQuery, useCreateOrUpdateBuilderUserMutation, useDeleteBuilderUserMutation } from "@/lib/api/services/builderUsers";
 import { validateEmail, validatePhone } from "@/utils/validation";
 import { Users, UserPlus, Edit, Trash2, Mail, Phone, User, Shield } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -43,12 +44,34 @@ interface User {
 }
 
 export function UserManagement({ organizationId }: UserManagementProps) {
+  const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
+
+  // Get builderId from user (organization ID)
+  const builderId = user && 'builderOrganization' in user && user.builderOrganization
+    ? user.builderOrganization.id
+    : user && 'id' in user 
+    ? user.id 
+    : organizationId || null;
+
+  // Fetch users from API
+  const { 
+    data: apiResponse, 
+    isLoading: loading, 
+    error: apiError,
+    refetch: refetchUsers
+  } = useGetBuilderUsersQuery(
+    { builderId: builderId || '' },
+    { skip: !builderId }
+  );
+
+  // Mutations
+  const [createOrUpdateUser, { isLoading: isUpdating }] = useCreateOrUpdateBuilderUserMutation();
+  const [deleteUser, { isLoading: isDeleting }] = useDeleteBuilderUserMutation();
 
   const form = useForm<UserFormData>({
     resolver: zodResolver(userSchema),
@@ -60,118 +83,96 @@ export function UserManagement({ organizationId }: UserManagementProps) {
     },
   });
 
-  const fetchUsers = async () => {
-    if (!organizationId) return;
-    
-    try {
-      // Get user roles for this organization with created_at
-      const { data: userRoles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role, created_at')
-        .eq('organization_id', organizationId);
-
-      if (rolesError) throw rolesError;
-
-      if (!userRoles || userRoles.length === 0) {
-        setUsers([]);
-        return;
-      }
-
-      // Get profiles for these users
-      const userIds = userRoles.map(ur => ur.user_id);
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('user_id, company_name, contact_person, phone, first_name, last_name, status')
-        .in('user_id', userIds);
-
-      if (profilesError) throw profilesError;
-
-      // Get organization details for company name
-      const { data: orgData } = await supabase
-        .from('builder_organizations')
-        .select('name')
-        .eq('id', organizationId)
-        .single();
-
-      const combinedUsers: User[] = userRoles.map((userRole) => {
-        const profile = profiles?.find(p => p.user_id === userRole.user_id);
-        const fullName = profile?.first_name && profile?.last_name 
-          ? `${profile.first_name} ${profile.last_name}`
-          : profile?.contact_person || 'Team Member';
+  // Map API response to component format
+  useEffect(() => {
+    if (apiResponse?.data) {
+      const mappedUsers: User[] = apiResponse.data.map((apiUser) => {
+        const fullName = apiUser.lastName 
+          ? `${apiUser.firstName} ${apiUser.lastName}`
+          : apiUser.firstName;
         
         return {
-          id: userRole.user_id,
-          email: `${fullName.toLowerCase().replace(/\s+/g, '.')}@${orgData?.name.toLowerCase().replace(/\s+/g, '') || 'company'}.com` || 'user@company.com',
-          company_name: orgData?.name || profile?.company_name || 'Organization',
+          id: apiUser.id,
+          email: apiUser.email,
+          company_name: apiUser.builderOrganization?.name || 'Organization',
           contact_person: fullName,
-          phone: profile?.phone || '',
-          role: userRole.role,
-          created_at: userRole.created_at,
+          phone: apiUser.contact || '',
+          role: apiUser.role,
+          created_at: new Date().toISOString(), // API doesn't provide created_at, using current date
         };
       });
-
-      setUsers(combinedUsers);
-    } catch (error) {
-      console.error('Error fetching users:', error);
+      setUsers(mappedUsers);
+    } else if (apiError) {
       toast({
         title: "Error",
         description: "Failed to load users",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchUsers();
-  }, [organizationId]);
+  }, [apiResponse, apiError, toast]);
 
   const onSubmit = async (data: UserFormData) => {
+    if (!builderId) {
+      toast({
+        title: "Error",
+        description: "Organization ID is missing",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
+      // Split contact_person into firstName and lastName
+      const nameParts = data.contact_person.trim().split(/\s+/);
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || undefined;
+
       if (editingUser) {
-        // Update existing user profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            contact_person: data.contact_person,
-            phone: data.phone || null,
-          })
-          .eq('user_id', editingUser.id);
-
-        if (profileError) throw profileError;
-
-        // Update user role
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .update({ role: data.role })
-          .eq('user_id', editingUser.id);
-
-        if (roleError) throw roleError;
+        // Update existing user
+        await createOrUpdateUser({
+          id: editingUser.id,
+          email: data.email,
+          firstName,
+          lastName,
+          contact: data.phone || undefined,
+          role: data.role,
+          builderOrganizationId: builderId,
+        }).unwrap();
 
         toast({
           title: "Success",
           description: "User updated successfully",
         });
       } else {
-        // For now, just show success message since we can't create actual users
-        // In a real app, this would send an invitation email
+        // Create new user
+        await createOrUpdateUser({
+          email: data.email,
+          firstName,
+          lastName,
+          contact: data.phone || undefined,
+          role: data.role,
+          builderOrganizationId: builderId,
+        }).unwrap();
+
         toast({
-          title: "User Invitation",
-          description: `An invitation would be sent to ${data.email} to join your organization. For this demo, users can sign up directly with their email.`,
+          title: "Success",
+          description: "User added successfully",
         });
       }
 
       setIsAddDialogOpen(false);
       setEditingUser(null);
       form.reset();
-      fetchUsers();
+      refetchUsers();
     } catch (error) {
       console.error('Error saving user:', error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error 
+        ? (error.data as { message?: string })?.message 
+        : undefined;
       toast({
         title: "Error",
-        description: "Failed to save user",
+        description: errorMessage || "Failed to save user",
         variant: "destructive",
       });
     } finally {
@@ -192,24 +193,21 @@ export function UserManagement({ organizationId }: UserManagementProps) {
 
   const handleDelete = async (userId: string) => {
     try {
-      // Delete user role (this will cascade to remove access)
-      const { error } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userId);
-
-      if (error) throw error;
+      await deleteUser(userId).unwrap();
 
       toast({
         title: "Success",
         description: "User removed from organization",
       });
-      fetchUsers();
+      refetchUsers();
     } catch (error) {
       console.error('Error deleting user:', error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error 
+        ? (error.data as { message?: string })?.message 
+        : undefined;
       toast({
         title: "Error",
-        description: "Failed to remove user",
+        description: errorMessage || "Failed to remove user",
         variant: "destructive",
       });
     }
@@ -359,8 +357,8 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting}>
-                    {submitting ? (editingUser ? 'Updating...' : 'Adding...') : (editingUser ? 'Update User' : 'Add User')}
+                  <Button type="submit" disabled={submitting || isUpdating}>
+                    {(submitting || isUpdating) ? (editingUser ? 'Updating...' : 'Adding...') : (editingUser ? 'Update User' : 'Add User')}
                   </Button>
                 </div>
               </form>

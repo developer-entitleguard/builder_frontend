@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +13,12 @@ import { Plus, Edit, Trash2, Users, Mail, Phone, Building2 } from "lucide-react"
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  useGetBuilderVendorsQuery,
+  useCreateOrUpdateBuilderVendorMutation,
+  useDeleteBuilderVendorMutation,
+} from "@/lib/api/services/builderVendor";
 
 const vendorTypes = ['Tradesman', 'Plumber', 'Electrician', 'Landscaper', 'Sellers', 'Others'] as const;
 
@@ -42,11 +47,18 @@ interface VendorManagementProps {
 }
 
 const VendorManagement = ({ organizationId }: VendorManagementProps) => {
+  const { user } = useAuth();
   const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
   const { toast } = useToast();
+
+  const builderId =
+    (user && "builderOrganization" in user && user.builderOrganization
+      ? user.builderOrganization.id
+      : user && "id" in user
+      ? user.id
+      : organizationId) || null;
 
   const {
     register,
@@ -54,86 +66,115 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
     reset,
     setValue,
     watch,
-    formState: { errors, isSubmitting }
+    formState: { errors, isSubmitting },
   } = useForm<VendorFormData>({
-    resolver: zodResolver(vendorSchema)
+    resolver: zodResolver(vendorSchema),
+    defaultValues: {
+      name: "",
+      contact_email: "",
+      contact_phone: "",
+      type: vendorTypes[0],
+      description: "",
+    },
   });
 
   const watchedType = watch('type');
 
+  const {
+    data: vendorResponse,
+    isLoading: isVendorsLoading,
+    error: vendorsError,
+    refetch: refetchVendors,
+  } = useGetBuilderVendorsQuery(
+    { builderId: builderId || "" },
+    { skip: !builderId }
+  );
+
+  const [createOrUpdateVendor, { isLoading: isSavingVendor }] =
+    useCreateOrUpdateBuilderVendorMutation();
+  const [deleteVendor, { isLoading: isDeletingVendor }] =
+    useDeleteBuilderVendorMutation();
+
   useEffect(() => {
-    fetchVendors();
-  }, [organizationId]);
+    if (vendorResponse?.data) {
+      const mapped = vendorResponse.data.map((apiVendor) => ({
+        id: apiVendor.id,
+        name: apiVendor.name,
+        contact_email: apiVendor.email,
+        contact_phone: apiVendor.contact,
+        type: apiVendor.type,
+        description: apiVendor.description,
+        created_at: apiVendor.created_at,
+      }));
+      setVendors(mapped);
+    }
+  }, [vendorResponse]);
 
-  const fetchVendors = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('vendors')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setVendors(data || []);
-    } catch (error: any) {
+  useEffect(() => {
+    if (vendorsError) {
       toast({
         title: "Error fetching vendors",
-        description: error.message,
-        variant: "destructive"
+        description: "Failed to load vendors. Please try again.",
+        variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [vendorsError, toast]);
 
   const onSubmit = async (data: VendorFormData) => {
+    if (!builderId) {
+      toast({
+        title: "Error",
+        description: "Organization ID is missing",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       if (editingVendor) {
-        const { error } = await supabase
-          .from('vendors')
-          .update({
-            name: data.name,
-            contact_email: data.contact_email,
-            contact_phone: data.contact_phone,
-            type: data.type,
-            description: data.description || null
-          })
-          .eq('id', editingVendor.id);
+        await createOrUpdateVendor({
+          id: editingVendor.id,
+          name: data.name,
+          email: data.contact_email,
+          contact: data.contact_phone,
+          type: data.type,
+          description: data.description || undefined,
+          builderOrganizationId: builderId,
+        }).unwrap();
 
-        if (error) throw error;
-        
         toast({
           title: "Vendor updated",
           description: "Vendor has been updated successfully"
         });
       } else {
-        const { error } = await supabase
-          .from('vendors')
-          .insert({
-            name: data.name,
-            contact_email: data.contact_email,
-            contact_phone: data.contact_phone,
-            type: data.type,
-            description: data.description || null,
-            organization_id: organizationId!
-          });
+        await createOrUpdateVendor({
+          name: data.name,
+          email: data.contact_email,
+          contact: data.contact_phone,
+          type: data.type,
+          description: data.description || undefined,
+          builderOrganizationId: builderId,
+        }).unwrap();
 
-        if (error) throw error;
-        
         toast({
           title: "Vendor added",
           description: "New vendor has been added successfully"
         });
       }
 
-      await fetchVendors();
+      await refetchVendors();
       setDialogOpen(false);
       setEditingVendor(null);
       reset();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage =
+        error && typeof error === "object" && "data" in error
+          ? (error as { data?: { message?: string } }).data?.message
+          : undefined;
       toast({
         title: "Error",
-        description: error.message,
-        variant: "destructive"
+        description: errorMessage || "Failed to save vendor",
+        variant: "destructive",
       });
     }
   };
@@ -143,31 +184,30 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
     setValue('name', vendor.name);
     setValue('contact_email', vendor.contact_email);
     setValue('contact_phone', vendor.contact_phone);
-    setValue('type', vendor.type as any);
+    setValue('type', vendor.type as VendorFormData["type"]);
     setValue('description', vendor.description || '');
     setDialogOpen(true);
   };
 
   const handleDelete = async (vendorId: string) => {
     try {
-      const { error } = await supabase
-        .from('vendors')
-        .delete()
-        .eq('id', vendorId);
-
-      if (error) throw error;
+      await deleteVendor(vendorId).unwrap();
 
       toast({
         title: "Vendor deleted",
         description: "Vendor has been removed successfully"
       });
 
-      await fetchVendors();
-    } catch (error: any) {
+      await refetchVendors();
+    } catch (error) {
+      const errorMessage =
+        error && typeof error === "object" && "data" in error
+          ? (error as { data?: { message?: string } }).data?.message
+          : undefined;
       toast({
         title: "Error deleting vendor",
-        description: error.message,
-        variant: "destructive"
+        description: errorMessage || "Failed to delete vendor",
+        variant: "destructive",
       });
     }
   };
@@ -184,7 +224,7 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
     return iconMap[type] || <Building2 className="h-4 w-4" />;
   };
 
-  if (loading) {
+  if (isVendorsLoading) {
     return (
       <Card>
         <CardContent className="p-6">
@@ -268,7 +308,12 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
 
                 <div className="space-y-2">
                   <Label htmlFor="type">Type *</Label>
-                  <Select value={watchedType} onValueChange={(value) => setValue('type', value as any)}>
+                  <Select
+                    value={watchedType}
+                    onValueChange={(value) =>
+                      setValue("type", value as VendorFormData["type"])
+                    }
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select vendor type" />
                     </SelectTrigger>
@@ -307,8 +352,15 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? 'Saving...' : editingVendor ? 'Update' : 'Add'} Vendor
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting || isSavingVendor}
+                  >
+                    {isSubmitting || isSavingVendor
+                      ? 'Saving...'
+                      : editingVendor
+                        ? 'Update'
+                        : 'Add'} Vendor
                   </Button>
                 </div>
               </form>
@@ -351,9 +403,9 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
                         <p className="mt-2 text-sm">{vendor.description}</p>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">
+                    {/* <p className="text-xs text-muted-foreground mt-2">
                       Added: {new Date(vendor.created_at).toLocaleDateString()}
-                    </p>
+                    </p> */}
                   </div>
                   <div className="flex items-center space-x-2 ml-4">
                     <Button
@@ -378,8 +430,11 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(vendor.id)}>
-                            Delete
+                          <AlertDialogAction
+                            onClick={() => handleDelete(vendor.id)}
+                            disabled={isDeletingVendor}
+                          >
+                            {isDeletingVendor ? 'Deleting...' : 'Delete'}
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>

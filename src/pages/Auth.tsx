@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useSignInMutation, useSendVerifyMailMutation } from '@/store/api/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Building2, Mail, Lock, User, Phone } from 'lucide-react';
+import { Building2, Mail, Lock, User, Phone, Eye, EyeOff } from 'lucide-react';
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +19,9 @@ const Auth = () => {
     password: '',
     confirmPassword: ''
   });
-  const { signIn, signUp, resetPassword, updatePassword } = useAuth();
+  const { signUp, resetPassword, updatePassword, setApiUser } = useAuth();
+  const [signInMutation, { isLoading: isSignInLoading }] = useSignInMutation();
+  const [sendVerifyMailMutation, { isLoading: isSendVerifyMailLoading }] = useSendVerifyMailMutation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
@@ -27,6 +30,7 @@ const Auth = () => {
     email: '',
     password: ''
   });
+  const [showSignInPassword, setShowSignInPassword] = useState(false);
 
   const [signUpData, setSignUpData] = useState({
     email: '',
@@ -48,25 +52,54 @@ const Auth = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await signIn(signInData.email, signInData.password);
+      const result = await signInMutation({
+        email: signInData.email,
+        password: signInData.password
+      }).unwrap();
       
-      if (error) {
+      if (!result.success) {
         toast({
           title: "Sign in failed",
-          description: error.message,
+          description: result.message || "Invalid credentials. Please try again.",
           variant: "destructive"
         });
-      } else {
-        toast({
-          title: "Welcome back!",
-          description: "You have been signed in successfully."
-        });
-        navigate('/dashboard');
+        return;
       }
-    } catch (error) {
+      
+      // Set the user in auth context for navigation
+      if (result.data?.userInfo) {
+        setApiUser(result.data.userInfo);
+        localStorage.setItem('userData', JSON.stringify({
+          userInfo: result.data.userInfo,
+          jwt: result.data.jwt,
+          logged: result.data.logged,
+          createdAt: result.data.createdAt
+        }));
+      }
+      
+      toast({
+        title: result.message || "Welcome back!",
+        description: result.message || "You have been signed in successfully."
+      });
+      navigate('/dashboard');
+    } catch (error: unknown) {
+      let errorMessage = "An unexpected error occurred.";
+      
+      if (error && typeof error === 'object') {
+        if ('data' in error && error.data && typeof error.data === 'object') {
+          if ('message' in error.data) {
+            errorMessage = String(error.data.message);
+          } else if ('data' in error.data && error.data.data && typeof error.data.data === 'object' && 'message' in error.data.data) {
+            errorMessage = String(error.data.data.message);
+          }
+        } else if ('message' in error) {
+          errorMessage = String(error.message);
+        }
+      }
+      
       toast({
         title: "Sign in failed",
-        description: "An unexpected error occurred.",
+        description: errorMessage || "An unexpected error occurred.",
         variant: "destructive"
       });
     } finally {
@@ -92,10 +125,23 @@ const Auth = () => {
       if (error) {
         toast({
           title: "Sign up failed",
-          description: error.message,
+          description: error instanceof Error ? error.message : "An unexpected error occurred.",
           variant: "destructive"
         });
       } else {
+        localStorage.setItem('userData', JSON.stringify({
+          userInfo: {
+            name: signUpData.contactPerson,
+            email: signUpData.email,
+            contact: signUpData.phone,
+            source: {
+              name: signUpData.companyName
+            }
+          },
+          logged: new Date().toISOString(),
+          createdAt: new Date().toISOString()
+        }));
+        
         toast({
           title: "Welcome!",
           description: "Your account has been created successfully."
@@ -118,26 +164,28 @@ const Auth = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await resetPassword(forgotPasswordEmail);
+      const result = await sendVerifyMailMutation({ email: forgotPasswordEmail }).unwrap();
       
-      if (error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Reset link sent",
-          description: "Check your email for password reset instructions."
-        });
-        setShowForgotPassword(false);
-        setForgotPasswordEmail('');
+      toast({
+        title: "Reset link sent",
+        description: result.message || "Check your email for password reset instructions."
+      });
+      setShowForgotPassword(false);
+      setForgotPasswordEmail('');
+    } catch (error: unknown) {
+      let errorMessage = "An unexpected error occurred.";
+      
+      if (error && typeof error === 'object') {
+        if ('data' in error && error.data && typeof error.data === 'object' && 'message' in error.data) {
+          errorMessage = String(error.data.message);
+        } else if ('message' in error) {
+          errorMessage = String(error.message);
+        }
       }
-    } catch (error) {
+      
       toast({
         title: "Error",
-        description: "An unexpected error occurred.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -165,7 +213,7 @@ const Auth = () => {
       if (error) {
         toast({
           title: "Error updating password",
-          description: error.message,
+          description: error instanceof Error ? error.message : "An unexpected error occurred.",
           variant: "destructive"
         });
       } else {
@@ -193,10 +241,17 @@ const Auth = () => {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <Building2 className="h-8 w-8 text-primary mr-2" />
+            {/* <Building2 className="h-8 w-8 text-primary mr-2" /> */}
+            <div className="p-1">
+                <img 
+                  src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
+                  alt="Entitle Guard for Builders Logo" 
+                  className="h-8 w-8 rounded-lg"
+                />
+              </div>
             <h1 className="text-2xl font-bold text-foreground">Entitle Guard for Builders</h1>
           </div>
-          <p className="text-muted-foreground">Because Your Homeowners Deserve Clarity.</p>
+          <p className="text-muted-foreground">Because Builders Deserve Clarity.</p>
         </div>
 
         <Card>
@@ -231,8 +286,8 @@ const Auth = () => {
                       />
                     </div>
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Sending..." : "Send Reset Link"}
+                  <Button type="submit" className="w-full" disabled={isLoading || isSendVerifyMailLoading}>
+                    {isLoading || isSendVerifyMailLoading ? "Sending..." : "Send Reset Link"}
                   </Button>
                   <Button 
                     type="button" 
@@ -292,10 +347,10 @@ const Auth = () => {
               </div>
             ) : (
               <Tabs defaultValue="signin" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+                {/* <TabsList className="grid w-full grid-cols-1">
                   <TabsTrigger value="signin">Sign In</TabsTrigger>
                   <TabsTrigger value="signup">Sign Up</TabsTrigger>
-                </TabsList>
+                </TabsList> */}
               
               <TabsContent value="signin">
                 <form onSubmit={handleSignIn} className="space-y-4">
@@ -316,21 +371,34 @@ const Auth = () => {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="signin-password">Password</Label>
-                    <div className="relative">
+                  <div className="relative">
                       <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
+                    <Input
                         id="signin-password"
-                        type="password"
-                        placeholder="Your password"
-                        className="pl-10"
+                      type={showSignInPassword ? "text" : "password"}
+                      placeholder="Your password"
+                      className="pl-10 pr-10"
                         value={signInData.password}
                         onChange={(e) => setSignInData(prev => ({ ...prev, password: e.target.value }))}
                         required
                       />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowSignInPassword(!showSignInPassword)}
+                    >
+                      {showSignInPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
                     </div>
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Signing in..." : "Sign In"}
+                  <Button type="submit" className="w-full" disabled={isLoading || isSignInLoading}>
+                    {isLoading || isSignInLoading ? "Signing in..." : "Sign In"}
                   </Button>
                   <div className="text-center">
                     <Button 
@@ -345,7 +413,7 @@ const Auth = () => {
                 </form>
               </TabsContent>
               
-              <TabsContent value="signup">
+              {/* <TabsContent value="signup">
                 <form onSubmit={handleSignUp} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="company-name">Company Name</Label>
@@ -423,7 +491,7 @@ const Auth = () => {
                     {isLoading ? "Creating account..." : "Create Account"}
                   </Button>
                 </form>
-              </TabsContent>
+              </TabsContent> */}
             </Tabs>
             )}
           </CardContent>

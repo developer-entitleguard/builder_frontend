@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { useGetDashboardCountQuery } from "@/store/api/dashboard";
 import Header from "@/components/Header";
 import { RegistrationTypeDialog } from "@/components/RegistrationTypeDialog";
 import { BulkActionsBar } from "@/components/BulkActionsBar";
@@ -69,6 +70,23 @@ const Dashboard = () => {
     []
   );
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Get builderId from user (organization ID)
+  const builderId = user && 'builderOrganization' in user && user.builderOrganization
+    ? user.builderOrganization.id
+    : user && 'id' in user 
+    ? user.id 
+    : null;
+
+  // Fetch dashboard counts from API
+  const { 
+    data: dashboardCountData, 
+    isLoading: isCountsLoading, 
+    error: countsError 
+  } = useGetDashboardCountQuery(
+    { builderId: builderId || '' },
+    { skip: !builderId }
+  );
 
   useEffect(() => {
     if (!user) {
@@ -183,18 +201,27 @@ const Dashboard = () => {
     return acc;
   }, {} as Record<string, HomeownerRegistration[]>);
 
-  const stats = {
-    total: registrations.length,
-    sent: registrations.filter(
-      (r) => r.status === "sent" || r.status === "delivered"
-    ).length,
-    pending: registrations.filter(
-      (r) => r.status === "draft" || r.status === "documents_pending"
-    ).length,
-    ready: registrations.filter((r) => r.status === "ready_for_review").length,
-  };
+  // Use API data for stats, fallback to calculated values if API data not available
+  const stats = dashboardCountData?.data
+    ? {
+        total: dashboardCountData.data.totalHomeowners,
+        sent: dashboardCountData.data.entitlementsSent,
+        pending: dashboardCountData.data.pending,
+        ready: dashboardCountData.data.readyForReview,
+      }
+    : {
+        total: registrations.length,
+        sent: registrations.filter(
+          (r) => r.status === "sent" || r.status === "delivered"
+        ).length,
+        pending: registrations.filter(
+          (r) => r.status === "draft" || r.status === "documents_pending"
+        ).length,
+        ready: registrations.filter((r) => r.status === "ready_for_review").length,
+      };
 
-  if (loading) {
+  // Show loading if either registrations or dashboard counts are loading
+  if (loading || (isCountsLoading && builderId)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -203,6 +230,15 @@ const Dashboard = () => {
         </div>
       </div>
     );
+  }
+
+  // Show error if API call failed
+  if (countsError && builderId) {
+    toast({
+      title: "Error loading dashboard stats",
+      description: "Failed to load dashboard statistics. Showing local data.",
+      variant: "destructive",
+    });
   }
 
   return (

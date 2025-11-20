@@ -6,18 +6,36 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowRight, MapPin, Phone, Mail, User } from "lucide-react";
-import { useRegistrations } from "@/hooks/useRegistrations";
+import { useAuth } from "@/hooks/useAuth";
+import { useCreateBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
 import { useToast } from "@/hooks/use-toast";
 import { australianStates, validateAustralianPhone, formatAustralianPhone, validateAustralianPostcode, validateEmail } from "@/utils/validation";
 
+interface CustomerFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  propertyAddress: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  projectName: string;
+  settlementDate: string;
+  notes: string;
+  customerId?: string;
+  registrationId?: string;
+}
+
 interface CustomerDetailsFormProps {
-  onNext: (data: any) => void;
-  initialData?: any;
+  onNext: (data: CustomerFormData) => void;
+  initialData?: Partial<CustomerFormData>;
 }
 
 const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) => {
-  const { createRegistration } = useRegistrations();
+  const { user } = useAuth();
   const { toast } = useToast();
+  const [createBuilderCustomer, { isLoading: isCreating }] = useCreateBuilderCustomerMutation();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: initialData?.firstName || '',
@@ -83,34 +101,62 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
       });
       return;
     }
+
+    // Get builderOrganizationId from user
+    const builderOrganizationId = user && 'builderOrganization' in user && user.builderOrganization
+      ? user.builderOrganization.id
+      : user && 'id' in user 
+      ? user.id 
+      : null;
+
+    if (!builderOrganizationId) {
+      toast({
+        title: "Error",
+        description: "Organization ID is missing. Please log in again.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setLoading(true);
     try {
-      const registrationData = {
-        customer_name: `${formData.firstName} ${formData.lastName}`,
-        customer_email: formData.email,
-        customer_phone: formData.phone,
-        property_address: formData.propertyAddress,
-        property_city: formData.city,
-        property_state: formData.state,
-        property_zip: formData.zipCode,
-        project_name: formData.projectName || null,
-        settlement_date: formData.settlementDate || null,
-        notes: formData.notes || null
+      // Map form data to API payload format
+      const customerData = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        contact: formData.phone,
+        address: formData.propertyAddress,
+        city: formData.city,
+        state: formData.state,
+        zip: formData.zipCode,
+        projectName: formData.projectName || undefined,
+        settlementDate: formData.settlementDate || undefined,
+        notes: formData.notes || undefined,
+        builderOrganizationId: builderOrganizationId
       };
       
-      const registration = await createRegistration(registrationData);
+      const response = await createBuilderCustomer(customerData).unwrap();
       
       toast({
         title: "Customer details saved",
         description: "Moving to item selection"
       });
       
-      onNext({ ...formData, registrationId: registration.id });
-    } catch (error: any) {
+      // Pass the customer data and response to the next step
+      onNext({ 
+        ...formData, 
+        customerId: response.data?.id,
+        registrationId: response.data?.id // For backward compatibility
+      });
+    } catch (error) {
+      console.error('Error saving customer details:', error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error 
+        ? (error.data as { message?: string })?.message 
+        : undefined;
       toast({
         title: "Error saving customer details",
-        description: error.message,
+        description: errorMessage || "Failed to save customer details. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -293,8 +339,8 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" size="lg" className="min-w-[150px]" disabled={loading}>
-            {loading ? 'Saving...' : 'Continue to Items'}
+          <Button type="submit" size="lg" className="min-w-[150px]" disabled={loading || isCreating}>
+            {(loading || isCreating) ? 'Saving...' : 'Continue to Items'}
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         </div>

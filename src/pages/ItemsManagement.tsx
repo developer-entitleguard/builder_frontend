@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useGetCategorysQuery, useGetBillOfMaterialsQuery, useGetBillMaterialsQuery } from "@/store/api/items";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,28 +38,18 @@ interface BillOfMaterials {
   project_name: string | null;
 }
 
-const categories = [
-  "Kitchen",
-  "Bathroom", 
-  "Appliances",
-  "Electrical",
-  "Plumbing",
-  "Flooring",
-  "Trim",
-  "HVAC",
-  "Windows & Doors",
-  "Other"
-];
-
 const ItemsManagement = () => {
   console.log('ItemsManagement - Component initialized');
   const { user } = useAuth();
   const { organization, loading: orgLoading } = useOrganization();
   const { toast } = useToast();
-  const [items, setItems] = useState<BuilderItem[]>([]);
-  const [boms, setBoms] = useState<BillOfMaterials[]>([]);
+  const { data: categoriesResponse, isLoading: isLoadingCategories } = useGetCategorysQuery();
+  const { data: bomsResponse, isLoading: isLoadingBOMs } = useGetBillOfMaterialsQuery();
   const [selectedBomId, setSelectedBomId] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+  const { data: billMaterialsResponse, isLoading: isLoadingBillMaterials } = useGetBillMaterialsQuery(selectedBomId, {
+    skip: !selectedBomId,
+  });
+  const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BuilderItem | null>(null);
   const [formData, setFormData] = useState({
@@ -74,86 +65,47 @@ const ItemsManagement = () => {
     purchaser: ""
   });
 
+  // Map API BOMs response to component format
+  const boms = useMemo(() => {
+    return bomsResponse?.data?.map(bom => ({
+      id: bom.id,
+      name: bom.bomName,
+      project_name: bom.projectName || null,
+    })) || [];
+  }, [bomsResponse?.data]);
+
+  // Map API bill materials response to BuilderItem format
+  const items = useMemo(() => {
+    if (!billMaterialsResponse?.data) return [];
+    
+    return billMaterialsResponse.data.map(item => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      make: item.make || null,
+      brand: item.brand || null,
+      model: item.model || null,
+      description: item.text || null,
+      price: item.price ? parseFloat(item.price) : null,
+      documentation_url: item.documentationUrl || null,
+      notes: item.note || null,
+      purchaser: item.puchaser || null,
+      bom_id: item.billOfMaterials?.id || null,
+    })).sort((a, b) => {
+      // Sort by category first, then by name
+      if (a.category !== b.category) {
+        return a.category.localeCompare(b.category);
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [billMaterialsResponse?.data]);
+
+  // Auto-select first BOM when BOMs are loaded
   useEffect(() => {
-    console.log('ItemsManagement - user/organization changed:', { user: !!user, organization: !!organization, orgLoading });
-    if (user) {
-      fetchBOMs();
-      fetchItems();
-    } else if (!user) {
-      console.log('ItemsManagement - No user, setting loading to false');
-      setLoading(false);
+    if (boms.length > 0 && !selectedBomId) {
+      setSelectedBomId(boms[0].id);
     }
-  }, [user, organization, orgLoading, selectedBomId]);
-
-  const fetchBOMs = async () => {
-    if (!user) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('bill_of_materials')
-        .select('*')
-        .eq('builder_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setBoms(data || []);
-      
-      // Auto-select first BOM if available
-      if (data && data.length > 0 && !selectedBomId) {
-        setSelectedBomId(data[0].id);
-      }
-    } catch (error: any) {
-      console.error('Error fetching BOMs:', error);
-      toast({
-        title: "Error fetching Bill of Materials",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
-  };
-
-  const fetchItems = async () => {
-    if (!user) {
-      console.log('ItemsManagement - No user, cannot fetch items');
-      setLoading(false);
-      return;
-    }
-    
-    console.log('ItemsManagement - fetchItems started for user:', user.id);
-    try {
-      let query = supabase
-        .from('builder_items')
-        .select('*')
-        .eq('builder_id', user.id);
-      
-      // Filter by selected BOM if one is selected
-      if (selectedBomId) {
-        query = query.eq('bom_id', selectedBomId);
-      }
-      
-      const { data, error } = await query
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
-
-      console.log('ItemsManagement - fetchItems result:', { data, error, dataLength: data?.length });
-      if (error) {
-        console.error('ItemsManagement - fetchItems error:', error);
-        throw error;
-      }
-      setItems(data || []);
-      console.log('ItemsManagement - items set:', data?.length || 0, 'items');
-    } catch (error: any) {
-      console.error('ItemsManagement - fetchItems error:', error);
-      toast({
-        title: "Error fetching items",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      console.log('ItemsManagement - setting loading to false');
-      setLoading(false);
-    }
-  };
+  }, [boms, selectedBomId]);
 
   const resetForm = () => {
     setFormData({
@@ -212,11 +164,11 @@ const ItemsManagement = () => {
 
       setDialogOpen(false);
       resetForm();
-      fetchItems();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save item';
       toast({
         title: "Error saving item",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive"
       });
     }
@@ -250,11 +202,11 @@ const ItemsManagement = () => {
 
       if (error) throw error;
       toast({ title: "Item deleted successfully" });
-      fetchItems();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete item';
       toast({
         title: "Error deleting item",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive"
       });
     }
@@ -275,7 +227,7 @@ const ItemsManagement = () => {
     shouldShowMain: !loading && !!user 
   });
 
-  if (loading) {
+  if (loading || isLoadingBOMs || (selectedBomId && isLoadingBillMaterials)) {
     console.log('ItemsManagement - Showing loading state');
     return (
       <div className="min-h-screen bg-background">
@@ -314,12 +266,11 @@ const ItemsManagement = () => {
           </div>
           <div className="flex gap-2">
             <BOMUpload onSuccess={() => {
-              fetchBOMs();
-              fetchItems();
+              // Items will automatically refetch when selectedBomId changes or cache is invalidated
             }} />
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button onClick={resetForm} disabled={!selectedBomId}>
+                <Button onClick={resetForm}>
                   <Plus className="w-4 h-4 mr-2" />
                   Add Item
                 </Button>
@@ -346,11 +297,11 @@ const ItemsManagement = () => {
                     <Label htmlFor="category">Category *</Label>
                     <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
+                        <SelectValue placeholder={isLoadingCategories ? "Loading categories..." : "Select category"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category} value={category}>{category}</SelectItem>
+                        {categoriesResponse?.data?.map((category) => (
+                          <SelectItem key={category.id} value={category.name}>{category.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -463,7 +414,7 @@ const ItemsManagement = () => {
                 setSelectedBomId(value);
               }}>
                 <SelectTrigger className="w-full max-w-md">
-                  <SelectValue placeholder="Select a Bill of Materials" />
+                  <SelectValue placeholder={isLoadingBOMs ? "Loading BOMs..." : "Select a Bill of Materials"} />
                 </SelectTrigger>
                 <SelectContent>
                   {boms.map((bom) => (

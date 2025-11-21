@@ -123,6 +123,67 @@ export const itemsApi = api.injectEndpoints({
       providesTags: ['Item'],
     }),
 
+    // Get categories from API
+    getCategorys: build.query<{ success: boolean; message: string; data: Array<{ id: string; name: string }> }, void>({
+      query: () => ({
+        url: '/api/getcategorys',
+        method: 'GET',
+      }),
+      providesTags: ['Item'],
+    }),
+
+    // Get Bill of Materials from API
+    getBillOfMaterials: build.query<{ success: boolean; message: string; data: Array<{ id: string; bomName: string; projectName: string }> }, void>({
+      query: () => ({
+        url: '/api/getbillofmaterials',
+        method: 'GET',
+      }),
+      providesTags: ['Item'],
+    }),
+
+    // Get Bill Materials (items) by billId
+    getBillMaterials: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{
+        id: string;
+        builderOrganization: {
+          id: string;
+          name: string;
+          address: string;
+          contact: string;
+          email: string;
+          abn: string | null;
+          description: string;
+          isActive: boolean;
+        };
+        billOfMaterials: {
+          id: string;
+          bomName: string;
+          projectName: string;
+        };
+        name: string;
+        category: string;
+        make: string | null;
+        brand: string | null;
+        model: string | null;
+        text: string | null;
+        note: string | null;
+        price: string | null;
+        documentationUrl: string | null;
+        isActive: boolean;
+        status: string;
+        puchaser: string | null;
+      }>;
+    }, string>({
+      query: (billId) => ({
+        url: '/api/getbillmaterials',
+        method: 'GET',
+        params: { billId },
+      }),
+      providesTags: ['Item'],
+    }),
+
     // Bulk update items
     bulkUpdateItems: build.mutation<BuilderItem[], { updates: Array<{ id: string; data: UpdateBuilderItemRequest }> }>({
       query: (data) => ({
@@ -162,6 +223,9 @@ export const {
   useGetItemsByBuilderQuery,
   useLazySearchItemsQuery,
   useGetCategoriesQuery,
+  useGetCategorysQuery,
+  useGetBillOfMaterialsQuery,
+  useGetBillMaterialsQuery,
   useBulkUpdateItemsMutation,
   useImportItemsMutation,
 } = itemsApi;

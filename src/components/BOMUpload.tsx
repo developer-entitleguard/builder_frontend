@@ -1,22 +1,36 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { useUploadTemplateMutation } from "@/lib/api/services/bomUpload";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Upload } from "lucide-react";
+import { Upload, Download } from "lucide-react";
+import { getApiBaseUrl } from "@/lib/config";
 
 interface BOMUploadProps {
   onSuccess: () => void;
 }
 
+interface CSVItem {
+  name?: string;
+  category?: string;
+  make?: string;
+  brand?: string;
+  model?: string;
+  description?: string;
+  price?: number | null;
+  documentation_url?: string;
+  notes?: string;
+  purchaser?: string;
+}
+
 export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [uploadTemplate, { isLoading: isUploading }] = useUploadTemplateMutation();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     projectName: "",
@@ -25,27 +39,99 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type !== "text/csv") {
-      toast({
-        title: "Invalid file type",
-        description: "Please upload a CSV file",
-        variant: "destructive"
-      });
-      return;
+    if (file) {
+      // Check for .xlsx file extension
+      const fileName = file.name.toLowerCase();
+      const isValidXlsx = fileName.endsWith('.xlsx') || 
+                         file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      
+      if (!isValidXlsx) {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload an Excel (.xlsx) file",
+          variant: "destructive"
+        });
+        return;
+      }
     }
     setFormData({ ...formData, file });
   };
 
-  const parseCSV = (text: string): any[] => {
+  const handleDownloadTemplate = async () => {
+    try {
+      // Get JWT token from localStorage
+      const userData = localStorage.getItem('userData');
+      let authToken = '';
+      
+      if (userData) {
+        try {
+          const parsedData = JSON.parse(userData);
+          if (parsedData.jwt) {
+            authToken = parsedData.jwt;
+          }
+        } catch (error) {
+          console.warn('Failed to parse userData:', error);
+        }
+      }
+
+      // Get API base URL
+      const apiBaseUrl = getApiBaseUrl();
+      const url = import.meta.env.DEV 
+        ? '/auth/download-template'
+        : `${apiBaseUrl}/auth/download-template`;
+
+      // Fetch the file
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream, */*',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to download template: ${response.statusText}`);
+      }
+
+      // Get the blob from response
+      const blob = await response.blob();
+      
+      // Create a download link
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = 'bom-template.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      toast({
+        title: "Template downloaded",
+        description: "BOM template Excel (.xlsx) file has been downloaded"
+      });
+    } catch (error) {
+      console.error('Error downloading template:', error);
+      toast({
+        title: "Error downloading template",
+        description: error instanceof Error ? error.message : "Failed to download template",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const parseCSV = (text: string): CSVItem[] => {
     const lines = text.split('\n').filter(line => line.trim());
     if (lines.length < 2) return [];
     
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-    const items = [];
+    const items: CSVItem[] = [];
     
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',');
-      const item: any = {};
+      const item: CSVItem = {};
       
       headers.forEach((header, index) => {
         const value = values[index]?.trim() || null;
@@ -85,7 +171,7 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!user || !formData.file) {
+    if (!user || !formData.file || !formData.name) {
       toast({
         title: "Missing information",
         description: "Please fill in all required fields",
@@ -94,60 +180,50 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
       return;
     }
 
-    setUploading(true);
+    // Get builderOrganizationId from user
+    const builderOrganizationId = user && 'builderOrganization' in user && user.builderOrganization
+      ? user.builderOrganization.id
+      : user && 'id' in user 
+      ? user.id 
+      : null;
+
+    if (!builderOrganizationId) {
+      toast({
+        title: "Error",
+        description: "Organization ID is missing. Please log in again.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     try {
-      // Read the CSV file
-      const text = await formData.file.text();
-      const items = parseCSV(text);
-
-      if (items.length === 0) {
-        throw new Error("No valid items found in CSV. Please ensure the CSV has 'name' and 'category' columns.");
-      }
-
-      // Create the BOM record
-      const { data: bomData, error: bomError } = await supabase
-        .from('bill_of_materials')
-        .insert({
-          builder_id: user.id,
-          name: formData.name,
-          project_name: formData.projectName || null
-        })
-        .select()
-        .single();
-
-      if (bomError) throw bomError;
-
-      // Insert all items with the BOM ID
-      const itemsWithBOM = items.map(item => ({
-        ...item,
-        builder_id: user.id,
-        bom_id: bomData.id
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('builder_items')
-        .insert(itemsWithBOM);
-
-      if (itemsError) throw itemsError;
+      const result = await uploadTemplate({
+        file: formData.file,
+        bomName: formData.name,
+        projectName: formData.projectName || undefined,
+        builderOrganizationId: builderOrganizationId,
+      }).unwrap();
 
       toast({
         title: "Bill of Materials uploaded successfully",
-        description: `${items.length} items have been added`
+        description: result.message || "BOM has been uploaded successfully"
       });
 
       setDialogOpen(false);
       setFormData({ name: "", projectName: "", file: null });
       onSuccess();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error uploading BOM:', error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error 
+        ? String((error.data as { message?: string })?.message || "Failed to upload Bill of Materials")
+        : error instanceof Error 
+        ? error.message 
+        : "Failed to upload Bill of Materials";
       toast({
         title: "Error uploading Bill of Materials",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive"
       });
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -163,7 +239,7 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
         <DialogHeader>
           <DialogTitle>Upload Bill of Materials</DialogTitle>
           <DialogDescription>
-            Upload a CSV file with your items. Required columns: name, category. Optional: make, brand, model, description, price, documentation_url, notes, purchaser.
+            Upload an Excel (.xlsx) file with your items. Required columns: name, category. Optional: make, brand, model, description, price, documentation_url, notes, purchaser.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -187,24 +263,32 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
             />
           </div>
           <div>
-            <Label htmlFor="csvFile">CSV File *</Label>
+            <Label htmlFor="xlsxFile">Excel File (.xlsx) *</Label>
             <Input
-              id="csvFile"
+              id="xlsxFile"
               type="file"
-              accept=".csv"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={handleFileChange}
               required
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Upload a CSV file with item data
+              Upload an Excel (.xlsx) file with item data
             </p>
           </div>
           <div className="flex justify-end gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={handleDownloadTemplate}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download Template
+            </Button>
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={uploading}>
-              {uploading ? "Uploading..." : "Upload"}
+            <Button type="submit" disabled={isUploading}>
+              {isUploading ? "Uploading..." : "Upload"}
             </Button>
           </div>
         </form>

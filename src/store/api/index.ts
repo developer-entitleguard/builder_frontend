@@ -17,6 +17,7 @@ export * from '@/lib/api/services/builderCustomer';
 export * from '@/lib/api/services/builderOrganization';
 export * from '@/lib/api/services/builderUsers';
 export * from '@/lib/api/services/builderVendor';
+export * from '@/lib/api/services/bomUpload';
 
 // Re-export types
 export type * from '@/lib/api/types.ts';

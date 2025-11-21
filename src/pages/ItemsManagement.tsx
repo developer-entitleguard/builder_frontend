@@ -1,9 +1,8 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useOrganization } from "@/hooks/useOrganization";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useGetCategorysQuery, useGetBillOfMaterialsQuery, useGetBillMaterialsQuery } from "@/store/api/items";
+import { useGetCategorysQuery, useGetBillOfMaterialsQuery, useGetBillMaterialsQuery, useCreateItemMutation, useDeleteItemMutation } from "@/store/api/items";
+import { CreateBuilderItemRequest } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -41,15 +40,15 @@ interface BillOfMaterials {
 const ItemsManagement = () => {
   console.log('ItemsManagement - Component initialized');
   const { user } = useAuth();
-  const { organization, loading: orgLoading } = useOrganization();
   const { toast } = useToast();
   const { data: categoriesResponse, isLoading: isLoadingCategories } = useGetCategorysQuery();
   const { data: bomsResponse, isLoading: isLoadingBOMs } = useGetBillOfMaterialsQuery();
   const [selectedBomId, setSelectedBomId] = useState<string>("");
-  const { data: billMaterialsResponse, isLoading: isLoadingBillMaterials } = useGetBillMaterialsQuery(selectedBomId, {
+  const { data: billMaterialsResponse, isLoading: isLoadingBillMaterials, refetch: refetchBillMaterials } = useGetBillMaterialsQuery(selectedBomId, {
     skip: !selectedBomId,
   });
-  const [loading, setLoading] = useState(false);
+  const [createItem, { isLoading: isCreating }] = useCreateItemMutation();
+  const [deleteItem, { isLoading: isDeleting }] = useDeleteItemMutation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BuilderItem | null>(null);
   const [formData, setFormData] = useState({
@@ -125,47 +124,79 @@ const ItemsManagement = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.category) return;
+    if (!formData.name || !formData.category) {
+      toast({ 
+        title: "Missing required fields", 
+        description: "Please fill in name and category.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     if (!user) {
       toast({ title: "Not signed in", description: "Please log in and try again.", variant: "destructive" });
       return;
     }
 
+    // Get builderOrganizationId from user
+    const builderOrganizationId = user && 'builderOrganization' in user && user.builderOrganization
+      ? user.builderOrganization.id
+      : user && 'id' in user
+      ? user.id
+      : null;
+
+    if (!builderOrganizationId) {
+      toast({ 
+        title: "Error", 
+        description: "Organization ID is missing. Please log in again.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
     try {
-      const itemData = {
+      const payload: CreateBuilderItemRequest = {
         name: formData.name,
         category: formData.category,
-        make: formData.make || null,
-        brand: formData.brand || null,
-        model: formData.model || null,
-        description: formData.description || null,
+        make: formData.make || undefined,
+        brand: formData.brand || undefined,
+        model: formData.model || undefined,
+        text: formData.description || undefined, // Map description to text
+        note: formData.notes || null, // Map notes to note
         price: formData.price ? parseFloat(formData.price) : null,
-        documentation_url: formData.documentation_url || null,
-        notes: formData.notes || null,
-        purchaser: formData.purchaser || null
+        documentationUrl: formData.documentation_url || undefined, // Map to camelCase
+        purchaser: formData.purchaser || undefined,
+        builderOrganizationId: builderOrganizationId,
       };
 
       if (editingItem) {
-        const { error } = await supabase
-          .from('builder_items')
-          .update(itemData)
-          .eq('id', editingItem.id);
-
-        if (error) throw error;
+        // For update, use createItem with id (API uses same endpoint for create/update)
+        await createItem({
+          ...payload,
+          id: editingItem.id, // Include id for update
+        }).unwrap();
+        
         toast({ title: "Item updated successfully" });
       } else {
-        const { error } = await supabase
-          .from('builder_items')
-          .insert({ ...itemData, builder_id: user.id });
-
-        if (error) throw error;
+        // For create, use createItem mutation without id
+        await createItem(payload).unwrap();
         toast({ title: "Item added successfully" });
       }
 
       setDialogOpen(false);
       resetForm();
+      
+      // Refetch items after successful create/update
+      if (selectedBomId) {
+        refetchBillMaterials();
+      }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to save item';
+      console.error('Error saving item:', error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error
+        ? String((error.data as { message?: string })?.message || "Failed to save item")
+        : error instanceof Error
+        ? error.message
+        : 'Failed to save item';
       toast({
         title: "Error saving item",
         description: errorMessage,
@@ -195,15 +226,21 @@ const ItemsManagement = () => {
     if (!confirm("Are you sure you want to delete this item?")) return;
 
     try {
-      const { error } = await supabase
-        .from('builder_items')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await deleteItem(id).unwrap();
+      
       toast({ title: "Item deleted successfully" });
+      
+      // Refetch items after successful delete
+      if (selectedBomId) {
+        refetchBillMaterials();
+      }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete item';
+      console.error('Error deleting item:', error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error
+        ? String((error.data as { message?: string })?.message || "Failed to delete item")
+        : error instanceof Error
+        ? error.message
+        : 'Failed to delete item';
       toast({
         title: "Error deleting item",
         description: errorMessage,
@@ -220,14 +257,7 @@ const ItemsManagement = () => {
     return acc;
   }, {} as Record<string, BuilderItem[]>);
 
-  console.log('ItemsManagement - Render state:', { loading, user: !!user, itemsCount: items.length, userLoading: !user });
-  console.log('ItemsManagement - About to render, conditions:', { 
-    isLoading: loading, 
-    hasUser: !!user, 
-    shouldShowMain: !loading && !!user 
-  });
-
-  if (loading || isLoadingBOMs || (selectedBomId && isLoadingBillMaterials)) {
+  if (isLoadingCategories || isLoadingBOMs || (selectedBomId && isLoadingBillMaterials)) {
     console.log('ItemsManagement - Showing loading state');
     return (
       <div className="min-h-screen bg-background">
@@ -388,8 +418,8 @@ const ItemsManagement = () => {
                   <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit">
-                    {editingItem ? 'Update Item' : 'Add Item'}
+                  <Button type="submit" disabled={isCreating}>
+                    {isCreating ? 'Saving...' : (editingItem ? 'Update Item' : 'Add Item')}
                   </Button>
                 </div>
               </form>

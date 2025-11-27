@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { User, Users, Upload } from 'lucide-react';
+import { User, Users, Upload, Download } from 'lucide-react';
+import { getApiBaseUrl } from '@/lib/config';
 
 interface RegistrationTypeDialogProps {
   open: boolean;
@@ -21,20 +22,39 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
   const { user } = useAuth();
   const [selectedType, setSelectedType] = useState<'single' | 'bulk' | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const handleSingleRegistration = () => {
     onOpenChange(false);
     navigate('/onboarding');
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.csv')) {
+    const fileName = file.name.toLowerCase();
+    const isValidXlsx = fileName.endsWith('.xlsx') || 
+                       file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    
+    if (!isValidXlsx) {
       toast({
         title: "Invalid file type",
-        description: "Please upload a CSV file",
+        description: "Please upload an Excel (.xlsx) file",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSelectedFile(file);
+  };
+
+  const handleFileUpload = async (file?: File) => {
+    const fileToUpload = file || selectedFile;
+    if (!fileToUpload) {
+      toast({
+        title: "No file selected",
+        description: "Please select an Excel (.xlsx) file to upload",
         variant: "destructive"
       });
       return;
@@ -43,64 +63,145 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
     setUploading(true);
 
     try {
-      const text = await file.text();
-      const rows = text.split('\n').filter(row => row.trim());
-      const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
+      // Get builderOrganizationId and JWT token from localStorage
+      const userData = localStorage.getItem('userData');
+      let authToken = '';
+      let builderOrganizationId = '';
       
-      // Validate headers
-      const requiredHeaders = ['customer_name', 'customer_email', 'property_address', 'property_city', 'property_state', 'property_zip'];
-      const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
-      
-      if (missingHeaders.length > 0) {
+      if (userData) {
+        try {
+          const parsedData = JSON.parse(userData);
+          if (parsedData.jwt) {
+            authToken = parsedData.jwt;
+          }
+          if (parsedData.userInfo?.builderOrganization?.id) {
+            builderOrganizationId = parsedData.userInfo.builderOrganization.id;
+          }
+        } catch (error) {
+          console.warn('Failed to parse userData:', error);
+        }
+      }
+
+      if (!builderOrganizationId) {
         toast({
-          title: "Invalid CSV format",
-          description: `Missing required columns: ${missingHeaders.join(', ')}`,
+          title: "Error",
+          description: "Organization ID is missing. Please log in again.",
           variant: "destructive"
         });
         setUploading(false);
         return;
       }
 
-      // Parse data rows
-      const registrations = rows.slice(1).map(row => {
-        const values = row.split(',').map(v => v.trim());
-        const registration: any = {
-          builder_id: user?.id,
-          status: 'draft'
-        };
-        
-        headers.forEach((header, index) => {
-          if (values[index]) {
-            registration[header] = values[index];
-          }
-        });
-        
-        return registration;
+      // Create FormData for file upload (file in body)
+      const formData = new FormData();
+      formData.append('file', fileToUpload);
+
+      // Get API base URL
+      const apiBaseUrl = getApiBaseUrl();
+      // builderOrganizationId as query parameter
+      const url = import.meta.env.DEV 
+        ? `/api/upload/registration-template?builderOrganizationId=${encodeURIComponent(builderOrganizationId)}`
+        : `${apiBaseUrl}/api/upload/registration-template?builderOrganizationId=${encodeURIComponent(builderOrganizationId)}`;
+
+      // Upload file to API
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+        },
+        body: formData,
       });
 
-      // Insert registrations
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .insert(registrations);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to upload file: ${response.statusText}`);
+      }
 
-      if (error) throw error;
+      const result = await response.json();
 
       toast({
         title: "Success",
-        description: `${registrations.length} registration(s) created successfully`
+        description: result.message || "Registration(s) created successfully"
       });
 
       onOpenChange(false);
       setSelectedType(null);
+      setSelectedFile(null);
       onSuccess?.();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to process Excel file";
       toast({
         title: "Error",
-        description: error.message || "Failed to process CSV file",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      // Get JWT token from localStorage
+      const userData = localStorage.getItem('userData');
+      let authToken = '';
+      
+      if (userData) {
+        try {
+          const parsedData = JSON.parse(userData);
+          if (parsedData.jwt) {
+            authToken = parsedData.jwt;
+          }
+        } catch (error) {
+          console.warn('Failed to parse userData:', error);
+        }
+      }
+
+      // Get API base URL
+      const apiBaseUrl = getApiBaseUrl();
+      const url = import.meta.env.DEV 
+        ? '/auth/download/registration-template'
+        : `${apiBaseUrl}/auth/download/registration-template`;
+
+      // Fetch the file
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream, */*',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to download template: ${response.statusText}`);
+      }
+
+      // Get the blob from response
+      const blob = await response.blob();
+      
+      // Create a download link
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = 'registration-template.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      toast({
+        title: "Template downloaded",
+        description: "Registration template Excel (.xlsx) file has been downloaded"
+      });
+    } catch (error) {
+      console.error('Error downloading template:', error);
+      toast({
+        title: "Error downloading template",
+        description: error instanceof Error ? error.message : "Failed to download template",
+        variant: "destructive"
+      });
     }
   };
 
@@ -151,14 +252,19 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
         {selectedType === 'bulk' && (
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="csv-file">Upload CSV File</Label>
+              <Label htmlFor="xlsx-file">Select Excel File (.xlsx)</Label>
               <Input
-                id="csv-file"
+                id="xlsx-file"
                 type="file"
-                accept=".csv"
-                onChange={handleFileUpload}
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={handleFileSelect}
                 disabled={uploading}
               />
+              {selectedFile && (
+                <p className="text-sm text-muted-foreground">
+                  Selected: {selectedFile.name}
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
                 Required columns: customer_name, customer_email, property_address, property_city, property_state, property_zip
               </p>
@@ -166,7 +272,27 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
                 Optional columns: customer_phone, project_name, settlement_date, notes
               </p>
             </div>
-
+            {/* Download and Upload buttons */}
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={handleDownloadTemplate}
+                className="flex-1"
+                disabled={uploading}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download Template
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => handleFileUpload()}
+                className="flex-1"
+                disabled={uploading || !selectedFile}
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                {uploading ? 'Uploading...' : 'Upload'}
+              </Button>
+            </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleBack} className="flex-1">
                 Back

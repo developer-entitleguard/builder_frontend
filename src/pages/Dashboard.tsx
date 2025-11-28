@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { useGetDashboardCountQuery } from "@/store/api/dashboard";
+import { useGetDashboardCountQuery, useGetRegistrationsQuery } from "@/store/api/dashboard";
 import Header from "@/components/Header";
 import { RegistrationTypeDialog } from "@/components/RegistrationTypeDialog";
 import { BulkActionsBar } from "@/components/BulkActionsBar";
@@ -56,27 +55,71 @@ interface HomeownerRegistration {
   entitlement_sent_at: string | null;
 }
 
+interface OwnerRegistrationResponse {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  email: string;
+  contact: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  projectName: string;
+  statusName: string;
+  createdAt: string;
+  builderId: string;
+  builderName: string;
+}
+
+interface ProjectGroup {
+  projectName: string;
+  totalCount: number;
+  sentCount: number;
+  homeowners: Array<{
+    id: string;
+    firstName: string;
+    lastName: string | null;
+    email: string;
+    contact: string;
+    statusName: string;
+    createdAt: string;
+    builderId: string;
+    builderName: string;
+  }>;
+}
+
 const Dashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [registrations, setRegistrations] = useState<HomeownerRegistration[]>(
-    []
-  );
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedRegistrations, setSelectedRegistrations] = useState<string[]>(
     []
   );
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"by-owner" | "by-project">("by-owner");
 
-  // Get builderId from user (organization ID)
-  const builderId = user && 'builderOrganization' in user && user.builderOrganization
-    ? user.builderOrganization.id
-    : user && 'id' in user 
-    ? user.id 
-    : null;
+  // Get builderId from localStorage (userData.userInfo.builderOrganization.id)
+  const builderId = useMemo(() => {
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+      try {
+        const parsedData = JSON.parse(userData);
+        if (parsedData.userInfo?.builderOrganization?.id) {
+          return parsedData.userInfo.builderOrganization.id;
+        }
+      } catch (error) {
+        console.warn('Failed to parse userData:', error);
+      }
+    }
+    // Fallback to user object if available
+    if (user && 'builderOrganization' in user && user.builderOrganization) {
+      return user.builderOrganization.id;
+    }
+    return null;
+  }, [user]);
 
   // Fetch dashboard counts from API
   const { 
@@ -88,45 +131,129 @@ const Dashboard = () => {
     { skip: !builderId }
   );
 
+  // Fetch registrations by type - fetch both for instant tab switching
+  const { 
+    data: ownerRegistrationsData, 
+    isLoading: isLoadingOwner,
+    error: ownerError 
+  } = useGetRegistrationsQuery(
+    { builderId: builderId || '', type: 'owner' },
+    { skip: !builderId }
+  );
+
+  const { 
+    data: projectRegistrationsData, 
+    isLoading: isLoadingProject,
+    error: projectError 
+  } = useGetRegistrationsQuery(
+    { builderId: builderId || '', type: 'project' },
+    { skip: !builderId }
+  );
+
   useEffect(() => {
     if (!user) {
       navigate("/auth");
       return;
     }
-    fetchRegistrations();
   }, [user, navigate]);
 
-  const fetchRegistrations = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("homeowner_registrations")
-        .select("*")
-        .eq("builder_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        toast({
-          title: "Error loading registrations",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        setRegistrations(data || []);
+  // Transform owner API response to component format
+  const ownerRegistrations = useMemo(() => {
+    if (!ownerRegistrationsData?.data || !Array.isArray(ownerRegistrationsData.data)) return [];
+    
+    return (ownerRegistrationsData.data as OwnerRegistrationResponse[]).map((item) => {
+      // Map status from API format to component format
+      let status = 'draft';
+      if (item.statusName) {
+        const statusLower = item.statusName.toLowerCase();
+        if (statusLower === 'entitlement') {
+          status = 'documents_pending';
+        } else if (statusLower === 'sent') {
+          status = 'sent';
+        } else if (statusLower === 'draft') {
+          status = 'draft';
+        }
       }
-    } catch (error) {
+      
+      return {
+        id: item.id,
+        customer_name: `${item.firstName || ''} ${item.lastName || ''}`.trim(),
+        customer_email: item.email || '',
+        property_address: item.address || '',
+        property_city: item.city || '',
+        property_state: item.state || '',
+        project_name: item.projectName || 'No Project',
+        status: status,
+        created_at: item.createdAt,
+        entitlement_sent_at: item.statusName === 'SENT' ? item.createdAt : null,
+      };
+    });
+  }, [ownerRegistrationsData]);
+
+  // Transform project API response to component format
+  const projectGroups = useMemo(() => {
+    if (!projectRegistrationsData?.data || !Array.isArray(projectRegistrationsData.data)) return {};
+    
+    const groups: Record<string, HomeownerRegistration[]> = {};
+    
+    (projectRegistrationsData.data as ProjectGroup[]).forEach((project) => {
+      const projectName = project.projectName || 'No Project';
+      groups[projectName] = project.homeowners.map((homeowner) => {
+        // Map status from API format to component format
+        let status = 'draft';
+        if (homeowner.statusName) {
+          const statusLower = homeowner.statusName.toLowerCase();
+          if (statusLower === 'entitlement') {
+            status = 'documents_pending';
+          } else if (statusLower === 'sent') {
+            status = 'sent';
+          } else if (statusLower === 'draft') {
+            status = 'draft';
+          }
+        }
+        
+        return {
+          id: homeowner.id,
+          customer_name: `${homeowner.firstName || ''} ${homeowner.lastName || ''}`.trim(),
+          customer_email: homeowner.email || '',
+          property_address: homeowner.contact || '', // Using contact as fallback
+          property_city: '',
+          property_state: '',
+          project_name: projectName,
+          status: status,
+          created_at: homeowner.createdAt,
+          entitlement_sent_at: homeowner.statusName === 'SENT' ? homeowner.createdAt : null,
+        };
+      });
+    });
+    
+    return groups;
+  }, [projectRegistrationsData]);
+
+  // Determine which registrations to use based on active tab
+  const currentRegistrations = activeTab === 'by-owner' ? ownerRegistrations : [];
+  const isLoadingRegistrations = activeTab === 'by-owner' ? isLoadingOwner : isLoadingProject;
+  const registrationsError = activeTab === 'by-owner' ? ownerError : projectError;
+
+  // Get all registrations from project groups for filtering/search
+  const allProjectRegistrations = useMemo(() => {
+    return Object.values(projectGroups).flat();
+  }, [projectGroups]);
+
+  useEffect(() => {
+    if (registrationsError) {
       toast({
-        title: "Error",
-        description: "Failed to load registrations",
+        title: "Error loading registrations",
+        description: "Failed to load registrations. Please try again.",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [registrationsError, toast]);
 
   const getStatusBadge = (status: string) => {
+    // Normalize status to lowercase with underscores
+    const normalizedStatus = status.toLowerCase().replace(/\s+/g, '_');
+    
     const statusConfig = {
       draft: { label: "Draft", variant: "secondary" as const },
       documents_pending: {
@@ -139,15 +266,19 @@ const Dashboard = () => {
       },
       sent: { label: "Sent", variant: "default" as const },
       delivered: { label: "Delivered", variant: "default" as const },
+      entitlement: { label: "Entitlement", variant: "default" as const },
     };
 
     const config =
-      statusConfig[status as keyof typeof statusConfig] || statusConfig.draft;
+      statusConfig[normalizedStatus as keyof typeof statusConfig] || statusConfig.draft;
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
+    // Normalize status to lowercase with underscores
+    const normalizedStatus = status.toLowerCase().replace(/\s+/g, '_');
+    
+    switch (normalizedStatus) {
       case "draft":
         return <FileText className="h-4 w-4 text-muted-foreground" />;
       case "documents_pending":
@@ -158,12 +289,14 @@ const Dashboard = () => {
         return <Send className="h-4 w-4 text-green-500" />;
       case "delivered":
         return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case "entitlement":
+        return <CheckCircle className="h-4 w-4 text-blue-500" />;
       default:
         return <FileText className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
-  const filteredRegistrations = registrations.filter((reg) => {
+  const filteredRegistrations = currentRegistrations.filter((reg) => {
     const matchesSearch =
       reg.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       reg.customer_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -191,15 +324,30 @@ const Dashboard = () => {
     }
   };
 
-  // Group registrations by project
-  const projectGroups = filteredRegistrations.reduce((acc, reg) => {
-    const projectName = reg.project_name || "No Project";
-    if (!acc[projectName]) {
-      acc[projectName] = [];
-    }
-    acc[projectName].push(reg);
-    return acc;
-  }, {} as Record<string, HomeownerRegistration[]>);
+  // Filter project groups by search and status
+  const filteredProjectGroups = useMemo(() => {
+    const filtered: Record<string, HomeownerRegistration[]> = {};
+    
+    Object.entries(projectGroups).forEach(([projectName, regs]) => {
+      const filteredRegs = regs.filter((reg) => {
+        const matchesSearch =
+          reg.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          reg.customer_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          reg.property_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase());
+
+        const matchesStatus = statusFilter === "all" || reg.status === statusFilter;
+
+        return matchesSearch && matchesStatus;
+      });
+      
+      if (filteredRegs.length > 0) {
+        filtered[projectName] = filteredRegs;
+      }
+    });
+    
+    return filtered;
+  }, [projectGroups, searchTerm, statusFilter]);
 
   // Use API data for stats, fallback to calculated values if API data not available
   const stats = dashboardCountData?.data
@@ -210,18 +358,18 @@ const Dashboard = () => {
         ready: dashboardCountData.data.readyForReview,
       }
     : {
-        total: registrations.length,
-        sent: registrations.filter(
-          (r) => r.status === "sent" || r.status === "delivered"
-        ).length,
-        pending: registrations.filter(
-          (r) => r.status === "draft" || r.status === "documents_pending"
-        ).length,
-        ready: registrations.filter((r) => r.status === "ready_for_review").length,
-      };
+    total: ownerRegistrations.length,
+    sent: ownerRegistrations.filter(
+      (r) => r.status === "sent" || r.status === "delivered" || r.status === "entitlement"
+    ).length,
+    pending: ownerRegistrations.filter(
+      (r) => r.status === "draft" || r.status === "documents_pending"
+    ).length,
+    ready: ownerRegistrations.filter((r) => r.status === "ready_for_review").length,
+  };
 
   // Show loading if either registrations or dashboard counts are loading
-  if (loading || (isCountsLoading && builderId)) {
+  if ((isCountsLoading && builderId) || isLoadingRegistrations) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -478,7 +626,7 @@ const Dashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="by-owner" className="w-full">
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "by-owner" | "by-project")} className="w-full">
               <TabsList className="grid w-full max-w-md grid-cols-2 mb-6">
                 <TabsTrigger
                   value="by-owner"
@@ -498,7 +646,12 @@ const Dashboard = () => {
 
               {/* By Owner Tab */}
               <TabsContent value="by-owner" className="mt-0">
-                {filteredRegistrations.length === 0 ? (
+                {isLoadingOwner ? (
+                  <div className="text-center py-12">
+                    <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
+                    <p className="text-muted-foreground">Loading registrations...</p>
+                  </div>
+                ) : filteredRegistrations.length === 0 ? (
                   <div className="text-center py-12">
                     <Home className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-foreground mb-2">
@@ -600,7 +753,12 @@ const Dashboard = () => {
 
               {/* By Project Tab */}
               <TabsContent value="by-project" className="mt-0">
-                {Object.keys(projectGroups).length === 0 ? (
+                {isLoadingProject ? (
+                  <div className="text-center py-12">
+                    <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
+                    <p className="text-muted-foreground">Loading projects...</p>
+                  </div>
+                ) : Object.keys(filteredProjectGroups).length === 0 ? (
                   <div className="text-center py-12">
                     <FolderKanban className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-foreground mb-2">
@@ -612,81 +770,90 @@ const Dashboard = () => {
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    {Object.entries(projectGroups)
+                    {Object.entries(filteredProjectGroups)
                       .sort(([a], [b]) => a.localeCompare(b))
-                      .map(([projectName, projectRegs]) => (
-                        <Card key={projectName} className="border-2">
-                          <CardHeader>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <Building2 className="h-6 w-6 text-primary" />
-                                <div>
-                                  <CardTitle className="text-xl">
-                                    {projectName}
-                                  </CardTitle>
-                                  <CardDescription>
-                                    {projectRegs.length} homeowner
-                                    {projectRegs.length !== 1 ? "s" : ""}
-                                  </CardDescription>
+                      .map(([projectName, projectRegs]) => {
+                        // Find the project data from API response
+                        const projectData = Array.isArray(projectRegistrationsData?.data)
+                          ? (projectRegistrationsData.data as ProjectGroup[]).find(
+                              (p) => p.projectName === projectName
+                            )
+                          : undefined;
+                        return (
+                          <Card key={projectName} className="border-2">
+                            <CardHeader>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <Building2 className="h-6 w-6 text-primary" />
+                                  <div>
+                                    <CardTitle className="text-xl">
+                                      {projectName}
+                                    </CardTitle>
+                                    <CardDescription>
+                                      {projectData?.totalCount || projectRegs.length} homeowner
+                                      {(projectData?.totalCount || projectRegs.length) !== 1 ? "s" : ""}
+                                    </CardDescription>
+                                  </div>
                                 </div>
-                              </div>
-                              <Badge variant="secondary" className="text-sm">
-                                {
-                                  projectRegs.filter(
+                                <Badge variant="secondary" className="text-sm">
+                                  {projectData?.sentCount || projectRegs.filter(
                                     (r) =>
                                       r.status === "sent" ||
-                                      r.status === "delivered"
-                                  ).length
-                                }{" "}
-                                sent
-                              </Badge>
-                            </div>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-3">
-                              {projectRegs.map((registration) => (
-                                <div
-                                  key={registration.id}
-                                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                                  onClick={() =>
-                                    navigate(`/registration/${registration.id}`)
-                                  }
-                                >
-                                  <div className="flex items-center space-x-3 flex-1">
-                                    {getStatusIcon(registration.status)}
-                                    <div className="flex-1">
-                                      <h4 className="font-semibold text-foreground">
-                                        {registration.customer_name}
-                                      </h4>
-                                      <p className="text-sm text-muted-foreground">
-                                        {registration.property_address}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground mt-1">
-                                        {registration.customer_email}
-                                      </p>
+                                      r.status === "delivered" ||
+                                      r.status === "entitlement"
+                                  ).length}{" "}
+                                  sent
+                                </Badge>
+                              </div>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-3">
+                                {projectRegs.map((registration) => (
+                                  <div
+                                    key={registration.id}
+                                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                                    onClick={() =>
+                                      navigate(`/registration/${registration.id}`)
+                                    }
+                                  >
+                                    <div className="flex items-center space-x-3 flex-1">
+                                      {getStatusIcon(registration.status)}
+                                      <div className="flex-1">
+                                        <h4 className="font-semibold text-foreground">
+                                          {registration.customer_name}
+                                        </h4>
+                                        {registration.property_address && (
+                                          <p className="text-sm text-muted-foreground">
+                                            {registration.property_address}
+                                          </p>
+                                        )}
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          {registration.customer_email}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center space-x-3">
+                                      {getStatusBadge(registration.status)}
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigate(
+                                            `/onboarding?id=${registration.id}`
+                                          );
+                                        }}
+                                      >
+                                        Edit
+                                      </Button>
                                     </div>
                                   </div>
-                                  <div className="flex items-center space-x-3">
-                                    {getStatusBadge(registration.status)}
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigate(
-                                          `/onboarding?id=${registration.id}`
-                                        );
-                                      }}
-                                    >
-                                      Edit
-                                    </Button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                                ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
                   </div>
                 )}
               </TabsContent>
@@ -698,14 +865,20 @@ const Dashboard = () => {
       <RegistrationTypeDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        onSuccess={fetchRegistrations}
+        onSuccess={() => {
+          // Refetch data when new registration is created
+          window.location.reload();
+        }}
       />
 
       <BulkActionsBar
         selectedCount={selectedRegistrations.length}
         selectedIds={selectedRegistrations}
         onClearSelection={() => setSelectedRegistrations([])}
-        onSuccess={fetchRegistrations}
+        onSuccess={() => {
+          // Refetch data when bulk action is completed
+          window.location.reload();
+        }}
       />
     </div>
   );

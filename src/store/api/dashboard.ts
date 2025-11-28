@@ -126,6 +126,14 @@ export const dashboardApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Dashboard'],
     }),
+    getRegistrations: build.query<any, { builderId: string; type: 'owner' | 'project' }>({
+      query: (params) => ({
+        url: '/api/dashboard/getregistrations',
+        method: 'GET',
+        params,
+      }),
+      providesTags: ['Dashboard', 'Registration'],
+    }),
   }),
 });
 
@@ -142,4 +150,5 @@ export const {
   useMarkAlertAsReadMutation,
   useGetWidgetsConfigQuery,
   useUpdateWidgetsConfigMutation,
+  useGetRegistrationsQuery,
 } = dashboardApi;

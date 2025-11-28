@@ -129,12 +129,12 @@ export function OrganizationDetails({ organization: propOrganization }: Organiza
     try {
       await updateOrganization({
         id: organization.id,
-        name: data.name,
-        address: data.address,
+          name: data.name,
+          address: data.address,
         contact: data.contact_phone,
         email: data.contact_email,
-        abn: data.abn || null,
-        description: data.description || null,
+          abn: data.abn || null,
+          description: data.description || null,
       }).unwrap();
 
       toast({

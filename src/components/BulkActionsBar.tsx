@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { useGetBillOfMaterialsQuery, useAssignBOMMutation } from '@/store/api/items';
 import { Package, Send, X } from 'lucide-react';
 
 interface BulkActionsBarProps {
@@ -19,36 +20,30 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
   const { user } = useAuth();
   const { toast } = useToast();
   const [bomDialogOpen, setBomDialogOpen] = useState(false);
-  const [boms, setBoms] = useState<any[]>([]);
   const [selectedBom, setSelectedBom] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const { 
+    data: bomsData, 
+    isLoading: isLoadingBoms, 
+    error: bomsError 
+  } = useGetBillOfMaterialsQuery(undefined, {
+    skip: !bomDialogOpen
+  });
+
+  const [assignBOM, { isLoading: isAssigningBOM }] = useAssignBOMMutation();
+
+  const boms = bomsData?.data || [];
+
   useEffect(() => {
-    if (bomDialogOpen) {
-      fetchBOMs();
-    }
-  }, [bomDialogOpen]);
-
-  const fetchBOMs = async () => {
-    if (!user) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('bill_of_materials')
-        .select('*')
-        .eq('builder_id', user.id)
-        .order('name');
-
-      if (error) throw error;
-      setBoms(data || []);
-    } catch (error: any) {
+    if (bomsError && bomDialogOpen) {
       toast({
         title: "Error loading BOMs",
-        description: error.message,
+        description: "Failed to load Bill of Materials. Please try again.",
         variant: "destructive"
       });
     }
-  };
+  }, [bomsError, bomDialogOpen, toast]);
 
   const handleAssignBOM = async () => {
     if (!selectedBom) {
@@ -60,18 +55,21 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
       return;
     }
 
+    if (selectedIds.length === 0) {
+      toast({
+        title: "No registrations selected",
+        description: "Please select at least one registration",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setLoading(true);
     try {
-      // Update all selected registrations
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .update({ 
-          selected_items: { bom_id: selectedBom },
-          status: 'ready_for_review'
-        })
-        .in('id', selectedIds);
-
-      if (error) throw error;
+      await assignBOM({
+        billOfMaterialId: selectedBom,
+        customerIds: selectedIds
+      }).unwrap();
 
       toast({
         title: "Success",
@@ -82,10 +80,10 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
       setSelectedBom('');
       onClearSelection();
       onSuccess();
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Error",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to assign BOM",
         variant: "destructive"
       });
     } finally {
@@ -113,10 +111,10 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
 
       onClearSelection();
       onSuccess();
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Error",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to submit registrations",
         variant: "destructive"
       });
     } finally {
@@ -180,11 +178,25 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
                   <SelectValue placeholder="Select a BOM" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover z-50">
-                  {boms.map((bom) => (
-                    <SelectItem key={bom.id} value={bom.id}>
-                      {bom.name} {bom.project_name && `(${bom.project_name})`}
+                  {isLoadingBoms ? (
+                    <SelectItem value="loading" disabled>
+                      Loading BOMs...
                     </SelectItem>
-                  ))}
+                  ) : bomsError ? (
+                    <SelectItem value="error" disabled>
+                      Error loading BOMs
+                    </SelectItem>
+                  ) : boms.length === 0 ? (
+                    <SelectItem value="empty" disabled>
+                      No BOMs available
+                    </SelectItem>
+                  ) : (
+                    boms.map((bom) => (
+                      <SelectItem key={bom.id} value={bom.id}>
+                        {bom.bomName} {bom.projectName && `(${bom.projectName})`}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -193,8 +205,8 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
               <Button variant="outline" onClick={() => setBomDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAssignBOM} disabled={loading || !selectedBom}>
-                {loading ? 'Assigning...' : 'Assign BOM'}
+              <Button onClick={handleAssignBOM} disabled={loading || isAssigningBOM || !selectedBom}>
+                {loading || isAssigningBOM ? 'Assigning...' : 'Assign BOM'}
               </Button>
             </div>
           </div>

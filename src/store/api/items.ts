@@ -208,6 +208,16 @@ export const itemsApi = api.injectEndpoints({
       },
       invalidatesTags: ['Item'],
     }),
+
+    // Assign BOM to customers
+    assignBOM: build.mutation<{ success: boolean; message?: string }, { billOfMaterialId: string; customerIds: string[] }>({
+      query: (data) => ({
+        url: '/api/add/assignbom',
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Item', 'Registration', 'Dashboard'],
+    }),
   }),
 });
 
@@ -228,4 +238,5 @@ export const {
   useGetBillMaterialsQuery,
   useBulkUpdateItemsMutation,
   useImportItemsMutation,
+  useAssignBOMMutation,
 } = itemsApi;

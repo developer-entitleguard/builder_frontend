@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRegistrations } from "@/hooks/useRegistrations";
 import { useToast } from "@/hooks/use-toast";
+import { useGetBillOfMaterialsQuery, useGetBuilderItemsByBOMQuery } from "@/store/api/items";
 import { 
   Home, 
   Lightbulb, 
@@ -55,13 +56,20 @@ interface RegistrationItem extends BuilderItem {
 
 interface BillOfMaterials {
   id: string;
-  name: string;
-  project_name: string | null;
+  bomName: string;
+  projectName: string | null;
+}
+
+interface FormData {
+  selected_items: RegistrationItem[];
 }
 
 interface ItemsSelectionFormProps {
-  onNext: (data: any) => void;
-  initialData?: any;
+  onNext: (data: FormData) => void;
+  initialData?: {
+    selected_items?: RegistrationItem[];
+    [key: string]: unknown;
+  };
   registrationId?: string;
 }
 
@@ -70,11 +78,9 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   const { updateRegistration } = useRegistrations();
   const { toast } = useToast();
   const [selectedBomId, setSelectedBomId] = useState<string>("");
-  const [boms, setBoms] = useState<BillOfMaterials[]>([]);
   const [selectedItems, setSelectedItems] = useState<RegistrationItem[]>(
     Array.isArray(initialData?.selected_items) ? initialData.selected_items : []
   );
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showCustomItemModal, setShowCustomItemModal] = useState(false);
@@ -97,79 +103,101 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     manual_documents: []
   });
 
+  // Fetch BOMs from API
+  const { 
+    data: bomsData, 
+    isLoading: loading, 
+    error: bomsError 
+  } = useGetBillOfMaterialsQuery(undefined);
+
+  // Transform API response to component format
+  const boms: BillOfMaterials[] = bomsData?.data || [];
+
+  // Show error toast if BOMs API call fails
   useEffect(() => {
-    if (user) {
-      fetchBOMs();
-    } else {
-      setLoading(false);
-    }
-  }, [user]);
-
-  const fetchBOMs = async () => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    
-    try {
-      const { data, error } = await supabase
-        .from('bill_of_materials')
-        .select('*')
-        .eq('builder_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setBoms(data || []);
-    } catch (error: any) {
+    if (bomsError) {
       toast({
         title: "Error fetching BOMs",
-        description: error.message,
+        description: "Failed to load Bill of Materials. Please try again.",
         variant: "destructive"
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [bomsError, toast]);
 
-  const loadItemsFromBOM = async (bomId: string) => {
-    if (!user) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('builder_items')
-        .select('*')
-        .eq('bom_id', bomId)
-        .eq('builder_id', user.id)
-        .eq('status', 'active');
+  // Fetch items by BOM and customer ID
+  const { 
+    data: itemsData, 
+    isLoading: isLoadingItems,
+    error: itemsError,
+    refetch: refetchItems
+  } = useGetBuilderItemsByBOMQuery(
+    { 
+      billMaterialId: selectedBomId, 
+      customerId: registrationId || '' 
+    },
+    { 
+      skip: !selectedBomId || !registrationId 
+    }
+  );
 
-      if (error) throw error;
+  // Transform API response to component format
+  useEffect(() => {
+    if (itemsData && selectedBomId && registrationId) {
+      // Handle both success and "already mapped" cases - both return data
+      const items = itemsData.data || [];
       
-      const items: RegistrationItem[] = (data || []).map(item => ({
-        ...item,
-        color: '',
-        custom_notes: '',
-        serial_number: '',
-        warranty_documents: [],
-        manual_documents: []
-      }));
-      
-      setSelectedItems(items);
-      toast({
-        title: "Items loaded",
-        description: `${items.length} items loaded from BOM`,
+      if (items.length === 0) {
+        // No items found or not yet mapped
+        setSelectedItems([]);
+        return;
+      }
+
+      const transformedItems: RegistrationItem[] = items.map((item) => {
+        const builderItem = item.builderItem;
+        return {
+          id: item.id,
+          name: builderItem.name,
+          category: builderItem.category,
+          brand: item.brand || builderItem.brand || '',
+          model: item.model || builderItem.model || '',
+          make: item.make || builderItem.make || '',
+          description: builderItem.text || '',
+          price: builderItem.price ? parseFloat(builderItem.price) : null,
+          bom_id: selectedBomId,
+          color: item.color || '',
+          custom_notes: item.notes || '',
+          serial_number: item.serialNumber || '',
+          warranty_documents: [],
+          manual_documents: [],
+          is_custom: false
+        };
       });
-    } catch (error: any) {
+      
+      setSelectedItems(transformedItems);
+      
+      if (transformedItems.length > 0) {
+        toast({
+          title: itemsData.success ? "Items loaded" : "Items already mapped",
+          description: `${transformedItems.length} items loaded from BOM`,
+        });
+      }
+    }
+  }, [itemsData, selectedBomId, registrationId, toast]);
+
+  // Show error toast if items API call fails
+  useEffect(() => {
+    if (itemsError && selectedBomId) {
       toast({
         title: "Error loading items",
-        description: error.message,
+        description: itemsError instanceof Error ? itemsError.message : "Failed to load items from BOM",
         variant: "destructive"
       });
     }
-  };
+  }, [itemsError, selectedBomId, toast]);
 
   const handleBOMSelect = (bomId: string) => {
     setSelectedBomId(bomId);
-    loadItemsFromBOM(bomId);
+    // Items will be loaded automatically via the query hook
   };
 
   const handleRemoveItem = (itemId: string) => {
@@ -234,10 +262,10 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
         title: `${documentType === 'warranty' ? 'Warranty' : 'Manual'} uploaded`,
         description: "The document has been uploaded successfully",
       });
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Upload failed",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to upload document",
         variant: "destructive"
       });
     } finally {
@@ -274,10 +302,10 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
         title: "Document removed",
         description: "The document has been removed successfully",
       });
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Remove failed",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to remove document",
         variant: "destructive"
       });
     }
@@ -361,10 +389,10 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
       });
       
       onNext({ selected_items: selectedItems });
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Error saving items",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to save items",
         variant: "destructive"
       });
     } finally {
@@ -400,17 +428,39 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                   <SelectValue placeholder="Select a Bill of Materials" />
                 </SelectTrigger>
                 <SelectContent className="bg-background z-50">
-                  {boms.map((bom) => (
-                    <SelectItem key={bom.id} value={bom.id}>
-                      {bom.name} {bom.project_name && `(${bom.project_name})`}
+                  {loading ? (
+                    <SelectItem value="loading" disabled>
+                      Loading BOMs...
                     </SelectItem>
-                  ))}
+                  ) : bomsError ? (
+                    <SelectItem value="error" disabled>
+                      Error loading BOMs
+                    </SelectItem>
+                  ) : boms.length === 0 ? (
+                    <SelectItem value="empty" disabled>
+                      No BOMs available
+                    </SelectItem>
+                  ) : (
+                    boms.map((bom) => (
+                      <SelectItem key={bom.id} value={bom.id}>
+                        {bom.bomName} {bom.projectName && `(${bom.projectName})`}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </CardContent>
           </Card>
 
-          {selectedItems.length > 0 && (
+          {isLoadingItems && selectedBomId && registrationId && (
+            <Card>
+              <CardContent className="py-8">
+                <p className="text-center text-muted-foreground">Loading items from BOM...</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {!isLoadingItems && selectedItems.length > 0 && (
             <>
               <Card>
                 <CardHeader>

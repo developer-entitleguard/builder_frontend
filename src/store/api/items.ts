@@ -184,6 +184,44 @@ export const itemsApi = api.injectEndpoints({
       providesTags: ['Item'],
     }),
 
+    // Get builder items by BOM and customer ID
+    getBuilderItemsByBOM: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{
+        id: string;
+        builderItem: {
+          id: string;
+          name: string;
+          category: string;
+          make: string | null;
+          brand: string | null;
+          model: string | null;
+          text: string | null;
+          note: string | null;
+          price: string | null;
+          documentationUrl: string | null;
+          isActive: boolean;
+          status: string;
+        };
+        seller: string | null;
+        serialNumber: string | null;
+        make: string | null;
+        model: string | null;
+        brand: string | null;
+        color: string | null;
+        notes: string | null;
+        files: unknown;
+      }>;
+    }, { billMaterialId: string; customerId: string }>({
+      query: (params) => ({
+        url: '/api/getbuilderitems/bybom',
+        method: 'GET',
+        params,
+      }),
+      providesTags: ['Item'],
+    }),
+
     // Bulk update items
     bulkUpdateItems: build.mutation<BuilderItem[], { updates: Array<{ id: string; data: UpdateBuilderItemRequest }> }>({
       query: (data) => ({
@@ -236,6 +274,7 @@ export const {
   useGetCategorysQuery,
   useGetBillOfMaterialsQuery,
   useGetBillMaterialsQuery,
+  useGetBuilderItemsByBOMQuery,
   useBulkUpdateItemsMutation,
   useImportItemsMutation,
   useAssignBOMMutation,

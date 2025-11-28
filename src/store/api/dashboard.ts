@@ -134,6 +134,16 @@ export const dashboardApi = api.injectEndpoints({
       }),
       providesTags: ['Dashboard', 'Registration'],
     }),
+
+    // Get statuses by type
+    getStatusesByType: build.query<{ success: boolean; message: string; data: Array<{ id: string; name: string; module: string }> }, { type: string }>({
+      query: (params) => ({
+        url: '/api/getstatus/bytype',
+        method: 'GET',
+        params,
+      }),
+      providesTags: ['Dashboard'],
+    }),
   }),
 });
 
@@ -151,4 +161,5 @@ export const {
   useGetWidgetsConfigQuery,
   useUpdateWidgetsConfigMutation,
   useGetRegistrationsQuery,
+  useGetStatusesByTypeQuery,
 } = dashboardApi;

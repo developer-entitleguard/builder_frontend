@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useGetDashboardCountQuery, useGetRegistrationsQuery } from "@/store/api/dashboard";
+import { useGetDashboardCountQuery, useGetRegistrationsQuery, useGetStatusesByTypeQuery } from "@/store/api/dashboard";
 import Header from "@/components/Header";
 import { RegistrationTypeDialog } from "@/components/RegistrationTypeDialog";
 import { BulkActionsBar } from "@/components/BulkActionsBar";
@@ -150,6 +150,14 @@ const Dashboard = () => {
     { skip: !builderId }
   );
 
+  // Fetch statuses for filter dropdown
+  const { 
+    data: statusesData, 
+    isLoading: isLoadingStatuses 
+  } = useGetStatusesByTypeQuery(
+    { type: 'BUILDER' }
+  );
+
   useEffect(() => {
     if (!user) {
       navigate("/auth");
@@ -249,6 +257,32 @@ const Dashboard = () => {
       });
     }
   }, [registrationsError, toast]);
+
+  // Helper function to format status name for display
+  const formatStatusName = (statusName: string): string => {
+    return statusName
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  // Helper function to convert API status name to filter value
+  const statusNameToFilterValue = (statusName: string): string => {
+    const normalized = statusName.toLowerCase();
+    // Map API status names to filter values
+    const statusMap: Record<string, string> = {
+      'draft': 'draft',
+      'entitlement': 'documents_pending',
+      'ready_for_review': 'ready_for_review',
+      'created': 'draft',
+      'sent': 'sent',
+      'delivered': 'delivered',
+    };
+    return statusMap[normalized] || normalized;
+  };
+
+  // Get statuses from API
+  const statuses = statusesData?.data || [];
 
   const getStatusBadge = (status: string) => {
     // Normalize status to lowercase with underscores
@@ -596,15 +630,20 @@ const Dashboard = () => {
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
                 <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="documents_pending">
-                  Documents Pending
-                </SelectItem>
-                <SelectItem value="ready_for_review">
-                  Ready for Review
-                </SelectItem>
-                <SelectItem value="sent">Sent</SelectItem>
-                <SelectItem value="delivered">Delivered</SelectItem>
+                {isLoadingStatuses ? (
+                  <SelectItem value="loading" disabled>
+                    Loading statuses...
+                  </SelectItem>
+                ) : (
+                  statuses.map((status) => (
+                    <SelectItem 
+                      key={status.id} 
+                      value={statusNameToFilterValue(status.name)}
+                    >
+                      {formatStatusName(status.name)}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>

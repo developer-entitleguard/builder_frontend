@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useGetDashboardCountQuery, useGetRegistrationsQuery, useGetStatusesByTypeQuery } from "@/store/api/dashboard";
+import { useGetBuilderOrganizationQuery } from "@/lib/api/services/builderOrganization";
 import Header from "@/components/Header";
 import { RegistrationTypeDialog } from "@/components/RegistrationTypeDialog";
 import { BulkActionsBar } from "@/components/BulkActionsBar";
@@ -158,6 +159,13 @@ const Dashboard = () => {
     isLoading: isLoadingStatuses 
   } = useGetStatusesByTypeQuery(
     { type: 'BUILDER' }
+  );
+
+  const { 
+    data: organizationData 
+  } = useGetBuilderOrganizationQuery(
+    builderId || '',
+    { skip: !builderId }
   );
 
   useEffect(() => {
@@ -431,6 +439,16 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        {/* Organization Welcome Message */}
+        {organizationData?.data?.name && (
+          <div className="mb-6">
+            <p className="text-lg font-semibold text-foreground">
+               <span className="text-primary">{organizationData.data.name}</span>
+            </p>
+          </div>
+        )}
+        
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>

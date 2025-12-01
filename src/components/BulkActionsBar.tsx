@@ -66,14 +66,14 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
 
     setLoading(true);
     try {
-      await assignBOM({
+      const result = await assignBOM({
         billOfMaterialId: selectedBom,
         customerIds: selectedIds
       }).unwrap();
 
       toast({
         title: "Success",
-        description: `BOM assigned to ${selectedCount} registration(s)`
+        description: result.message || `BOM assigned to ${selectedCount} registration(s)`
       });
 
       setBomDialogOpen(false);
@@ -92,23 +92,38 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
   };
 
   const handleBulkSubmit = async () => {
+    if (!selectedBom) {
+      setBomDialogOpen(true);
+      toast({
+        title: "Select BOM",
+        description: "Please select a Bill of Materials to submit",
+      });
+      return;
+    }
+
+    if (selectedIds.length === 0) {
+      toast({
+        title: "No registrations selected",
+        description: "Please select at least one registration",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .update({ 
-          status: 'sent',
-          entitlement_sent_at: new Date().toISOString()
-        })
-        .in('id', selectedIds);
-
-      if (error) throw error;
+      const result = await assignBOM({
+        billOfMaterialId: selectedBom,
+        customerIds: selectedIds
+      }).unwrap();
 
       toast({
         title: "Success",
-        description: `${selectedCount} registration(s) submitted successfully`
+        description: result.message || `${selectedCount} registration(s) submitted successfully`
       });
 
+      setBomDialogOpen(false);
+      setSelectedBom('');
       onClearSelection();
       onSuccess();
     } catch (error) {
@@ -131,9 +146,14 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
         
         <div className="flex gap-2">
           <Button 
+            type="button"
             variant="secondary" 
             size="sm"
-            onClick={() => setBomDialogOpen(true)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setBomDialogOpen(true);
+            }}
             disabled={loading}
           >
             <Package className="h-4 w-4 mr-2" />
@@ -141,13 +161,18 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
           </Button>
           
           <Button 
+            type="button"
             variant="secondary" 
             size="sm"
-            onClick={handleBulkSubmit}
-            disabled={loading}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleBulkSubmit();
+            }}
+            disabled={loading || isAssigningBOM}
           >
             <Send className="h-4 w-4 mr-2" />
-            Bulk Submit
+            {loading || isAssigningBOM ? 'Submitting...' : 'Bulk Submit'}
           </Button>
         </div>
 

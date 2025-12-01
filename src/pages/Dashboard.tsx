@@ -135,7 +135,8 @@ const Dashboard = () => {
   const { 
     data: ownerRegistrationsData, 
     isLoading: isLoadingOwner,
-    error: ownerError 
+    error: ownerError,
+    refetch: refetchOwnerRegistrations
   } = useGetRegistrationsQuery(
     { builderId: builderId || '', type: 'owner' },
     { skip: !builderId }
@@ -144,7 +145,8 @@ const Dashboard = () => {
   const { 
     data: projectRegistrationsData, 
     isLoading: isLoadingProject,
-    error: projectError 
+    error: projectError,
+    refetch: refetchProjectRegistrations
   } = useGetRegistrationsQuery(
     { builderId: builderId || '', type: 'project' },
     { skip: !builderId }
@@ -915,8 +917,9 @@ const Dashboard = () => {
         selectedIds={selectedRegistrations}
         onClearSelection={() => setSelectedRegistrations([])}
         onSuccess={() => {
-          // Refetch data when bulk action is completed
-          window.location.reload();
+          // Refetch data when bulk action is completed without reloading the page
+          refetchOwnerRegistrations();
+          refetchProjectRegistrations();
         }}
       />
     </div>

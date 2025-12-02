@@ -159,17 +159,22 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
 
       // Get API base URL
       const apiBaseUrl = getApiBaseUrl();
+      // Add cache-busting query parameter to prevent 304 responses
+      const timestamp = Date.now();
       const url = import.meta.env.DEV 
-        ? '/auth/download/registration-template'
-        : `${apiBaseUrl}/auth/download/registration-template`;
+        ? `/auth/download/registration-template?t=${timestamp}`
+        : `${apiBaseUrl}/auth/download/registration-template?t=${timestamp}`;
 
-      // Fetch the file
+      // Fetch the file with cache-busting headers
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
           'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream, */*',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
         },
+        cache: 'no-store',
       });
 
       if (!response.ok) {
@@ -178,9 +183,24 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
 
       // Get the blob from response
       const blob = await response.blob();
+
+      // Verify blob is valid (not empty)
+      if (blob.size === 0) {
+        throw new Error('Downloaded file is empty. Please try again.');
+      }
+
+      // Optionally check content type
+      const contentType = response.headers.get('content-type');
+      if (contentType && !contentType.includes('spreadsheetml') && !contentType.includes('octet-stream')) {
+        console.warn('Unexpected content type for registration template:', contentType);
+      }
       
-      // Create a download link
-      const downloadUrl = window.URL.createObjectURL(blob);
+      // Create a download link with proper MIME type
+      const downloadUrl = window.URL.createObjectURL(
+        new Blob([blob], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        }),
+      );
       const link = document.createElement('a');
       link.href = downloadUrl;
       link.download = 'registration-template.xlsx';

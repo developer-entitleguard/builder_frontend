@@ -76,17 +76,22 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
 
       // Get API base URL
       const apiBaseUrl = getApiBaseUrl();
+      // Add cache-busting query parameter to prevent 304 responses
+      const timestamp = Date.now();
       const url = import.meta.env.DEV 
-        ? '/auth/download-template'
-        : `${apiBaseUrl}/auth/download-template`;
+        ? `/auth/download-template?t=${timestamp}`
+        : `${apiBaseUrl}/auth/download-template?t=${timestamp}`;
 
-      // Fetch the file
+      // Fetch the file with cache-busting headers
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
           'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream, */*',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
         },
+        cache: 'no-store', // Force fresh request
       });
 
       if (!response.ok) {
@@ -96,11 +101,26 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
       // Get the blob from response
       const blob = await response.blob();
       
-      // Create a download link
-      const downloadUrl = window.URL.createObjectURL(blob);
+      // Verify blob is valid (not empty and has correct type)
+      if (blob.size === 0) {
+        throw new Error('Downloaded file is empty. Please try again.');
+      }
+
+      // Verify content type if available
+      const contentType = response.headers.get('content-type');
+      if (contentType && !contentType.includes('spreadsheetml') && !contentType.includes('octet-stream')) {
+        console.warn('Unexpected content type:', contentType);
+      }
+
+      // Create a download link with proper MIME type
+      const downloadUrl = window.URL.createObjectURL(
+        new Blob([blob], { 
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        })
+      );
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = 'bom-template.xlsx';
+      link.download = 'builder_template.xlsx';
       document.body.appendChild(link);
       link.click();
       

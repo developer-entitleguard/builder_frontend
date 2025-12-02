@@ -144,6 +144,32 @@ export const dashboardApi = api.injectEndpoints({
       }),
       providesTags: ['Dashboard'],
     }),
+
+    // Get statuses by module (e.g., QUERY)
+    getStatus: build.query<{ success: boolean; message: string; data: Array<{ id: string; name: string; module: string }> }, { module: string }>({
+      query: (params) => ({
+        url: '/api/status/bymodule',
+        method: 'GET',
+        params,
+      }),
+      providesTags: ['Dashboard'],
+    }),
+
+    // Get builder queries by builder and optional status
+    getBuilderQueries: build.query<
+      { success: boolean; message: string; data: any[] },
+      { builderId: string; statusId?: string }
+    >({
+      query: ({ builderId, statusId }) => ({
+        url: '/api/builder/query',
+        method: 'GET',
+        params: {
+          builderId,
+          ...(statusId ? { statusId } : {}),
+        },
+      }),
+      providesTags: ['Query'],
+    }),
   }),
 });
 
@@ -162,4 +188,6 @@ export const {
   useUpdateWidgetsConfigMutation,
   useGetRegistrationsQuery,
   useGetStatusesByTypeQuery,
+  useGetStatusQuery,
+  useGetBuilderQueriesQuery,
 } = dashboardApi;

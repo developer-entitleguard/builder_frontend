@@ -257,7 +257,7 @@ const Onboarding = () => {
   };
 
   const handleNextStep = () => {
-    const steps = ['customer', 'items', 'documents', 'review', 'send'];
+    const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex < steps.length - 1) {
       setCurrentStep(steps[currentIndex + 1]);
@@ -265,7 +265,7 @@ const Onboarding = () => {
   };
 
   const handlePreviousStep = () => {
-    const steps = ['customer', 'items', 'documents', 'review', 'send'];
+    const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex > 0) {
       setCurrentStep(steps[currentIndex - 1]);
@@ -353,7 +353,7 @@ const Onboarding = () => {
                   Save & Exit
                 </Button>
                 <div className="text-sm text-muted-foreground">
-                  Step {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) + 1} of 5
+                  Step {['customer', 'items', 'review', 'send'].indexOf(currentStep) + 1} of 4
                 </div>
               </div>
             </div>
@@ -361,18 +361,18 @@ const Onboarding = () => {
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <div>
-                {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) > 0 && (
+                {['customer', 'items', 'review', 'send'].indexOf(currentStep) > 0 && (
                   <Button variant="outline" onClick={handlePreviousStep}>
                     Previous
                   </Button>
                 )}
               </div>
               <div className="flex space-x-2">
-                {['customer', 'items', 'documents', 'review', 'send'].map((step, index) => (
+                {['customer', 'items', 'review', 'send'].map((step, index) => (
                   <div
                     key={step}
                     className={`w-3 h-3 rounded-full ${
-                      ['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) >= index
+                      ['customer', 'items', 'review', 'send'].indexOf(currentStep) >= index
                         ? 'bg-primary'
                         : 'bg-muted'
                     }`}

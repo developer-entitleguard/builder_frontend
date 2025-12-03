@@ -239,7 +239,8 @@ const Onboarding = () => {
       setRegistrationId(itemsData.registrationId);
     }
     setFormData(prev => ({ ...prev, items: itemsData }));
-    handleNextStep();
+    // Go directly to review page, skipping documents
+    setCurrentStep('review');
   };
 
   const handleDocumentsNext = async (documentsData: any) => {
@@ -256,7 +257,7 @@ const Onboarding = () => {
   };
 
   const handleNextStep = () => {
-    const steps = ['customer', 'items', 'review', 'send'];
+    const steps = ['customer', 'items', 'documents', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex < steps.length - 1) {
       setCurrentStep(steps[currentIndex + 1]);
@@ -264,7 +265,7 @@ const Onboarding = () => {
   };
 
   const handlePreviousStep = () => {
-    const steps = ['customer', 'items', 'review', 'send'];
+    const steps = ['customer', 'items', 'documents', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex > 0) {
       setCurrentStep(steps[currentIndex - 1]);
@@ -302,6 +303,8 @@ const Onboarding = () => {
 
   const renderCurrentStep = () => {
     switch (currentStep) {
+      case 'overview':
+        return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
       case 'customer':
         return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} />;
       case 'items':

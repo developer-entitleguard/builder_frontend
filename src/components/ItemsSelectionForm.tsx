@@ -88,6 +88,17 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   const [selectedItems, setSelectedItems] = useState<RegistrationItem[]>(
     Array.isArray(initialData?.selected_items) ? initialData.selected_items : []
   );
+
+  // Restore selectedBomId from initialData when component mounts or initialData changes
+  useEffect(() => {
+    if (initialData?.selected_items && Array.isArray(initialData.selected_items) && initialData.selected_items.length > 0) {
+      // Get bom_id from the first item (all items should have the same bom_id)
+      const firstItem = initialData.selected_items[0] as RegistrationItem;
+      if (firstItem?.bom_id) {
+        setSelectedBomId(firstItem.bom_id);
+      }
+    }
+  }, [initialData]);
   const [saving, setSaving] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showCustomItemModal, setShowCustomItemModal] = useState(false);
@@ -209,13 +220,6 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
       });
       
       setSelectedItems(transformedItems);
-      
-      if (transformedItems.length > 0) {
-        toast({
-          title: itemsData.success ? "Items loaded" : "Items already mapped",
-          description: `${transformedItems.length} items loaded from BOM`,
-        });
-      }
     }
   }, [itemsData, selectedBomId, registrationId, toast]);
 

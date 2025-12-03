@@ -638,32 +638,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   }, {} as Record<string, RegistrationItem[]>);
 
   const handleNext = async () => {
-    if (!registrationId) {
-      onNext({ selected_items: selectedItems });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await updateRegistration(registrationId, {
-        selected_items: selectedItems
-      });
-      
-      toast({
-        title: "Items saved",
-        description: "Your item selection has been saved successfully",
-      });
-      
-      onNext({ selected_items: selectedItems });
-    } catch (error) {
-      toast({
-        title: "Error saving items",
-        description: error instanceof Error ? error.message : "Failed to save items",
-        variant: "destructive"
-      });
-    } finally {
-      setSaving(false);
-    }
+    // Navigate to next page directly without calling Supabase
+    onNext({ selected_items: selectedItems });
   };
 
   return (

@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { User, Home, FileText, Building, CheckCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 interface ReviewApprovalFormProps {
@@ -16,41 +15,8 @@ interface ReviewApprovalFormProps {
 const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
   const [approved, setApproved] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (formData?.items?.selected_items?.length) {
-      fetchSelectedItems();
-    } else {
-      setLoading(false);
-    }
-  }, [formData]);
-
-  const fetchSelectedItems = async () => {
-    if (!formData?.items?.selected_items?.length) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('builder_items')
-        .select('*')
-        .in('id', formData.items.selected_items);
-
-      if (error) throw error;
-      setSelectedItems(data || []);
-    } catch (error: any) {
-      toast({
-        title: "Error fetching selected items",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Use items passed from previous step instead of fetching from Supabase
+  const selectedItems: any[] = formData?.items?.selected_items || [];
 
   const customerData = formData?.customer || {};
   const uploadedDocs = formData?.documents || {};
@@ -65,17 +31,6 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
     acc[item.category].push(item);
     return acc;
   }, {} as Record<string, any[]>);
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-foreground">Loading Review...</h2>
-          <p className="text-muted-foreground mt-1">Preparing review data</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">

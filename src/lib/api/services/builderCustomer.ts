@@ -13,7 +13,7 @@ export interface BuilderItemFileDto {
 }
 
 export interface UpdateBuilderCustomerMapRequest {
-  id: string;
+  id?: string; // Optional for creating new items
   seller?: string;
   serialNumber?: string;
   notes?: string;
@@ -56,7 +56,10 @@ export const builderCustomerApi = api.injectEndpoints({
           const formData = new FormData();
           
           // Add all the basic fields
-          formData.append('id', data.id);
+          // Only append id if it's provided (for updates, not for new items)
+          if (data.id) {
+            formData.append('id', data.id);
+          }
           formData.append('builderCustomerId', data.builderCustomerId);
           formData.append('builderItemId', data.builderItemId);
           formData.append('billMaterialId', data.billMaterialId);

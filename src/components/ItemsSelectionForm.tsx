@@ -108,6 +108,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     custom_notes: '',
     is_custom: true,
     serial_number: '',
+    builderItemId: '',
     warranty_documents: [],
     manual_documents: []
   });
@@ -168,7 +169,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
           item.builderCustomerItemFiles
             ?.filter((f) => f.type === 'Warranty' && f.files)
             .map((f) => ({
-              id: f.files.id,
+              // Use builderCustomerItemFiles.id for delete API (/api/itemfile/{id})
+              id: f.id,
               name: f.files.name,
               url: f.files.filePath,
               path: f.files.filePath,
@@ -178,7 +180,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
           item.builderCustomerItemFiles
             ?.filter((f) => f.type === 'Manual' && f.files)
             .map((f) => ({
-              id: f.files.id,
+              // Use builderCustomerItemFiles.id for delete API (/api/itemfile/{id})
+              id: f.id,
               name: f.files.name,
               url: f.files.filePath,
               path: f.files.filePath,
@@ -556,7 +559,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     setShowCustomItemModal(true);
   };
 
-  const handleSaveCustomItem = () => {
+  const handleSaveCustomItem = async () => {
     if (!newCustomItem.name.trim()) {
       toast({
         title: "Missing item name",
@@ -566,12 +569,51 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
       return;
     }
 
-    setSelectedItems(prev => [...prev, newCustomItem]);
-    setShowCustomItemModal(false);
-    toast({
-      title: "Custom item added",
-      description: "The custom item has been added to the selection",
-    });
+    if (!registrationId || !selectedBomId) {
+      toast({
+        title: "Missing required information",
+        description: "Please select a BOM and ensure registration ID is available",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Call the API without id field (for creating new custom item)
+      const result = await updateBuilderCustomerMap({
+        builderCustomerId: registrationId,
+        builderItemId: newCustomItem.builderItemId || '',
+        billMaterialId: selectedBomId,
+        seller: newCustomItem.seller,
+        serialNumber: newCustomItem.serial_number,
+        notes: newCustomItem.custom_notes,
+        color: newCustomItem.color,
+        model: newCustomItem.model || undefined,
+        brand: newCustomItem.brand || undefined,
+        make: newCustomItem.make || undefined,
+        builderItemFilesDtos: undefined, // No files for new custom item
+      }).unwrap();
+
+      // Add to local state after successful API call
+      setSelectedItems(prev => [...prev, newCustomItem]);
+      setShowCustomItemModal(false);
+      
+      // Refetch items to get the updated list with the new item
+      await refetchItems();
+
+      toast({
+        title: "Custom item added",
+        description: result.message || "The custom item has been added successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to add custom item",
+        description: error && typeof error === 'object' && 'data' in error 
+          ? String((error.data as { message?: string })?.message || "Failed to add custom item")
+          : "Failed to add custom item",
+        variant: "destructive"
+      });
+    }
   };
 
   const getCategoryIcon = (category: string) => {

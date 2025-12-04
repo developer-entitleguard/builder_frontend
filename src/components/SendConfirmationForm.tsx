@@ -166,7 +166,7 @@ const SendConfirmationForm = ({ onNext, customerId }: SendConfirmationFormProps)
         </CardContent>
       </Card>
 
-      {status === 'delivered' && (
+      {/* {status === 'delivered' && (
         <Card>
           <CardHeader>
             <CardTitle>Next Steps</CardTitle>
@@ -189,7 +189,7 @@ const SendConfirmationForm = ({ onNext, customerId }: SendConfirmationFormProps)
             </div>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       <div className="flex justify-between items-center pt-6 border-t">
         <Button 

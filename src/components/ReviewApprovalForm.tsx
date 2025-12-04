@@ -6,31 +6,95 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { User, Home, FileText, Building, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
+import { skipToken } from "@reduxjs/toolkit/query";
+
+interface SelectedItem {
+  id: string;
+  name: string;
+  category: string;
+  brand?: string;
+  model?: string;
+  make?: string;
+  color?: string;
+  serial_number?: string;
+  custom_notes?: string;
+  warranty_documents?: Array<{ name: string; url: string; path: string }>;
+  manual_documents?: Array<{ name: string; url: string; path: string }>;
+}
+
+interface FormData {
+  customer?: {
+    customerId?: string;
+    customer_name?: string;
+    customer_email?: string;
+    customer_phone?: string;
+    settlement_date?: string;
+    property_address?: string;
+    property_city?: string;
+    property_state?: string;
+    property_zip?: string;
+    notes?: string;
+    project_name?: string;
+  };
+  items?: {
+    selected_items?: SelectedItem[];
+  };
+  documents?: Record<string, unknown>;
+}
 
 interface ReviewApprovalFormProps {
   onNext: () => void;
-  formData?: any;
+  formData?: FormData;
 }
 
 const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [approved, setApproved] = useState(false);
   // Use items passed from previous step instead of fetching from Supabase
-  const selectedItems: any[] = formData?.items?.selected_items || [];
+  const selectedItems: SelectedItem[] = formData?.items?.selected_items || [];
 
-  const customerData = formData?.customer || {};
+  const customerId: string | undefined = formData?.customer?.customerId;
+
+  // Fetch customer details from API when we have both builderId and customerId
+  const { data: customerDetailsData } = useGetCustomerDetailsQuery(
+    user?.id && customerId
+      ? { builderId: user.id as string, customerId }
+      : skipToken
+  );
+
+  const apiCustomer = customerDetailsData?.data?.customer;
+
+  const customerData = apiCustomer
+    ? {
+        customer_name: `${apiCustomer.firstName} ${apiCustomer.lastName}`.trim(),
+        customer_email: apiCustomer.email,
+        customer_phone: apiCustomer.contact,
+        settlement_date: apiCustomer.settlementDate || null,
+        property_address: apiCustomer.address,
+        property_city: apiCustomer.city,
+        property_state: apiCustomer.state,
+        property_zip: apiCustomer.zip,
+        notes: apiCustomer.notes,
+        project_name: apiCustomer.projectName,
+      }
+    : formData?.customer || {};
   const uploadedDocs = formData?.documents || {};
 
   // Count total uploaded documents
   const getTotalDocuments = () => {
-    return Object.values(uploadedDocs).reduce((total: number, docs: any) => total + (Array.isArray(docs) ? docs.length : 0), 0);
+    return Object.values(uploadedDocs).reduce((total: number, docs: unknown) => {
+      return total + (Array.isArray(docs) ? docs.length : 0);
+    }, 0);
   };
 
   const groupedItems = selectedItems.reduce((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
     acc[item.category].push(item);
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {} as Record<string, SelectedItem[]>);
 
   return (
     <div className="space-y-6">
@@ -78,7 +142,7 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
         </CardContent>
       </Card>
 
-      {selectedItems.length === 0 ? (
+      {/* {selectedItems.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
@@ -149,10 +213,10 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
             </div>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       {/* Documentation Status */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <FileText className="w-5 h-5" />
@@ -175,7 +239,7 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
             {getTotalDocuments() as number} document{(getTotalDocuments() as number) !== 1 ? 's' : ''} ready for delivery
           </p>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Approval */}
       <Card>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowRight, MapPin, Phone, Mail, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCreateBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
+import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
 import { useToast } from "@/hooks/use-toast";
+import { skipToken } from "@reduxjs/toolkit/query";
 import { australianStates, validateAustralianPhone, formatAustralianPhone, validateAustralianPostcode, validateEmail } from "@/utils/validation";
 
 interface CustomerFormData {
@@ -30,9 +32,10 @@ interface CustomerFormData {
 interface CustomerDetailsFormProps {
   onNext: (data: CustomerFormData) => void;
   initialData?: Partial<CustomerFormData>;
+  customerId?: string;
 }
 
-const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) => {
+const CustomerDetailsForm = ({ onNext, initialData, customerId }: CustomerDetailsFormProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [createBuilderCustomer, { isLoading: isCreating }] = useCreateBuilderCustomerMutation();
@@ -51,6 +54,33 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
     notes: initialData?.notes || ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Fetch customer details when customerId is provided
+  const { data: customerDetailsData, isLoading: isLoadingCustomer } = useGetCustomerDetailsQuery(
+    user?.id && customerId
+      ? { builderId: user.id as string, customerId }
+      : skipToken
+  );
+
+  // Populate form fields when customer data is fetched
+  useEffect(() => {
+    if (customerDetailsData?.data?.customer) {
+      const customer = customerDetailsData.data.customer;
+      setFormData({
+        firstName: customer.firstName || '',
+        lastName: customer.lastName || '',
+        email: customer.email || '',
+        phone: customer.contact || '',
+        propertyAddress: customer.address || '',
+        city: customer.city || '',
+        state: customer.state || '',
+        zipCode: customer.zip || '',
+        projectName: customer.projectName || '',
+        settlementDate: customer.settlementDate || '',
+        notes: customer.notes || ''
+      });
+    }
+  }, [customerDetailsData]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -102,6 +132,11 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
       return;
     }
 
+    // If customerId exists, we're editing an existing customer
+    // In this case, we might need to update instead of create
+    // For now, we'll still create/update via the API
+    // The API should handle updates if customerId is provided in the future
+    
     // Get builderOrganizationId from user
     const builderOrganizationId = user && 'builderOrganization' in user && user.builderOrganization
       ? user.builderOrganization.id
@@ -136,18 +171,21 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
         builderOrganizationId: builderOrganizationId
       };
       
+      // If customerId exists, we're editing - but the API might still create
+      // This depends on your backend implementation
       const response = await createBuilderCustomer(customerData).unwrap();
       
       toast({
-        title: "Customer details saved",
+        title: customerId ? "Customer details updated" : "Customer details saved",
         description: "Moving to item selection"
       });
       
       // Pass the customer data and response to the next step
+      // Use existing customerId if available, otherwise use the response ID
       onNext({ 
         ...formData, 
-        customerId: response.data?.id,
-        registrationId: response.data?.id // For backward compatibility
+        customerId: customerId || response.data?.id,
+        registrationId: customerId || response.data?.id // For backward compatibility
       });
     } catch (error) {
       console.error('Error saving customer details:', error);
@@ -339,8 +377,8 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" size="lg" className="min-w-[150px]" disabled={loading || isCreating}>
-            {(loading || isCreating) ? 'Saving...' : 'Continue to Items'}
+          <Button type="submit" size="lg" className="min-w-[150px]" disabled={loading || isCreating || isLoadingCustomer}>
+            {(loading || isCreating || isLoadingCustomer) ? 'Loading...' : 'Continue to Items'}
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         </div>

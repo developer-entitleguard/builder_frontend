@@ -759,9 +759,7 @@ const Dashboard = () => {
                         />
                         <div
                           className="flex items-center justify-between flex-1 cursor-pointer"
-                          onClick={() =>
-                            navigate(`/registration/${registration.id}`)
-                          }
+                          onClick={() => navigate(`/onboarding?id=${registration.id}`)}
                         >
                           <div className="flex items-center space-x-4 flex-1">
                             {getStatusIcon(registration.status)}
@@ -872,7 +870,7 @@ const Dashboard = () => {
                                     key={registration.id}
                                     className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
                                     onClick={() =>
-                                      navigate(`/registration/${registration.id}`)
+                                      navigate(`/onboarding?id=${registration.id}`)
                                     }
                                   >
                                     <div className="flex items-center space-x-3 flex-1">

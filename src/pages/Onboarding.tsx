@@ -45,12 +45,14 @@ const Onboarding = () => {
     }
   }, [user, navigate]);
 
-  // Check for existing registration ID in URL params and load data
+  // Check for existing registration ID in URL params
   useEffect(() => {
     const editingId = searchParams.get('id');
     if (editingId && user) {
       setRegistrationId(editingId);
-      loadExistingRegistration(editingId);
+      // Legacy Supabase-backed registrations are no longer loaded.
+      // We now rely on builder APIs and in-memory formData instead.
+      setLoading(false);
     }
   }, [searchParams, user]);
 
@@ -306,7 +308,7 @@ const Onboarding = () => {
       case 'overview':
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
       case 'customer':
-        return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} />;
+        return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} customerId={registrationId || undefined} />;
       case 'items':
         return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} />;
       case 'review':

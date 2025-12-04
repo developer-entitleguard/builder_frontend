@@ -183,8 +183,8 @@ export const RegistrationTypeDialog = ({
       // Add cache-busting query parameter to prevent 304 responses
       const timestamp = Date.now();
       const url = import.meta.env.DEV
-        ? `/auth/download/registration-template`
-        : `${apiBaseUrl}/auth/download/registration-template`;
+        ? `/api/download/registration-template`
+        : `${apiBaseUrl}/api/download/registration-template`;
 
       // Fetch the file with cache-busting headers
       const response = await fetch(url, {

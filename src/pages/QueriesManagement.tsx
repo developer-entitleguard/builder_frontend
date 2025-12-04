@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -8,8 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageSquare, Clock, CheckCircle } from "lucide-react";
 import Header from "@/components/Header";
+import { useGetStatusByModuleQuery } from "@/lib/api/services/status";
 
 interface Query {
   id: string;
@@ -35,15 +37,15 @@ const QueriesManagement = () => {
   const [selectedQuery, setSelectedQuery] = useState<Query | null>(null);
   const [response, setResponse] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedStatusId, setSelectedStatusId] = useState<string>("all");
 
-  useEffect(() => {
-    if (user) {
-      fetchQueries();
-    }
-  }, [user]);
+  // Fetch statuses for QUERY module
+  const { data: statusData, isLoading: isLoadingStatuses } = useGetStatusByModuleQuery({ module: "QUERY" });
+  const statuses = statusData?.data || [];
 
-  const fetchQueries = async () => {
+  const fetchQueries = useCallback(async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('homeowner_queries')
         .select(`
@@ -58,16 +60,23 @@ const QueriesManagement = () => {
 
       if (error) throw error;
       setQueries(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({
         title: "Error fetching queries",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    if (user) {
+      fetchQueries();
+    }
+  }, [user, fetchQueries]);
 
   const handleRespond = async () => {
     if (!selectedQuery || !response.trim()) return;
@@ -89,10 +98,11 @@ const QueriesManagement = () => {
       setResponse("");
       setSelectedQuery(null);
       fetchQueries();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({
         title: "Error sending response",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive"
       });
     }
@@ -127,9 +137,18 @@ const QueriesManagement = () => {
     }
   };
 
-  const openQueries = queries.filter(q => q.status === 'open');
-  const respondedQueries = queries.filter(q => q.status === 'responded');
-  const closedQueries = queries.filter(q => q.status === 'closed');
+  // Filter queries based on selected status
+  const filterQueriesByStatus = (queriesList: Query[]) => {
+    if (selectedStatusId === 'all') return queriesList;
+    const selectedStatus = statuses.find(s => s.id === selectedStatusId);
+    if (!selectedStatus) return queriesList;
+    // Match by status name (case-insensitive)
+    return queriesList.filter(q => q.status?.toUpperCase() === selectedStatus.name.toUpperCase());
+  };
+
+  const openQueries = filterQueriesByStatus(queries.filter(q => q.status === 'open'));
+  const respondedQueries = filterQueriesByStatus(queries.filter(q => q.status === 'responded'));
+  const closedQueries = filterQueriesByStatus(queries.filter(q => q.status === 'closed'));
 
   const QueryCard = ({ query }: { query: Query }) => (
     <Card className="mb-4">
@@ -200,22 +219,27 @@ const QueriesManagement = () => {
         </div>
 
         <Tabs defaultValue="open" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="open" className="relative">
-              Open Queries
-              {openQueries.length > 0 && (
-                <Badge className="ml-2 h-5 w-5 rounded-full p-0 text-xs">
-                  {openQueries.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="responded">
-              Responded ({respondedQueries.length})
-            </TabsTrigger>
-            <TabsTrigger value="closed">
-              Closed ({closedQueries.length})
-            </TabsTrigger>
-          </TabsList>
+          {/* Status Filter */}
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-sm text-muted-foreground">Status:</span>
+            <Select value={selectedStatusId} onValueChange={setSelectedStatusId}>
+              <SelectTrigger className="w-[260px]">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="all">All Statuses</SelectItem>
+                {isLoadingStatuses ? (
+                  <SelectItem value="loading" disabled>Loading statuses...</SelectItem>
+                ) : (
+                  statuses.map((status) => (
+                    <SelectItem key={status.id} value={status.id}>
+                      {status.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
 
           <TabsContent value="open">
             {openQueries.length === 0 ? (

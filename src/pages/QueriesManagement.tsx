@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +12,41 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MessageSquare, Clock, CheckCircle } from "lucide-react";
 import Header from "@/components/Header";
 import { useGetStatusByModuleQuery } from "@/lib/api/services/status";
+import { useGetBuilderQueriesQuery, type BuilderQuery } from "@/lib/api/services/query";
+
+// Transform API query to component format
+const transformQuery = (query: BuilderQuery) => {
+  const customerName = query.orderItem?.order?.customerSourceMap?.customer?.name || 
+    query.orderItem?.order?.customerSourceMap?.source?.name || 'N/A';
+  
+  const customerEmail = query.orderItem?.order?.customerSourceMap?.customer?.email || 
+    query.orderItem?.order?.customerSourceMap?.source?.email || 'N/A';
+  
+  const projectName = query.orderItem?.order?.property || 'N/A';
+  const createdAt = query.orderItem?.order?.createdAt || new Date().toISOString();
+
+  return {
+    id: query.id,
+    subject: query.title,
+    message: query.description,
+    response: null, // API doesn't return response in this structure
+    status: query.status?.name || 'UNKNOWN',
+    statusId: query.status?.id,
+    created_at: createdAt,
+    updated_at: query.updatedAt || createdAt,
+    responded_at: null,
+    priorityLevel: query.priorityLevel,
+    dueDate: query.dueDate,
+    vendor: query.vendor,
+    queryFileMaps: query.queryFileMaps || [],
+    orderItem: query.orderItem,
+    homeowner_registrations: {
+      customer_name: customerName,
+      customer_email: customerEmail,
+      project_name: projectName,
+    },
+  };
+};
 
 interface Query {
   id: string;
@@ -19,9 +54,49 @@ interface Query {
   message: string;
   response: string | null;
   status: string;
+  statusId?: string;
   created_at: string;
   updated_at: string;
   responded_at: string | null;
+  priorityLevel?: string;
+  dueDate?: string;
+  vendor?: {
+    id: string;
+    name: string;
+    email?: string;
+  } | null;
+  queryFileMaps?: Array<{
+    id: string;
+    type: string;
+    files?: {
+      id: string;
+      name: string;
+      type: string;
+      fileType: string;
+      filePath: string;
+    };
+  }>;
+  orderItem?: {
+    id: string;
+    productName?: string;
+    sku?: string;
+    brand?: string;
+    order?: {
+      id: string;
+      property?: string;
+      createdAt?: string;
+      customerSourceMap?: {
+        customer?: {
+          name: string;
+          email: string;
+        };
+        source?: {
+          name: string;
+          email: string;
+        };
+      };
+    };
+  };
   homeowner_registrations: {
     customer_name: string;
     customer_email: string;
@@ -32,51 +107,35 @@ interface Query {
 const QueriesManagement = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [queries, setQueries] = useState<Query[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedQuery, setSelectedQuery] = useState<Query | null>(null);
   const [response, setResponse] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedStatusId, setSelectedStatusId] = useState<string>("all");
 
+  const builderId = user && 'builderOrganization' in user 
+    ? user.builderOrganization.id 
+    : null;
+
   // Fetch statuses for QUERY module
   const { data: statusData, isLoading: isLoadingStatuses } = useGetStatusByModuleQuery({ module: "QUERY" });
   const statuses = statusData?.data || [];
 
-  const fetchQueries = useCallback(async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('homeowner_queries')
-        .select(`
-          *,
-          homeowner_registrations (
-            customer_name,
-            customer_email,
-            project_name
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setQueries(data || []);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      toast({
-        title: "Error fetching queries",
-        description: errorMessage,
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
+  // Fetch queries from API only when a specific status is selected
+  const { data: queriesData, isLoading: loading, refetch } = useGetBuilderQueriesQuery(
+    { 
+      builderId: builderId || "",
+      statusId: selectedStatusId !== "all" ? selectedStatusId : undefined,
+    },
+    { 
+      skip: !builderId || selectedStatusId === "all",
+      refetchOnMountOrArgChange: true,
     }
-  }, [toast]);
+  );
 
-  useEffect(() => {
-    if (user) {
-      fetchQueries();
-    }
-  }, [user, fetchQueries]);
+  // Transform queries data - only show queries when a status is selected
+  const queries: Query[] = selectedStatusId !== "all" 
+    ? (queriesData?.data?.map(transformQuery) || [])
+    : [];
 
   const handleRespond = async () => {
     if (!selectedQuery || !response.trim()) return;
@@ -97,7 +156,7 @@ const QueriesManagement = () => {
       setDialogOpen(false);
       setResponse("");
       setSelectedQuery(null);
-      fetchQueries();
+      refetch();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({
@@ -125,30 +184,29 @@ const QueriesManagement = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'open':
-        return <Badge variant="destructive"><Clock className="w-3 h-3 mr-1" />Open</Badge>;
-      case 'responded':
-        return <Badge variant="default"><CheckCircle className="w-3 h-3 mr-1" />Responded</Badge>;
-      case 'closed':
-        return <Badge variant="secondary">Closed</Badge>;
+    const statusUpper = status?.toUpperCase() || '';
+    switch (statusUpper) {
+      case 'CREATED':
+        return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" />Created</Badge>;
+      case 'INPROGRESS':
+      case 'IN_PROGRESS':
+        return <Badge variant="default"><Clock className="w-3 h-3 mr-1" />In Progress</Badge>;
+      case 'REVIEW':
+        return <Badge variant="outline"><CheckCircle className="w-3 h-3 mr-1" />Review</Badge>;
+      case 'ASSIGNED':
+      case 'ASSINGED':
+        return <Badge variant="default">Assigned</Badge>;
+      case 'ASSIGNED TO VENDOR':
+        return <Badge variant="default">Assigned to Vendor</Badge>;
+      case 'AWAITING VENDOR ACTION':
+        return <Badge variant="outline">Awaiting Vendor</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
   };
 
-  // Filter queries based on selected status
-  const filterQueriesByStatus = (queriesList: Query[]) => {
-    if (selectedStatusId === 'all') return queriesList;
-    const selectedStatus = statuses.find(s => s.id === selectedStatusId);
-    if (!selectedStatus) return queriesList;
-    // Match by status name (case-insensitive)
-    return queriesList.filter(q => q.status?.toUpperCase() === selectedStatus.name.toUpperCase());
-  };
-
-  const openQueries = filterQueriesByStatus(queries.filter(q => q.status === 'open'));
-  const respondedQueries = filterQueriesByStatus(queries.filter(q => q.status === 'responded'));
-  const closedQueries = filterQueriesByStatus(queries.filter(q => q.status === 'closed'));
+  // Display all queries (already filtered by API)
+  const displayQueries = queries;
 
   const QueryCard = ({ query }: { query: Query }) => (
     <Card className="mb-4">
@@ -161,28 +219,66 @@ const QueriesManagement = () => {
               <br />
               Project: {query.homeowner_registrations.project_name || 'N/A'}
               <br />
+              {query.orderItem?.productName && (
+                <>
+                  Product: {query.orderItem.productName}
+                  {query.orderItem.brand && ` (${query.orderItem.brand})`}
+                  {query.orderItem.sku && ` - SKU: ${query.orderItem.sku}`}
+                  <br />
+                </>
+              )}
+              {query.priorityLevel && (
+                <>
+                  Priority: {query.priorityLevel}
+                  <br />
+                </>
+              )}
+              {query.dueDate && (
+                <>
+                  Due Date: {new Date(query.dueDate).toLocaleDateString()}
+                  <br />
+                </>
+              )}
               Submitted: {formatDate(query.created_at)}
             </CardDescription>
           </div>
           <div className="flex items-center space-x-2">
             {getStatusBadge(query.status)}
-            <Button
+            {/* <Button
               variant="outline"
               size="sm"
               onClick={() => openResponseDialog(query)}
             >
               <MessageSquare className="w-4 h-4 mr-2" />
               {query.response ? 'View/Edit Response' : 'Respond'}
-            </Button>
+            </Button> */}
           </div>
         </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           <div>
-            <h4 className="font-medium text-sm text-muted-foreground mb-2">Query Message:</h4>
+            <h4 className="font-medium text-sm text-muted-foreground mb-2">Query Description:</h4>
             <p className="text-sm bg-muted p-3 rounded-md">{query.message}</p>
           </div>
+          {/* {query.queryFileMaps && query.queryFileMaps.length > 0 && (
+            <div>
+              <h4 className="font-medium text-sm text-muted-foreground mb-2">Attachments:</h4>
+              <div className="flex flex-wrap gap-2">
+                {query.queryFileMaps.map((fileMap) => (
+                  <a
+                    key={fileMap.id}
+                    href={fileMap.files?.filePath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    {fileMap.files?.name || 'File'}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )} */}
           {query.response && (
             <div>
               <h4 className="font-medium text-sm text-muted-foreground mb-2">
@@ -242,48 +338,23 @@ const QueriesManagement = () => {
           </div>
 
           <TabsContent value="open">
-            {openQueries.length === 0 ? (
+            {selectedStatusId === "all" ? (
               <Card>
                 <CardContent className="py-12 text-center">
                   <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No open queries at the moment.</p>
+                  <p className="text-muted-foreground">Please select a status to view queries.</p>
                 </CardContent>
               </Card>
-            ) : (
-              <div>
-                {openQueries.map((query) => (
-                  <QueryCard key={query.id} query={query} />
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="responded">
-            {respondedQueries.length === 0 ? (
+            ) : displayQueries.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center">
-                  <p className="text-muted-foreground">No responded queries yet.</p>
+                  <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">No queries found for the selected status.</p>
                 </CardContent>
               </Card>
             ) : (
               <div>
-                {respondedQueries.map((query) => (
-                  <QueryCard key={query.id} query={query} />
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="closed">
-            {closedQueries.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <p className="text-muted-foreground">No closed queries yet.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div>
-                {closedQueries.map((query) => (
+                {displayQueries.map((query) => (
                   <QueryCard key={query.id} query={query} />
                 ))}
               </div>
@@ -299,9 +370,25 @@ const QueriesManagement = () => {
               </DialogTitle>
               <DialogDescription>
                 {selectedQuery && (
-                  <div className="mt-2 p-3 bg-muted rounded-md">
+                  <div className="mt-2 p-3 bg-muted rounded-md space-y-2">
                     <p className="font-medium">{selectedQuery.subject}</p>
-                    <p className="text-sm mt-1">{selectedQuery.message}</p>
+                    <p className="text-sm">{selectedQuery.message}</p>
+                    {selectedQuery.orderItem?.productName && (
+                      <p className="text-sm text-muted-foreground">
+                        Product: {selectedQuery.orderItem.productName}
+                        {selectedQuery.orderItem.brand && ` (${selectedQuery.orderItem.brand})`}
+                      </p>
+                    )}
+                    {selectedQuery.priorityLevel && (
+                      <p className="text-sm text-muted-foreground">
+                        Priority: {selectedQuery.priorityLevel}
+                      </p>
+                    )}
+                    {selectedQuery.dueDate && (
+                      <p className="text-sm text-muted-foreground">
+                        Due Date: {new Date(selectedQuery.dueDate).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
                 )}
               </DialogDescription>

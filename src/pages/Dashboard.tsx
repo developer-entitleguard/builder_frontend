@@ -523,7 +523,7 @@ const Dashboard = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2">
+          {/* <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px]">
@@ -538,10 +538,10 @@ const Dashboard = () => {
                 <SelectItem value="delivered">Delivered</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </div> */}
           <Button
             onClick={() => navigate("/onboarding")}
-            className="whitespace-nowrap"
+            className="whitespace-nowrap ml-auto"
           >
             <Plus className="h-4 w-4 mr-2" />
             New Registration

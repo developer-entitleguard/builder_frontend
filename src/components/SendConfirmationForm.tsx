@@ -3,12 +3,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Mail, Download, Eye, ArrowLeft } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
+import { skipToken } from "@reduxjs/toolkit/query";
 
 interface SendConfirmationFormProps {
   onNext?: () => void;
+  customerId?: string;
 }
 
-const SendConfirmationForm = ({ onNext }: SendConfirmationFormProps) => {
+const SendConfirmationForm = ({ onNext, customerId }: SendConfirmationFormProps) => {
+  const { user } = useAuth();
   const [status, setStatus] = useState<'sending' | 'sent' | 'delivered'>('sending');
 
   useEffect(() => {
@@ -22,11 +27,30 @@ const SendConfirmationForm = ({ onNext }: SendConfirmationFormProps) => {
     };
   }, []);
 
-  const customerData = {
-    name: "John & Sarah Johnson",
-    email: "john.johnson@email.com",
-    propertyAddress: "123 Oak Street, Austin, TX 78701"
-  };
+  // Fetch customer details and summary from API (same as review)
+  const { data: customerDetailsData } = useGetCustomerDetailsQuery(
+    user?.id && customerId
+      ? { builderId: user.id as string, customerId }
+      : skipToken
+  );
+
+  const apiCustomer = customerDetailsData?.data?.customer;
+  const apiSummary = customerDetailsData?.data;
+
+  const customerData = apiCustomer
+    ? {
+        name: `${apiCustomer.firstName} ${apiCustomer.lastName}`.trim(),
+        email: apiCustomer.email,
+        propertyAddress:
+          apiCustomer.address && apiCustomer.city && apiCustomer.state
+            ? `${apiCustomer.address}, ${apiCustomer.city}, ${apiCustomer.state} ${apiCustomer.zip || ""}`
+            : apiCustomer.address || "",
+      }
+    : {
+        name: "Homeowner",
+        email: "",
+        propertyAddress: "",
+      };
 
   const getStatusMessage = () => {
     switch (status) {
@@ -115,19 +139,27 @@ const SendConfirmationForm = ({ onNext }: SendConfirmationFormProps) => {
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">8</p>
+              <p className="text-2xl font-bold text-primary">
+                {apiSummary?.totalItems ?? 0}
+              </p>
               <p className="text-sm text-muted-foreground">Items</p>
             </div>
             <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">16</p>
+              <p className="text-2xl font-bold text-primary">
+                {apiSummary?.totalDocuments ?? 0}
+              </p>
               <p className="text-sm text-muted-foreground">Documents</p>
             </div>
             <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">4</p>
+              <p className="text-2xl font-bold text-primary">
+                {apiSummary?.totalCategories ?? 0}
+              </p>
               <p className="text-sm text-muted-foreground">Categories</p>
             </div>
             <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">100%</p>
+              <p className="text-2xl font-bold text-primary">
+                {apiSummary ? `${apiSummary.completionPercent}%` : "0%"}
+              </p>
               <p className="text-sm text-muted-foreground">Complete</p>
             </div>
           </div>

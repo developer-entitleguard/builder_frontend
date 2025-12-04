@@ -312,7 +312,7 @@ const Onboarding = () => {
       case 'review':
         return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} />;
       case 'send':
-        return <SendConfirmationForm />;
+        return <SendConfirmationForm customerId={formData.customer?.customerId} />;
       default:
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
     }

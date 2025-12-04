@@ -88,9 +88,9 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
       // Add cache-busting query parameter to prevent 304 responses
       const timestamp = Date.now();
       const url = import.meta.env.DEV
-        ? `/auth/download-template`
+        ? `/api/download-template`
         // ?t=${timestamp}
-        : `${apiBaseUrl}/auth/download-template`;
+        : `${apiBaseUrl}/api/download-template`;
 
       // Fetch the file with cache-busting headers
       const response = await fetch(url, {

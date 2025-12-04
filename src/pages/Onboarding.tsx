@@ -496,7 +496,7 @@ const Onboarding = () => {
               </div>
               <div className="flex items-center space-x-4">
                 <Button variant="outline" onClick={handleSaveAndExit}>
-                  Save & Exit asd
+                  Save & Exit
                 </Button>
                 <div className="text-sm text-muted-foreground">
                   Step {['customer', 'items', 'review', 'send'].indexOf(currentStep) + 1} of 4

@@ -212,6 +212,17 @@ export const itemsApi = api.injectEndpoints({
         color: string | null;
         notes: string | null;
         files: unknown;
+        builderCustomerItemFiles?: Array<{
+          id: string; // id used for delete (/api/itemfile/{id})
+          type: 'Warranty' | 'Manual' | string;
+          files: {
+            id: string;
+            name: string;
+            type: string;
+            fileType: string;
+            filePath: string;
+          };
+        }>;
       }>;
     }, { billMaterialId: string; customerId: string }>({
       query: (params) => ({

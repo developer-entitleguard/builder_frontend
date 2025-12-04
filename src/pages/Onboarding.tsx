@@ -45,12 +45,14 @@ const Onboarding = () => {
     }
   }, [user, navigate]);
 
-  // Check for existing registration ID in URL params and load data
+  // Check for existing registration ID in URL params
   useEffect(() => {
     const editingId = searchParams.get('id');
     if (editingId && user) {
       setRegistrationId(editingId);
-      loadExistingRegistration(editingId);
+      // Legacy Supabase-backed registrations are no longer loaded.
+      // We now rely on builder APIs and in-memory formData instead.
+      setLoading(false);
     }
   }, [searchParams, user]);
 
@@ -239,7 +241,8 @@ const Onboarding = () => {
       setRegistrationId(itemsData.registrationId);
     }
     setFormData(prev => ({ ...prev, items: itemsData }));
-    handleNextStep();
+    // Go directly to review page, skipping documents
+    setCurrentStep('review');
   };
 
   const handleDocumentsNext = async (documentsData: any) => {
@@ -302,14 +305,16 @@ const Onboarding = () => {
 
   const renderCurrentStep = () => {
     switch (currentStep) {
+      case 'overview':
+        return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
       case 'customer':
-        return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} />;
+        return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} customerId={registrationId || undefined} />;
       case 'items':
         return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} />;
       case 'review':
         return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} />;
       case 'send':
-        return <SendConfirmationForm />;
+        return <SendConfirmationForm customerId={formData.customer?.customerId} />;
       default:
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
     }
@@ -350,7 +355,7 @@ const Onboarding = () => {
                   Save & Exit
                 </Button>
                 <div className="text-sm text-muted-foreground">
-                  Step {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) + 1} of 5
+                  Step {['customer', 'items', 'review', 'send'].indexOf(currentStep) + 1} of 4
                 </div>
               </div>
             </div>
@@ -358,18 +363,18 @@ const Onboarding = () => {
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <div>
-                {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) > 0 && (
+                {['customer', 'items', 'review', 'send'].indexOf(currentStep) > 0 && (
                   <Button variant="outline" onClick={handlePreviousStep}>
                     Previous
                   </Button>
                 )}
               </div>
               <div className="flex space-x-2">
-                {['customer', 'items', 'documents', 'review', 'send'].map((step, index) => (
+                {['customer', 'items', 'review', 'send'].map((step, index) => (
                   <div
                     key={step}
                     className={`w-3 h-3 rounded-full ${
-                      ['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) >= index
+                      ['customer', 'items', 'review', 'send'].indexOf(currentStep) >= index
                         ? 'bg-primary'
                         : 'bg-muted'
                     }`}

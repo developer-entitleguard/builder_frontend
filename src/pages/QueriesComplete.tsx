@@ -26,6 +26,7 @@ import {
 import { format } from "date-fns";
 import { CalendarIcon, ChevronDown, ArrowLeft, Check, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getApiBaseUrl, getApiBaseUrlWithPrefix } from "@/lib/config";
 
 interface CaseReview {
   id: string;
@@ -207,12 +208,12 @@ const QueriesComplete = () => {
         <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {queryData ? `Query ID: ${queryData.id}` : `Case Review #{mockCase.caseNumber}`}
+              {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
             </h1>
             <p className="text-gray-600 mt-2">
               {queryData?.orderItem?.order?.createdAt 
                 ? `Submitted on ${format(new Date(queryData.orderItem.order.createdAt), "MMM d, yyyy 'at' h:mm a")}`
-                : `Submitted on ${format(mockCase.submittedAt, "MMM d, yyyy 'at' h:mm a")}`
+                : ""
               }
             </p>
           </div>
@@ -244,45 +245,51 @@ const QueriesComplete = () => {
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Submitted By</Label>
                     <p className="text-gray-900 font-semibold">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || mockCase.submittedBy}
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || "-"}
                     </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Contact Phone</Label>
                     <p className="text-gray-900 font-semibold">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.contact || mockCase.contactPhone}
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.contact || "-"}
                     </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Contact Email</Label>
                     <p className="text-gray-900">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.email || mockCase.contactEmail}
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.email || "-"}
                     </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Priority</Label>
-                    <Badge className={getPriorityColor(queryData?.priorityLevel || mockCase.priority)}>
-                      {queryData?.priorityLevel || mockCase.priority}
-                    </Badge>
+                    <div className="mt-1">
+                      <Badge className={getPriorityColor(queryData?.priorityLevel || priorityLevel)}>
+                        {queryData?.priorityLevel || priorityLevel}
+                      </Badge>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Category</Label>
-                    <Badge variant="outline" className="font-semibold">
-                      {queryData?.orderItem?.productName || mockCase.category}
-                    </Badge>
+                    <div className="mt-1">
+                      <Badge variant="outline" className="font-semibold">
+                        {queryData?.orderItem?.productName || "-"}
+                      </Badge>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Location</Label>
-                    <Badge variant="outline" className="font-semibold">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.address?.city || mockCase.location}
-                    </Badge>
+                    <div className="mt-1">
+                      <Badge variant="outline" className="font-semibold">
+                        {queryData?.orderItem?.order?.customerSourceMap?.customer?.address?.city || "-"}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
 
                 <div className="mb-6">
                   <Label className="text-sm font-medium text-gray-700">Description</Label>
                   <p className="text-gray-900 mt-2 leading-relaxed">
-                    {queryData?.description || mockCase.description}
+                    {queryData?.description || "-"}
                   </p>
                 </div>
 
@@ -304,11 +311,7 @@ const QueriesComplete = () => {
                         </p>
                       </>
                     ) : (
-                      <>
-                        <p>{mockCase.address.street}</p>
-                        <p>{mockCase.address.suite}</p>
-                        <p>{mockCase.address.city}, {mockCase.address.state} {mockCase.address.zip}</p>
-                      </>
+                      <p className="text-gray-500">No address available</p>
                     )}
                   </div>
                 </div>
@@ -318,24 +321,95 @@ const QueriesComplete = () => {
             {/* Photos Submitted */}
             <Card>
               <CardHeader>
-                <CardTitle>Photos Submitted ({mockCase.photos.length})</CardTitle>
+                <CardTitle>
+                  Photos Submitted ({queryData?.queryFileMaps?.length || 0})
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-4">
-                  {mockCase.photos.map((photo, index) => (
-                    <div key={index} className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center">
-                      <img 
-                        src={photo} 
-                        alt={`Case photo ${index + 1}`}
-                        className="w-full h-full object-cover rounded-lg"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = "/placeholder.svg";
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
+                {queryData?.queryFileMaps && queryData.queryFileMaps.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-4">
+                    {queryData.queryFileMaps.map((fileMap) => {
+                      const filePath = fileMap.files?.filePath;
+                      const fileName = fileMap.files?.name || 'Query file';
+                      
+                      // Construct image URL - try /api/files endpoint first
+                      let imageUrl: string | null = null;
+                      if (filePath) {
+                        if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+                          imageUrl = filePath;
+                        } else if (filePath.startsWith('/')) {
+                          const apiPrefix = getApiBaseUrlWithPrefix();
+                          const apiBaseUrl = getApiBaseUrl();
+                          // Try /api/files endpoint first as it's the most common pattern
+                          imageUrl = apiBaseUrl 
+                            ? `${apiBaseUrl}/api/files${filePath}`
+                            : `${apiPrefix}/files${filePath}`;
+                        } else {
+                          const apiPrefix = getApiBaseUrlWithPrefix();
+                          imageUrl = `${apiPrefix}/files/${filePath}`;
+                        }
+                      }
+                      
+                      // Track retry attempts to prevent infinite loops
+                      const maxRetries = 3;
+                      
+                      return (
+                        <div key={fileMap.id} className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                          {imageUrl ? (
+                            <img 
+                              src={imageUrl} 
+                              alt={fileName}
+                              className="w-full h-full object-cover rounded-lg"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                const retryCount = parseInt(target.dataset.retryCount || '0', 10);
+                                
+                                // Prevent infinite loops
+                                if (retryCount >= maxRetries) {
+                                  target.src = "/placeholder.svg";
+                                  target.onerror = null; // Remove error handler to stop retries
+                                  return;
+                                }
+                                
+                                // Try alternative endpoints
+                                if (filePath && filePath.startsWith('/')) {
+                                  const apiPrefix = getApiBaseUrlWithPrefix();
+                                  const apiBaseUrl = getApiBaseUrl();
+                                  const alternatives = [
+                                    apiBaseUrl ? `${apiBaseUrl}${filePath}` : `${apiPrefix}${filePath}`,
+                                    apiBaseUrl ? `${apiBaseUrl}/api/uploads${filePath}` : `${apiPrefix}/uploads${filePath}`,
+                                    apiBaseUrl ? `${apiBaseUrl}/api/file/download?path=${encodeURIComponent(filePath)}` : `${apiPrefix}/file/download?path=${encodeURIComponent(filePath)}`,
+                                  ];
+                                  
+                                  const currentSrc = target.src;
+                                  const nextAlt = alternatives.find(alt => alt !== currentSrc);
+                                  
+                                  if (nextAlt && retryCount < maxRetries) {
+                                    target.dataset.retryCount = String(retryCount + 1);
+                                    target.src = nextAlt;
+                                  } else {
+                                    target.src = "/placeholder.svg";
+                                    target.onerror = null; // Remove error handler to stop retries
+                                  }
+                                } else {
+                                  target.src = "/placeholder.svg";
+                                  target.onerror = null; // Remove error handler to stop retries
+                                }
+                              }}
+                              data-retry-count="0"
+                            />
+                          ) : (
+                            <div className="text-gray-400">No image</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    No photos submitted
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -350,7 +424,17 @@ const QueriesComplete = () => {
               <CardContent className="space-y-4">
                 <div>
                   <Label htmlFor="vendor-select">Select Vendor</Label>
-                  <Select value={selectedVendor} onValueChange={setSelectedVendor}>
+                  <Select 
+                    value={selectedVendor} 
+                    onValueChange={(value) => {
+                      setSelectedVendor(value);
+                      // Auto-populate vendor phone when vendor is selected
+                      const selectedVendorData = vendors.find(v => v.id === value);
+                      if (selectedVendorData?.contact) {
+                        setVendorPhone(selectedVendorData.contact);
+                      }
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : "Select a vendor..."} />
                     </SelectTrigger>
@@ -371,13 +455,20 @@ const QueriesComplete = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="vendor-phone">Or Enter Vendor Phone Number</Label>
+                  <Label htmlFor="vendor-phone">Vendor Contact</Label>
                   <Input
                     id="vendor-phone"
                     placeholder="(555) 555-5555"
                     value={vendorPhone}
                     onChange={(e) => setVendorPhone(e.target.value)}
                   />
+                  {selectedVendor && vendors.find(v => v.id === selectedVendor) && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {vendors.find(v => v.id === selectedVendor)?.email && (
+                        <>Email: {vendors.find(v => v.id === selectedVendor)?.email}</>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <div>

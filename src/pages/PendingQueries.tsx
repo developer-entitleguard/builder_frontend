@@ -143,7 +143,6 @@ const PendingQueries = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [queryData, setQueryData] = useState<BuilderQuery | null>(null);
-  const [selectedCase, setSelectedCase] = useState<CaseReview | null>(mockCases[0]);
   const [selectedVendor, setSelectedVendor] = useState<string>("");
   const [vendorPhone, setVendorPhone] = useState<string>("");
   const [priorityLevel, setPriorityLevel] = useState<"Low" | "Medium" | "High" | "Critical">("Medium");
@@ -262,14 +261,12 @@ const PendingQueries = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
-            {queryData ? `Query ID: ${queryData.id}` : `Case Review #{selectedCase?.caseNumber}`}
+            {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
           </h1>
           <p className="text-gray-600 mt-2">
             {queryData?.orderItem?.order?.createdAt 
               ? `Submitted on ${format(new Date(queryData.orderItem.order.createdAt), "MMM d, yyyy 'at' h:mm a")}`
-              : selectedCase?.submittedAt 
-                ? `Submitted on ${format(selectedCase.submittedAt, "MMM d, yyyy 'at' h:mm a")}`
-                : ""
+              : ""
             }
           </p>
         </div>
@@ -282,7 +279,7 @@ const PendingQueries = () => {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Case Details</CardTitle>
                 <Button variant="outline" size="sm">
-                  {queryData?.status?.name || selectedCase?.status || "Open"}
+                  {queryData?.status?.name || "Open"}
                 </Button>
               </CardHeader>
               <CardContent>
@@ -290,45 +287,51 @@ const PendingQueries = () => {
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Submitted By</Label>
                     <p className="text-gray-900">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || selectedCase?.submittedBy}
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || "-"}
                     </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Contact Phone</Label>
                     <p className="text-gray-900">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.contact || selectedCase?.contactPhone}
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.contact || "-"}
                     </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Contact Email</Label>
                     <p className="text-gray-900">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.email || selectedCase?.contactEmail}
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.email || "-"}
                     </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Priority</Label>
-                    <Badge className={getPriorityColor(priorityLevel)}>
-                      {queryData?.priorityLevel || priorityLevel}
-                    </Badge>
+                    <div className="mt-1">
+                      <Badge className={getPriorityColor(priorityLevel)}>
+                        {queryData?.priorityLevel || priorityLevel}
+                      </Badge>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Category</Label>
-                    <Badge variant="outline">
-                      {queryData?.orderItem?.productName || selectedCase?.category}
-                    </Badge>
+                    <div className="mt-1">
+                      <Badge variant="outline">
+                        {queryData?.orderItem?.productName || "-"}
+                      </Badge>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Location</Label>
-                    <Badge variant="outline">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.address?.city || selectedCase?.location}
-                    </Badge>
+                    <div className="mt-1">
+                      <Badge variant="outline">
+                        {queryData?.orderItem?.order?.customerSourceMap?.customer?.address?.city || "-"}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
 
                 <div className="mb-6">
                   <Label className="text-sm font-medium text-gray-700">Description</Label>
                   <p className="text-gray-900 mt-2">
-                    {queryData?.description || selectedCase?.description}
+                    {queryData?.description || "-"}
                   </p>
                 </div>
 
@@ -350,11 +353,7 @@ const PendingQueries = () => {
                         </p>
                       </>
                     ) : (
-                      <>
-                        <p>{selectedCase?.address.street}</p>
-                        <p>{selectedCase?.address.suite}</p>
-                        <p>{selectedCase?.address.city}, {selectedCase?.address.state} {selectedCase?.address.zip}</p>
-                      </>
+                      <p className="text-gray-500">No address available</p>
                     )}
                   </div>
                 </div>
@@ -365,7 +364,7 @@ const PendingQueries = () => {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  Photos Submitted ({queryData?.queryFileMaps?.length || selectedCase?.photos.length || 0})
+                  Photos Submitted ({queryData?.queryFileMaps?.length || 0})
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -449,22 +448,6 @@ const PendingQueries = () => {
                       );
                     })}
                   </div>
-                ) : selectedCase?.photos && selectedCase.photos.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-4">
-                    {selectedCase.photos.map((photo, index) => (
-                      <div key={index} className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center">
-                        <img 
-                          src={photo} 
-                          alt={`Case photo ${index + 1}`}
-                          className="w-full h-full object-cover rounded-lg"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.src = "/placeholder.svg";
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500">
                     No photos submitted
@@ -484,9 +467,19 @@ const PendingQueries = () => {
               <CardContent className="space-y-4">
                 <div>
                   <Label htmlFor="vendor-select">Select Vendor</Label>
-                  <Select value={selectedVendor} onValueChange={setSelectedVendor}>
+                  <Select 
+                    value={selectedVendor} 
+                    onValueChange={(value) => {
+                      setSelectedVendor(value);
+                      // Auto-populate vendor phone when vendor is selected
+                      const selectedVendorData = vendors.find(v => v.id === value);
+                      if (selectedVendorData?.contact) {
+                        setVendorPhone(selectedVendorData.contact);
+                      }
+                    }}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a vendor..." />
+                      <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : "Select a vendor..."} />
                     </SelectTrigger>
                     <SelectContent>
                       {isLoadingVendors ? (
@@ -505,13 +498,20 @@ const PendingQueries = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="vendor-phone">Or Enter Vendor Phone Number</Label>
+                  <Label htmlFor="vendor-phone">Vendor Contact</Label>
                   <Input
                     id="vendor-phone"
                     placeholder="(555) 555-5555"
                     value={vendorPhone}
                     onChange={(e) => setVendorPhone(e.target.value)}
                   />
+                  {selectedVendor && vendors.find(v => v.id === selectedVendor) && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {vendors.find(v => v.id === selectedVendor)?.email && (
+                        <>Email: {vendors.find(v => v.id === selectedVendor)?.email}</>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <div>

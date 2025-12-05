@@ -197,7 +197,7 @@ const AwaitingAction = () => {
         <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {queryData ? `Query ID: ${queryData.id}` : `Case #{mockCase.caseNumber}`}
+              {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
             </h1>
             <p className="text-gray-600 mt-2">
               {queryData?.orderItem?.order?.createdAt 
@@ -206,7 +206,7 @@ const AwaitingAction = () => {
                     month: "short",
                     day: "numeric"
                   })}`
-                : `Assigned to you on ${mockCase.assignedDate}`
+                : ""
               }
             </p>
           </div>
@@ -230,7 +230,7 @@ const AwaitingAction = () => {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Case Details</CardTitle>
                 <Badge variant="secondary" className="bg-gray-100 text-gray-700">
-                  {queryData?.status?.name || mockCase.status}
+                  {queryData?.status?.name || "-"}
                 </Badge>
               </CardHeader>
               <CardContent>
@@ -238,17 +238,17 @@ const AwaitingAction = () => {
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Submitted by</Label>
                     <p className="text-gray-900">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || mockCase.submittedBy}
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || "-"}
                     </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Department</Label>
-                    <p className="text-gray-900">{mockCase.department}</p>
+                    <p className="text-gray-900">-</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Priority</Label>
-                    <Badge className={getPriorityColor(queryData?.priorityLevel || mockCase.priority)}>
-                      {queryData?.priorityLevel || mockCase.priority}
+                    <Badge className={getPriorityColor(queryData?.priorityLevel || "Medium")}>
+                      {queryData?.priorityLevel || "-"}
                     </Badge>
                   </div>
                   <div>
@@ -260,7 +260,7 @@ const AwaitingAction = () => {
                             month: "short",
                             day: "numeric"
                           })
-                        : mockCase.dueDate
+                        : "-"
                       }
                     </p>
                   </div>
@@ -269,7 +269,7 @@ const AwaitingAction = () => {
                 <div>
                   <Label className="text-sm font-medium text-gray-700">Description</Label>
                   <p className="text-gray-900 mt-2 leading-relaxed">
-                    {queryData?.description || mockCase.description}
+                    {queryData?.description || "-"}
                   </p>
                 </div>
               </CardContent>

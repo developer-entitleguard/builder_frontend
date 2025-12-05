@@ -156,17 +156,17 @@ const SendConfirmationForm = ({ onNext, customerId }: SendConfirmationFormProps)
               </p>
               <p className="text-sm text-muted-foreground">Categories</p>
             </div>
-            <div className="p-4 border rounded-lg">
+            {/* <div className="p-4 border rounded-lg">
               <p className="text-2xl font-bold text-primary">
                 {apiSummary ? `${apiSummary.completionPercent}%` : "0%"}
               </p>
               <p className="text-sm text-muted-foreground">Complete</p>
-            </div>
+            </div> */}
           </div>
         </CardContent>
       </Card>
 
-      {status === 'delivered' && (
+      {/* {status === 'delivered' && (
         <Card>
           <CardHeader>
             <CardTitle>Next Steps</CardTitle>
@@ -189,7 +189,7 @@ const SendConfirmationForm = ({ onNext, customerId }: SendConfirmationFormProps)
             </div>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       <div className="flex justify-between items-center pt-6 border-t">
         <Button 

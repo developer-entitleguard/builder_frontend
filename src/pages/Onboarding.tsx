@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,14 +21,89 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+// Type definitions
+interface CustomerFormData {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  propertyAddress?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  projectName?: string;
+  settlementDate?: string;
+  notes?: string;
+  customerId?: string;
+  registrationId?: string;
+}
+
+// RegistrationItem type matching ItemsSelectionForm
+interface RegistrationItem {
+  id: string;
+  name: string;
+  category: string;
+  brand: string | null;
+  model: string | null;
+  make: string | null;
+  description: string | null;
+  price: number | null;
+  bom_id: string | null;
+  color?: string;
+  custom_notes?: string;
+  is_custom?: boolean;
+  serial_number?: string;
+  builderItemId?: string;
+  seller?: string;
+  quantity?: number;
+  [key: string]: unknown;
+}
+
+interface ItemsFormData {
+  selected_items?: RegistrationItem[];
+  [key: string]: unknown;
+}
+
+interface OnboardingFormData {
+  customer?: CustomerFormData;
+  items?: ItemsFormData;
+  documents?: Record<string, unknown>;
+}
+
+interface RegistrationData {
+  builder_id: string;
+  status: string;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  property_address?: string;
+  property_city?: string;
+  property_state?: string;
+  property_zip?: string;
+  project_name?: string;
+  settlement_date?: string | null;
+  notes?: string;
+  selected_items?: ItemsFormData;
+  documents_uploaded?: Record<string, unknown>;
+}
+
 const Onboarding = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [searchParams] = useSearchParams();
-  const [currentStep, setCurrentStep] = useState('customer');
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Helper function to get step from URL
+  const getStepFromUrl = (params: URLSearchParams) => {
+    const stepParam = params.get('step');
+    const validSteps = ['overview', 'customer', 'items', 'review', 'send'];
+    return stepParam && validSteps.includes(stepParam) ? stepParam : 'customer';
+  };
+  
+  // Initialize currentStep from URL params, fallback to 'customer'
+  const [currentStep, setCurrentStep] = useState(() => getStepFromUrl(searchParams));
   const [registrationId, setRegistrationId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<OnboardingFormData>({
     customer: {},
     items: {},
     documents: {}
@@ -37,7 +112,10 @@ const Onboarding = () => {
   const [originalEmail, setOriginalEmail] = useState<string | null>(null);
   const [originalStatus, setOriginalStatus] = useState<string | null>(null);
   const [emailChangeDialogOpen, setEmailChangeDialogOpen] = useState(false);
-  const [pendingCustomerData, setPendingCustomerData] = useState<any>(null);
+  const [pendingCustomerData, setPendingCustomerData] = useState<CustomerFormData | null>(null);
+  
+  // Ref to track if we're updating URL from internal state change (to prevent loop)
+  const isInternalStepChange = useRef(false);
 
   useEffect(() => {
     if (!user) {
@@ -55,6 +133,31 @@ const Onboarding = () => {
       setLoading(false);
     }
   }, [searchParams, user]);
+  
+  // Sync step from URL when URL changes externally (e.g., browser back/forward)
+  useEffect(() => {
+    if (isInternalStepChange.current) {
+      isInternalStepChange.current = false;
+      return;
+    }
+    
+    const stepFromUrl = getStepFromUrl(searchParams);
+    if (stepFromUrl !== currentStep) {
+      setCurrentStep(stepFromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+  
+  // Update URL when currentStep changes
+  useEffect(() => {
+    const currentStepParam = searchParams.get('step');
+    if (currentStepParam !== currentStep) {
+      isInternalStepChange.current = true;
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set('step', currentStep);
+      setSearchParams(newSearchParams, { replace: true });
+    }
+  }, [currentStep, searchParams, setSearchParams]);
 
   const loadExistingRegistration = async (id: string) => {
     setLoading(true);
@@ -83,7 +186,7 @@ const Onboarding = () => {
       setOriginalEmail(data.customer_email);
       setOriginalStatus(data.status);
       
-      const existingFormData = {
+      const existingFormData: OnboardingFormData = {
         customer: {
           firstName: data.customer_name?.split(' ')[0] || '',
           lastName: data.customer_name?.split(' ').slice(1).join(' ') || '',
@@ -97,8 +200,8 @@ const Onboarding = () => {
           settlementDate: data.settlement_date || '',
           notes: data.notes || ''
         },
-        items: data.selected_items || {},
-        documents: data.documents_uploaded || {}
+        items: (data.selected_items ? (Array.isArray(data.selected_items) ? { selected_items: data.selected_items as RegistrationItem[] } : {}) : {}) as ItemsFormData,
+        documents: (data.documents_uploaded ? (typeof data.documents_uploaded === 'object' ? data.documents_uploaded as Record<string, unknown> : {}) : {})
       };
 
       setFormData(existingFormData);
@@ -112,10 +215,11 @@ const Onboarding = () => {
         setCurrentStep('items');
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({
         title: "Error loading registration",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive"
       });
       navigate('/dashboard');
@@ -126,9 +230,13 @@ const Onboarding = () => {
 
   const handleStepClick = (stepId: string) => {
     setCurrentStep(stepId);
+    // Update URL immediately when step is clicked
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set('step', stepId);
+    setSearchParams(newSearchParams, { replace: true });
   };
 
-  const saveRegistrationData = async (stepData: any, step: string) => {
+  const saveRegistrationData = async (stepData: CustomerFormData | ItemsFormData | Record<string, unknown>, step: string) => {
     if (!user) return;
 
     try {
@@ -137,14 +245,14 @@ const Onboarding = () => {
       console.log('Onboarding - updatedFormData:', updatedFormData);
       setFormData(updatedFormData);
 
-      let registrationData: any = {
+      let registrationData: RegistrationData = {
         builder_id: user.id,
         status: 'draft'
       };
 
       // Add customer data
       if (updatedFormData.customer) {
-        const customerData = updatedFormData.customer as any;
+        const customerData = updatedFormData.customer;
         console.log('Onboarding - Processing customer data:', customerData);
         registrationData = {
           ...registrationData,
@@ -171,7 +279,7 @@ const Onboarding = () => {
 
       // Add documents data
       if (updatedFormData.documents) {
-        registrationData.documents_uploaded = updatedFormData.documents;
+        registrationData.documents_uploaded = updatedFormData.documents as Record<string, unknown>;
       }
 
       // Update status based on current step
@@ -181,11 +289,29 @@ const Onboarding = () => {
         registrationData.status = 'documents_pending';
       }
 
+      // Prepare data for Supabase with proper types
+      const supabaseData = {
+        builder_id: registrationData.builder_id,
+        status: registrationData.status,
+        customer_name: registrationData.customer_name || '',
+        customer_email: registrationData.customer_email || '',
+        customer_phone: registrationData.customer_phone || '',
+        property_address: registrationData.property_address || '',
+        property_city: registrationData.property_city || '',
+        property_state: registrationData.property_state || '',
+        property_zip: registrationData.property_zip || '',
+        project_name: registrationData.project_name || '',
+        settlement_date: registrationData.settlement_date || null,
+        notes: registrationData.notes || '',
+        selected_items: registrationData.selected_items ? JSON.parse(JSON.stringify(registrationData.selected_items)) : null,
+        documents_uploaded: registrationData.documents_uploaded ? JSON.parse(JSON.stringify(registrationData.documents_uploaded)) : null
+      };
+
       if (registrationId) {
         // Update existing registration
         const { error } = await supabase
           .from('homeowner_registrations')
-          .update(registrationData)
+          .update(supabaseData)
           .eq('id', registrationId);
 
         if (error) throw error;
@@ -193,23 +319,24 @@ const Onboarding = () => {
         // Create new registration
         const { data, error } = await supabase
           .from('homeowner_registrations')
-          .insert(registrationData)
+          .insert(supabaseData)
           .select()
           .single();
 
         if (error) throw error;
         setRegistrationId(data.id);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({
         title: "Error saving data",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive"
       });
     }
   };
 
-  const handleCustomerNext = async (customerData: any) => {
+  const handleCustomerNext = async (customerData: CustomerFormData) => {
     // Check if email changed for sent registrations
     if (originalStatus === 'sent' && originalEmail && customerData.email !== originalEmail) {
       setPendingCustomerData(customerData);
@@ -236,16 +363,22 @@ const Onboarding = () => {
     handleNextStep();
   };
 
-  const handleItemsNext = async (itemsData: any) => {
-    if (itemsData.registrationId) {
-      setRegistrationId(itemsData.registrationId);
+  const handleItemsNext = async (itemsData: { selected_items: RegistrationItem[] }) => {
+    // Extract registrationId if it exists in the data (though it shouldn't be in FormData)
+    const registrationIdFromData = (itemsData as { selected_items: RegistrationItem[]; registrationId?: string }).registrationId;
+    if (registrationIdFromData) {
+      setRegistrationId(registrationIdFromData);
     }
-    setFormData(prev => ({ ...prev, items: itemsData }));
+    setFormData(prev => ({ ...prev, items: itemsData as ItemsFormData }));
     // Go directly to review page, skipping documents
     setCurrentStep('review');
+    // Update URL when moving to review step
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set('step', 'review');
+    setSearchParams(newSearchParams, { replace: true });
   };
 
-  const handleDocumentsNext = async (documentsData: any) => {
+  const handleDocumentsNext = async (documentsData: Record<string, unknown>) => {
     await saveRegistrationData(documentsData, 'documents');
     handleNextStep();
   };
@@ -262,7 +395,12 @@ const Onboarding = () => {
     const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex < steps.length - 1) {
-      setCurrentStep(steps[currentIndex + 1]);
+      const nextStep = steps[currentIndex + 1];
+      setCurrentStep(nextStep);
+      // Update URL when moving to next step
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set('step', nextStep);
+      setSearchParams(newSearchParams, { replace: true });
     }
   };
 
@@ -270,7 +408,12 @@ const Onboarding = () => {
     const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex > 0) {
-      setCurrentStep(steps[currentIndex - 1]);
+      const prevStep = steps[currentIndex - 1];
+      setCurrentStep(prevStep);
+      // Update URL when moving to previous step
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set('step', prevStep);
+      setSearchParams(newSearchParams, { replace: true });
     }
   };
 
@@ -294,10 +437,11 @@ const Onboarding = () => {
       });
 
       handleNextStep();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({
         title: "Error sending entitlement",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive"
       });
     }
@@ -314,7 +458,7 @@ const Onboarding = () => {
       case 'review':
         return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} />;
       case 'send':
-        return <SendConfirmationForm customerId={formData.customer?.customerId} />;
+        return <SendConfirmationForm customerId={(formData.customer as CustomerFormData)?.customerId} />;
       default:
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
     }

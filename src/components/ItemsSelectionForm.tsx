@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/hooks/useAuth";
-import { useRegistrations } from "@/hooks/useRegistrations";
 import { useToast } from "@/hooks/use-toast";
 import { useGetBillOfMaterialsQuery, useGetBuilderItemsByBOMQuery } from "@/store/api/items";
 import { getApiBaseUrl } from "@/lib/config";
@@ -81,7 +80,6 @@ interface ItemsSelectionFormProps {
 
 const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelectionFormProps) => {
   const { user } = useAuth();
-  const { updateRegistration } = useRegistrations();
   const { toast } = useToast();
   const [updateBuilderCustomerMap] = useUpdateBuilderCustomerMapMutation();
   const [selectedBomId, setSelectedBomId] = useState<string>("");
@@ -164,62 +162,133 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   // Transform API response to component format
   useEffect(() => {
     if (itemsData && selectedBomId && registrationId) {
-      // Handle both success and "already mapped" cases - both return data
-      const items = itemsData.data || [];
-      
-      if (items.length === 0) {
-        // No items found or not yet mapped
+      try {
+        // Handle both success and "already mapped" cases - both return data
+        const items = itemsData.data || [];
+        
+        if (items.length === 0) {
+          // No items found or not yet mapped
+          setSelectedItems([]);
+          return;
+        }
+
+        const transformedItems: RegistrationItem[] = items
+          .filter((item) => item && item.id) // Filter out invalid items
+          .map((item) => {
+            // Handle items with builderItem (from BOM)
+            if (item.builderItem) {
+              const builderItem = item.builderItem;
+
+              const warranty_documents =
+                item.builderCustomerItemFiles
+                  ?.filter((f) => f.type === 'Warranty' && f.files)
+                  .map((f) => ({
+                    // Use builderCustomerItemFiles.id for delete API (/api/itemfile/{id})
+                    id: f.id,
+                    name: f.files.name,
+                    url: f.files.filePath,
+                    path: f.files.filePath,
+                  })) || [];
+
+              const manual_documents =
+                item.builderCustomerItemFiles
+                  ?.filter((f) => f.type === 'Manual' && f.files)
+                  .map((f) => ({
+                    // Use builderCustomerItemFiles.id for delete API (/api/itemfile/{id})
+                    id: f.id,
+                    name: f.files.name,
+                    url: f.files.filePath,
+                    path: f.files.filePath,
+                  })) || [];
+
+              return {
+                id: item.id,
+                name: builderItem.name,
+                category: builderItem.category,
+                brand: item.brand || builderItem.brand || null,
+                model: item.model || builderItem.model || null,
+                make: item.make || builderItem.make || null,
+                description: builderItem.text || null,
+                price: builderItem.price ? parseFloat(builderItem.price) : null,
+                bom_id: selectedBomId,
+                color: item.color || null,
+                custom_notes: item.notes || null,
+                serial_number: item.serialNumber || null,
+                builderItemId: builderItem.id,
+                seller: item.seller || null,
+                warranty_documents,
+                manual_documents,
+                is_custom: false
+              } as RegistrationItem;
+            } else {
+              // Handle custom items (without builderItem)
+              const warranty_documents =
+                item.builderCustomerItemFiles
+                  ?.filter((f) => f.type === 'Warranty' && f.files)
+                  .map((f) => ({
+                    id: f.id,
+                    name: f.files.name,
+                    url: f.files.filePath,
+                    path: f.files.filePath,
+                  })) || [];
+
+              const manual_documents =
+                item.builderCustomerItemFiles
+                  ?.filter((f) => f.type === 'Manual' && f.files)
+                  .map((f) => ({
+                    id: f.id,
+                    name: f.files.name,
+                    url: f.files.filePath,
+                    path: f.files.filePath,
+                  })) || [];
+
+              // Construct a display name from available fields
+              const nameParts = [
+                item.brand,
+                item.model,
+                item.make
+              ].filter(Boolean);
+              
+              const displayName = nameParts.length > 0 
+                ? nameParts.join(' ') 
+                : (item.serialNumber ? `Item ${item.serialNumber}` : 'Custom Item');
+
+              return {
+                id: item.id,
+                name: displayName,
+                category: 'Other', // Default category for custom items
+                brand: item.brand || null,
+                model: item.model || null,
+                make: item.make || null,
+                description: null,
+                price: null,
+                bom_id: selectedBomId,
+                color: item.color || null,
+                custom_notes: item.notes || null,
+                serial_number: item.serialNumber || null,
+                builderItemId: null,
+                seller: item.seller || null,
+                warranty_documents,
+                manual_documents,
+                is_custom: true
+              } as RegistrationItem;
+            }
+          });
+        
+        console.log('Transformed items:', transformedItems);
+        setSelectedItems(transformedItems);
+      } catch (error) {
+        console.error('Error transforming items data:', error);
+        toast({
+          title: "Error processing items",
+          description: "Failed to process items from BOM. Please try again.",
+          variant: "destructive"
+        });
         setSelectedItems([]);
-        return;
       }
-
-      const transformedItems: RegistrationItem[] = items.map((item) => {
-        const builderItem = item.builderItem;
-
-        const warranty_documents =
-          item.builderCustomerItemFiles
-            ?.filter((f) => f.type === 'Warranty' && f.files)
-            .map((f) => ({
-              // Use builderCustomerItemFiles.id for delete API (/api/itemfile/{id})
-              id: f.id,
-              name: f.files.name,
-              url: f.files.filePath,
-              path: f.files.filePath,
-            })) || [];
-
-        const manual_documents =
-          item.builderCustomerItemFiles
-            ?.filter((f) => f.type === 'Manual' && f.files)
-            .map((f) => ({
-              // Use builderCustomerItemFiles.id for delete API (/api/itemfile/{id})
-              id: f.id,
-              name: f.files.name,
-              url: f.files.filePath,
-              path: f.files.filePath,
-            })) || [];
-
-        return {
-          id: item.id,
-          name: builderItem.name,
-          category: builderItem.category,
-          brand: item.brand || builderItem.brand || '',
-          model: item.model || builderItem.model || '',
-          make: item.make || builderItem.make || '',
-          description: builderItem.text || '',
-          price: builderItem.price ? parseFloat(builderItem.price) : null,
-          bom_id: selectedBomId,
-          color: item.color || '',
-          custom_notes: item.notes || '',
-          serial_number: item.serialNumber || '',
-          builderItemId: builderItem.id,
-          seller: item.seller || '',
-          warranty_documents,
-          manual_documents,
-          is_custom: false
-        };
-      });
-      
-      setSelectedItems(transformedItems);
+    } else if (itemsData && itemsData.data && itemsData.data.length === 0) {
+      // Explicitly handle empty data case
+      setSelectedItems([]);
     }
   }, [itemsData, selectedBomId, registrationId, toast]);
 
@@ -235,6 +304,14 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   }, [itemsError, selectedBomId, toast]);
 
   const handleBOMSelect = (bomId: string) => {
+    if (!registrationId) {
+      toast({
+        title: "Registration ID required",
+        description: "Please complete the customer details step first.",
+        variant: "destructive"
+      });
+      return;
+    }
     setSelectedBomId(bomId);
     // Items will be loaded automatically via the query hook
   };
@@ -598,11 +675,30 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
         builderItemFilesDtos: undefined, // No files for new custom item
       }).unwrap();
 
-      // Add to local state after successful API call
-      setSelectedItems(prev => [...prev, newCustomItem]);
+      // Close modal first
       setShowCustomItemModal(false);
       
-      // Refetch items to get the updated list with the new item
+      // Reset custom item form
+      setNewCustomItem({
+        id: '',
+        name: '',
+        category: 'Other',
+        brand: '',
+        model: '',
+        make: '',
+        description: '',
+        price: null,
+        bom_id: null,
+        color: '',
+        custom_notes: '',
+        is_custom: true,
+        serial_number: '',
+        builderItemId: '',
+        warranty_documents: [],
+        manual_documents: []
+      });
+      
+      // Refetch items to get the updated list with the new item from API
       await refetchItems();
 
       toast({
@@ -698,6 +794,16 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
             </CardContent>
           </Card>
 
+          {selectedBomId && !registrationId && (
+            <Card>
+              <CardContent className="py-8">
+                <p className="text-center text-muted-foreground">
+                  Please complete the customer details step first to load items from BOM.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {isLoadingItems && selectedBomId && registrationId && (
             <Card>
               <CardContent className="py-8">
@@ -754,11 +860,13 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                                         size="sm"
                                         onClick={async () => {
                                           if (isEditing) {
-                                            // Save: call API to update builder customer map (only for non-custom items)
-                                            if (item.is_custom || !item.builderItemId || !registrationId || !selectedBomId) {
-                                              // For custom items or missing required fields, just upload files and exit edit mode
-                                              await uploadPendingFiles(item.id);
-                                              setEditingItemId(null);
+                                            // Save: call API to update builder customer map
+                                            if (!registrationId || !selectedBomId) {
+                                              toast({
+                                                title: "Missing required information",
+                                                description: "Registration ID and BOM ID are required to save changes",
+                                                variant: "destructive"
+                                              });
                                               return;
                                             }
 
@@ -773,16 +881,22 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                                                 ...manualFiles.map(file => ({ type: 'Manual' as const, file }))
                                               ];
 
-                                              // Call the API
+                                              // For custom items, builderItemId might be null/empty, use empty string
+                                              // For regular items, use the builderItemId
+                                              const builderItemId = item.is_custom 
+                                                ? (item.builderItemId || '') 
+                                                : (item.builderItemId || '');
+
+                                              // Call the API to update the item
                                               await updateBuilderCustomerMap({
                                                 id: item.id,
                                                 builderCustomerId: registrationId,
-                                                builderItemId: item.builderItemId,
+                                                builderItemId: builderItemId,
                                                 billMaterialId: selectedBomId,
-                                                seller: item.seller,
-                                                serialNumber: item.serial_number,
-                                                notes: item.custom_notes,
-                                                color: item.color,
+                                                seller: item.seller || undefined,
+                                                serialNumber: item.serial_number || undefined,
+                                                notes: item.custom_notes || undefined,
+                                                color: item.color || undefined,
                                                 model: item.model || undefined,
                                                 brand: item.brand || undefined,
                                                 make: item.make || undefined,
@@ -806,6 +920,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
 
                                               setEditingItemId(null);
                                             } catch (error) {
+                                              console.error('Error updating item:', error);
                                               toast({
                                                 title: "Update failed",
                                                 description: error && typeof error === 'object' && 'data' in error 

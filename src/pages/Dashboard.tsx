@@ -52,6 +52,7 @@ interface HomeownerRegistration {
   property_state: string;
   project_name: string;
   status: string;
+  statusName: string;
   created_at: string;
   entitlement_sent_at: string | null;
 }
@@ -202,6 +203,7 @@ const Dashboard = () => {
         property_state: item.state || '',
         project_name: item.projectName || 'No Project',
         status: status,
+        statusName: item.statusName || 'DRAFT',
         created_at: item.createdAt,
         entitlement_sent_at: item.statusName === 'SENT' ? item.createdAt : null,
       };
@@ -239,6 +241,7 @@ const Dashboard = () => {
           property_state: '',
           project_name: projectName,
           status: status,
+          statusName: homeowner.statusName || 'DRAFT',
           created_at: homeowner.createdAt,
           entitlement_sent_at: homeowner.statusName === 'SENT' ? homeowner.createdAt : null,
         };
@@ -295,34 +298,41 @@ const Dashboard = () => {
   const statuses = statusesData?.data || [];
 
   const getStatusBadge = (status: string) => {
-    // Normalize status to lowercase with underscores
-    const normalizedStatus = status.toLowerCase().replace(/\s+/g, '_');
+    // Normalize status to uppercase for API statusName values
+    const normalizedStatus = status.toUpperCase();
     
-    const statusConfig = {
-      draft: { label: "Draft", variant: "secondary" as const },
-      documents_pending: {
-        label: "Documents Pending",
-        variant: "outline" as const,
-      },
-      ready_for_review: {
-        label: "Ready for Review",
-        variant: "default" as const,
-      },
-      sent: { label: "Sent", variant: "default" as const },
-      delivered: { label: "Delivered", variant: "default" as const },
-      entitlement: { label: "Entitlement", variant: "default" as const },
+    const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
+      DRAFT: { label: "Draft", variant: "secondary" },
+      ENTITLEMENT: { label: "Entitlement", variant: "default" },
+      SENT: { label: "Sent", variant: "default" },
+      DELIVERED: { label: "Delivered", variant: "default" },
+      // Also support lowercase/underscore format for backward compatibility
+      draft: { label: "Draft", variant: "secondary" },
+      documents_pending: { label: "Documents Pending", variant: "outline" },
+      ready_for_review: { label: "Ready for Review", variant: "default" },
+      sent: { label: "Sent", variant: "default" },
+      delivered: { label: "Delivered", variant: "default" },
+      entitlement: { label: "Entitlement", variant: "default" },
     };
 
-    const config =
-      statusConfig[normalizedStatus as keyof typeof statusConfig] || statusConfig.draft;
+    const config = statusConfig[normalizedStatus] || statusConfig[status.toLowerCase().replace(/\s+/g, '_')] || statusConfig.DRAFT;
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
   const getStatusIcon = (status: string) => {
-    // Normalize status to lowercase with underscores
-    const normalizedStatus = status.toLowerCase().replace(/\s+/g, '_');
+    // Normalize status to uppercase for API statusName values
+    const normalizedStatus = status.toUpperCase();
     
     switch (normalizedStatus) {
+      case "DRAFT":
+        return <FileText className="h-4 w-4 text-muted-foreground" />;
+      case "ENTITLEMENT":
+        return <CheckCircle className="h-4 w-4 text-blue-500" />;
+      case "SENT":
+        return <Send className="h-4 w-4 text-green-500" />;
+      case "DELIVERED":
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      // Also support lowercase/underscore format for backward compatibility
       case "draft":
         return <FileText className="h-4 w-4 text-muted-foreground" />;
       case "documents_pending":
@@ -759,10 +769,12 @@ const Dashboard = () => {
                         />
                         <div
                           className="flex items-center justify-between flex-1 cursor-pointer"
-                          onClick={() => navigate(`/onboarding?id=${registration.id}`)}
+                          onClick={() =>
+                            navigate(`/onboarding?id=${registration.id}`)
+                          }
                         >
                           <div className="flex items-center space-x-4 flex-1">
-                            {getStatusIcon(registration.status)}
+                            {getStatusIcon(registration.statusName)}
                             <div className="flex-1">
                               <div className="flex items-center space-x-2 mb-1">
                                 <h4 className="font-semibold text-lg text-foreground">
@@ -783,7 +795,7 @@ const Dashboard = () => {
                             </div>
                           </div>
                           <div className="flex items-center space-x-4">
-                            {getStatusBadge(registration.status)}
+                            {getStatusBadge(registration.statusName)}
                             <div className="text-right">
                               <p className="text-sm text-muted-foreground">
                                 Created:{" "}
@@ -874,7 +886,7 @@ const Dashboard = () => {
                                     }
                                   >
                                     <div className="flex items-center space-x-3 flex-1">
-                                      {getStatusIcon(registration.status)}
+                                      {getStatusIcon(registration.statusName)}
                                       <div className="flex-1">
                                         <h4 className="font-semibold text-foreground">
                                           {registration.customer_name}
@@ -890,7 +902,7 @@ const Dashboard = () => {
                                       </div>
                                     </div>
                                     <div className="flex items-center space-x-3">
-                                      {getStatusBadge(registration.status)}
+                                      {getStatusBadge(registration.statusName)}
                                       <Button
                                         variant="ghost"
                                         size="sm"

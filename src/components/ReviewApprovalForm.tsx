@@ -264,7 +264,7 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
 
       <div className="flex justify-between items-center pt-6 border-t">
         <p className="text-sm text-muted-foreground">
-          {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} • {getTotalDocuments() as number} document{(getTotalDocuments() as number) !== 1 ? 's' : ''} • Ready to send
+          {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''}  • Ready to send
         </p>
         <Button 
           onClick={onNext}

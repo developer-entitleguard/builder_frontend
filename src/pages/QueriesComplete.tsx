@@ -136,6 +136,9 @@ const QueriesComplete = () => {
 
   const vendors = vendorsData?.data || [];
 
+  // Check if status is DONE to disable all fields
+  const isStatusDone = queryData?.status?.name === "DONE";
+
   // Get query data from navigation state
   useEffect(() => {
     if (location.state?.query) {
@@ -222,7 +225,7 @@ const QueriesComplete = () => {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to cases
             </Button>
-            <Button onClick={handleMarkAsDone}>
+            <Button onClick={handleMarkAsDone} disabled={isStatusDone}>
               <Check className="h-4 w-4 mr-2" />
               Mark as done
             </Button>
@@ -434,8 +437,9 @@ const QueriesComplete = () => {
                         setVendorPhone(selectedVendorData.contact);
                       }
                     }}
+                    disabled={isStatusDone}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger disabled={isStatusDone}>
                       <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : "Select a vendor..."} />
                     </SelectTrigger>
                     <SelectContent>
@@ -461,6 +465,7 @@ const QueriesComplete = () => {
                     placeholder="(555) 555-5555"
                     value={vendorPhone}
                     onChange={(e) => setVendorPhone(e.target.value)}
+                    disabled={isStatusDone}
                   />
                   {selectedVendor && vendors.find(v => v.id === selectedVendor) && (
                     <p className="text-sm text-gray-500 mt-1">
@@ -478,6 +483,7 @@ const QueriesComplete = () => {
                       variant={priorityLevel === "Low" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setPriorityLevel("Low")}
+                      disabled={isStatusDone}
                     >
                       Low
                     </Button>
@@ -485,6 +491,7 @@ const QueriesComplete = () => {
                       variant={priorityLevel === "Medium" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setPriorityLevel("Medium")}
+                      disabled={isStatusDone}
                     >
                       Medium
                     </Button>
@@ -492,6 +499,7 @@ const QueriesComplete = () => {
                       variant={priorityLevel === "High" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setPriorityLevel("High")}
+                      disabled={isStatusDone}
                     >
                       High
                     </Button>
@@ -499,6 +507,7 @@ const QueriesComplete = () => {
                       variant={priorityLevel === "Critical" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setPriorityLevel("Critical")}
+                      disabled={isStatusDone}
                     >
                       Critical
                     </Button>
@@ -515,23 +524,26 @@ const QueriesComplete = () => {
                           "w-full justify-start text-left font-normal",
                           !dueDate && "text-muted-foreground"
                         )}
+                        disabled={isStatusDone}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {dueDate ? format(dueDate, "PPP") : <span>Pick a date</span>}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={dueDate}
-                        onSelect={setDueDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
+                    {!isStatusDone && (
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dueDate}
+                          onSelect={setDueDate}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    )}
                   </Popover>
                 </div>
 
-                <Button className="w-full" onClick={handleAssignCase}>
+                <Button className="w-full" onClick={handleAssignCase} disabled={isStatusDone}>
                   Assign Case
                 </Button>
               </CardContent>
@@ -548,13 +560,14 @@ const QueriesComplete = () => {
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   rows={4}
+                  disabled={isStatusDone}
                 />
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" disabled={isStatusDone}>
                     <Paperclip className="h-4 w-4 mr-2" />
                     Attach File
                   </Button>
-                  <Button size="sm" onClick={handleAddComment}>
+                  <Button size="sm" onClick={handleAddComment} disabled={isStatusDone}>
                     Add Comment
                   </Button>
                 </div>

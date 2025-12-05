@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -107,10 +108,36 @@ interface Query {
 const QueriesManagement = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [selectedQuery, setSelectedQuery] = useState<Query | null>(null);
   const [response, setResponse] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedStatusId, setSelectedStatusId] = useState<string>("all");
+  const [selectedStatusId, setSelectedStatusId] = useState<string>("");
+
+  // Map status name to route
+  const getRouteByStatus = (statusName: string): string => {
+    const statusUpper = statusName?.toUpperCase() || '';
+    switch (statusUpper) {
+      case 'CREATED':
+        return '/pendingQueries';
+      case 'IN PROGRESS':
+      case 'INPROGRESS':
+        return '/pendingQueries';
+      case 'ASSIGNED TO VENDOR':
+        return '/awaitingAction';
+      case 'COMPLETED':
+        return '/pendingQueries';
+      case 'DONE':
+        return '/queriesComplete';
+      default:
+        return '/pendingQueries'; // Default route
+    }
+  };
+
+  const handleCardClick = (query: Query) => {
+    const route = getRouteByStatus(query.status);
+    navigate(route, { state: { query } });
+  };
 
   const builderId = user && 'builderOrganization' in user 
     ? user.builderOrganization.id 
@@ -124,16 +151,16 @@ const QueriesManagement = () => {
   const { data: queriesData, isLoading: loading, refetch } = useGetBuilderQueriesQuery(
     { 
       builderId: builderId || "",
-      statusId: selectedStatusId !== "all" ? selectedStatusId : undefined,
+      statusId: selectedStatusId || undefined,
     },
     { 
-      skip: !builderId || selectedStatusId === "all",
+      skip: !builderId || !selectedStatusId,
       refetchOnMountOrArgChange: true,
     }
   );
 
   // Transform queries data - only show queries when a status is selected
-  const queries: Query[] = selectedStatusId !== "all" 
+  const queries: Query[] = selectedStatusId 
     ? (queriesData?.data?.map(transformQuery) || [])
     : [];
 
@@ -209,7 +236,10 @@ const QueriesManagement = () => {
   const displayQueries = queries;
 
   const QueryCard = ({ query }: { query: Query }) => (
-    <Card className="mb-4">
+    <Card 
+      className="mb-4 cursor-pointer hover:shadow-md transition-shadow"
+      onClick={() => handleCardClick(query)}
+    >
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">
@@ -318,12 +348,11 @@ const QueriesManagement = () => {
           {/* Status Filter */}
           <div className="flex items-center gap-2 mb-4">
             <span className="text-sm text-muted-foreground">Status:</span>
-            <Select value={selectedStatusId} onValueChange={setSelectedStatusId}>
+            <Select value={selectedStatusId === "all" ? "" : selectedStatusId} onValueChange={setSelectedStatusId}>
               <SelectTrigger className="w-[260px]">
-                <SelectValue placeholder="Select status" />
+                <SelectValue placeholder="Select a status" />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
-                <SelectItem value="all">All Statuses</SelectItem>
                 {isLoadingStatuses ? (
                   <SelectItem value="loading" disabled>Loading statuses...</SelectItem>
                 ) : (
@@ -338,7 +367,7 @@ const QueriesManagement = () => {
           </div>
 
           <TabsContent value="open">
-            {selectedStatusId === "all" ? (
+            {!selectedStatusId ? (
               <Card>
                 <CardContent className="py-12 text-center">
                   <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />

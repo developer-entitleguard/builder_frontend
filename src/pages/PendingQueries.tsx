@@ -242,7 +242,7 @@ const PendingQueries = () => {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Case Details</CardTitle>
                 <Button variant="outline" size="sm">
-                  Open
+                  {queryData?.status?.name || selectedCase?.status || "Open"}
                 </Button>
               </CardHeader>
               <CardContent>

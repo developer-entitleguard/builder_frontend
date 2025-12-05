@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import type { BuilderQuery } from "@/lib/api/services/query";
+import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -110,11 +112,59 @@ const mockHistory: CaseHistory[] = [
 const QueriesComplete = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [queryData, setQueryData] = useState<BuilderQuery | null>(null);
   const [selectedVendor, setSelectedVendor] = useState<string>("");
   const [vendorPhone, setVendorPhone] = useState<string>("");
   const [priorityLevel, setPriorityLevel] = useState<"Low" | "Medium" | "High" | "Critical">("Medium");
   const [dueDate, setDueDate] = useState<Date | undefined>(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)); // 2 days from now
   const [comment, setComment] = useState<string>("");
+
+  const builderId = user && 'builderOrganization' in user 
+    ? user.builderOrganization.id 
+    : null;
+
+  // Fetch vendors from API
+  const { data: vendorsData, isLoading: isLoadingVendors } = useGetBuilderVendorsQuery(
+    { builderId: builderId || "" },
+    { 
+      skip: !builderId,
+      refetchOnMountOrArgChange: true,
+    }
+  );
+
+  const vendors = vendorsData?.data || [];
+
+  // Get query data from navigation state
+  useEffect(() => {
+    if (location.state?.query) {
+      const query = location.state.query as BuilderQuery;
+      setQueryData(query);
+      
+      // Update priority level from query data
+      if (query.priorityLevel) {
+        const priorityUpper = query.priorityLevel.toUpperCase();
+        let priority: "Low" | "Medium" | "High" | "Critical" = "Medium";
+        
+        if (priorityUpper === "LOW") {
+          priority = "Low";
+        } else if (priorityUpper === "MEDIUM") {
+          priority = "Medium";
+        } else if (priorityUpper === "HIGH") {
+          priority = "High";
+        } else if (priorityUpper === "CRITICAL") {
+          priority = "Critical";
+        }
+        
+        setPriorityLevel(priority);
+      }
+      
+      // Update due date from query data
+      if (query.dueDate) {
+        setDueDate(new Date(query.dueDate));
+      }
+    }
+  }, [location.state]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -157,10 +207,13 @@ const QueriesComplete = () => {
         <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              Case Review #{mockCase.caseNumber}
+              {queryData ? `Query ID: ${queryData.id}` : `Case Review #{mockCase.caseNumber}`}
             </h1>
             <p className="text-gray-600 mt-2">
-              Submitted on {format(mockCase.submittedAt, "MMM d, yyyy 'at' h:mm a")}
+              {queryData?.orderItem?.order?.createdAt 
+                ? `Submitted on ${format(new Date(queryData.orderItem.order.createdAt), "MMM d, yyyy 'at' h:mm a")}`
+                : `Submitted on ${format(mockCase.submittedAt, "MMM d, yyyy 'at' h:mm a")}`
+              }
             </p>
           </div>
           <div className="flex gap-3">
@@ -183,50 +236,80 @@ const QueriesComplete = () => {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Case Details</CardTitle>
                 <Button variant="outline" size="sm">
-                  Complete
+                  {queryData?.status?.name || "Complete"}
                 </Button>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4 mb-6">
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Submitted By</Label>
-                    <p className="text-gray-900 font-semibold">{mockCase.submittedBy}</p>
+                    <p className="text-gray-900 font-semibold">
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || mockCase.submittedBy}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Contact Phone</Label>
-                    <p className="text-gray-900 font-semibold">{mockCase.contactPhone}</p>
+                    <p className="text-gray-900 font-semibold">
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.contact || mockCase.contactPhone}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Contact Email</Label>
-                    <p className="text-gray-900">{mockCase.contactEmail}</p>
+                    <p className="text-gray-900">
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.email || mockCase.contactEmail}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Priority</Label>
-                    <Badge className={getPriorityColor(mockCase.priority)}>
-                      {mockCase.priority}
+                    <Badge className={getPriorityColor(queryData?.priorityLevel || mockCase.priority)}>
+                      {queryData?.priorityLevel || mockCase.priority}
                     </Badge>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Category</Label>
-                    <Badge variant="outline" className="font-semibold">{mockCase.category}</Badge>
+                    <Badge variant="outline" className="font-semibold">
+                      {queryData?.orderItem?.productName || mockCase.category}
+                    </Badge>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Location</Label>
-                    <Badge variant="outline" className="font-semibold">{mockCase.location}</Badge>
+                    <Badge variant="outline" className="font-semibold">
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.address?.city || mockCase.location}
+                    </Badge>
                   </div>
                 </div>
 
                 <div className="mb-6">
                   <Label className="text-sm font-medium text-gray-700">Description</Label>
-                  <p className="text-gray-900 mt-2 leading-relaxed">{mockCase.description}</p>
+                  <p className="text-gray-900 mt-2 leading-relaxed">
+                    {queryData?.description || mockCase.description}
+                  </p>
                 </div>
 
                 <div>
                   <Label className="text-sm font-medium text-gray-700">Address</Label>
                   <div className="text-gray-900 mt-2">
-                    <p>{mockCase.address.street}</p>
-                    <p>{mockCase.address.suite}</p>
-                    <p>{mockCase.address.city}, {mockCase.address.state} {mockCase.address.zip}</p>
+                    {queryData?.orderItem?.order?.shipToAddress ? (
+                      <>
+                        {queryData.orderItem.order.shipToAddress.street && (
+                          <p>{queryData.orderItem.order.shipToAddress.street}</p>
+                        )}
+                        {queryData.orderItem.order.shipToAddress.apt && (
+                          <p>{queryData.orderItem.order.shipToAddress.apt}</p>
+                        )}
+                        <p>
+                          {queryData.orderItem.order.shipToAddress.city}
+                          {queryData.orderItem.order.shipToAddress.state && `, ${queryData.orderItem.order.shipToAddress.state}`}
+                          {queryData.orderItem.order.shipToAddress.zipCode && ` ${queryData.orderItem.order.shipToAddress.zipCode}`}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p>{mockCase.address.street}</p>
+                        <p>{mockCase.address.suite}</p>
+                        <p>{mockCase.address.city}, {mockCase.address.state} {mockCase.address.zip}</p>
+                      </>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -269,14 +352,20 @@ const QueriesComplete = () => {
                   <Label htmlFor="vendor-select">Select Vendor</Label>
                   <Select value={selectedVendor} onValueChange={setSelectedVendor}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a vendor..." />
+                      <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : "Select a vendor..."} />
                     </SelectTrigger>
                     <SelectContent>
-                      {mockVendors.map((vendor) => (
-                        <SelectItem key={vendor.id} value={vendor.id}>
-                          {vendor.name}
-                        </SelectItem>
-                      ))}
+                      {isLoadingVendors ? (
+                        <SelectItem value="loading" disabled>Loading vendors...</SelectItem>
+                      ) : vendors.length > 0 ? (
+                        vendors.map((vendor) => (
+                          <SelectItem key={vendor.id} value={vendor.id}>
+                            {vendor.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-vendors" disabled>No vendors available</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

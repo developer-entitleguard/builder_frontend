@@ -87,6 +87,18 @@ export interface BuilderQueryResponse {
   data: BuilderQuery;
 }
 
+export interface UpdateQueryRequest {
+  id: string;
+  statusId?: string;
+  vendorId?: string;
+}
+
+export interface UpdateQueryResponse {
+  success: boolean;
+  message: string;
+  data?: BuilderQuery;
+}
+
 export const queryApi = api.injectEndpoints({
   endpoints: (build) => ({
     // Get builder queries by builder and optional status
@@ -115,11 +127,38 @@ export const queryApi = api.injectEndpoints({
       }),
       providesTags: (result, error, { id }) => [{ type: 'Query', id }],
     }),
+    // Update/Assign query
+    updateQuery: build.mutation<
+      UpdateQueryResponse,
+      UpdateQueryRequest
+    >({
+      query: (data) => {
+        const formData = new FormData();
+        
+        // Add only required fields: id, statusId, vendorId
+        formData.append('id', data.id);
+        
+        if (data.statusId) {
+          formData.append('statusId', data.statusId);
+        }
+        if (data.vendorId) {
+          formData.append('vendorId', data.vendorId);
+        }
+        
+        return {
+          url: '/api/query',
+          method: 'POST',
+          body: formData,
+        };
+      },
+      invalidatesTags: ['Query'],
+    }),
   }),
 });
 
 export const {
   useGetBuilderQueriesQuery,
   useLazyGetQueryByIdQuery,
+  useUpdateQueryMutation,
 } = queryApi;
 

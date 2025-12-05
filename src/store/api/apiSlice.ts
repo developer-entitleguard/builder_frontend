@@ -20,9 +20,28 @@ const baseQuery = fetchBaseQuery({
       }
     }
     
-    headers.set('Content-Type', 'application/json');
     headers.set('Accept', 'application/json');
     return headers;
+  },
+  fetchFn: async (input, init) => {
+    // Don't set Content-Type for FormData - browser will set it with boundary
+    if (init?.body instanceof FormData) {
+      if (init.headers) {
+        const headers = new Headers(init.headers);
+        headers.delete('Content-Type');
+        init.headers = headers;
+      }
+    } else if (init?.body && typeof init.body === 'object' && !(init.body instanceof FormData)) {
+      // Set Content-Type for JSON requests
+      if (init.headers) {
+        const headers = new Headers(init.headers);
+        if (!headers.has('Content-Type')) {
+          headers.set('Content-Type', 'application/json');
+        }
+        init.headers = headers;
+      }
+    }
+    return fetch(input, init);
   },
 });
 

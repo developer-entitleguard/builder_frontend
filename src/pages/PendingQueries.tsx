@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import type { BuilderQuery } from "@/lib/api/services/query";
 import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
+import { useUpdateQueryMutation } from "@/lib/api/services/query";
+import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -163,6 +165,12 @@ const PendingQueries = () => {
 
   const vendors = vendorsData?.data || [];
 
+  // Update query mutation
+  const [updateQuery, { isLoading: isUpdating }] = useUpdateQueryMutation();
+  
+  // Toast for notifications
+  const { toast } = useToast();
+
   // Get query data from navigation state
   useEffect(() => {
     if (location.state?.query) {
@@ -204,9 +212,40 @@ const PendingQueries = () => {
     }
   };
 
-  const handleAssignCase = () => {
-    // Handle case assignment logic here
-    console.log("Assigning case to vendor:", selectedVendor, "Priority:", priorityLevel);
+  const handleAssignCase = async () => {
+    if (!queryData) {
+      console.error("No query data available");
+      return;
+    }
+
+    try {
+      // Call the update query API with only id, statusId, and vendorId
+      const result = await updateQuery({
+        id: queryData.id,
+        statusId: queryData.status?.id || undefined,
+        vendorId: selectedVendor?.trim() || undefined,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Query Updated Successfully",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to update query",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating query:", error);
+      toast({
+        title: "Error",
+        description: "An error occurred while updating the query",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleAddComment = () => {
@@ -535,8 +574,12 @@ const PendingQueries = () => {
                   </Popover>
                 </div>
 
-                <Button className="w-full" onClick={handleAssignCase}>
-                  Assign Case
+                <Button 
+                  className="w-full" 
+                  onClick={handleAssignCase}
+                  disabled={isUpdating || !queryData}
+                >
+                  {isUpdating ? "Assigning..." : "Assign Case"}
                 </Button>
               </CardContent>
             </Card>

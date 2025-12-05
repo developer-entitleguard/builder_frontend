@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MessageSquare, Clock, CheckCircle } from "lucide-react";
 import Header from "@/components/Header";
 import { useGetStatusByModuleQuery } from "@/lib/api/services/status";
-import { useGetBuilderQueriesQuery, type BuilderQuery } from "@/lib/api/services/query";
+import { useGetBuilderQueriesQuery, useLazyGetQueryByIdQuery, type BuilderQuery } from "@/lib/api/services/query";
 
 // Transform API query to component format
 const transformQuery = (query: BuilderQuery) => {
@@ -134,9 +134,33 @@ const QueriesManagement = () => {
     }
   };
 
-  const handleCardClick = (query: Query) => {
-    const route = getRouteByStatus(query.status);
-    navigate(route, { state: { query } });
+  const handleCardClick = async (query: Query) => {
+    try {
+      // Fetch full query details by ID
+      const result = await getQueryById({ id: query.id }).unwrap();
+      
+      if (result.success && result.data) {
+        // Get route based on status from API response
+        const statusName = result.data.status?.name || query.status;
+        const route = getRouteByStatus(statusName);
+        
+        // Navigate to the appropriate page with the full query data
+        navigate(route, { state: { query: result.data } });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to fetch query details",
+          variant: "destructive"
+        });
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      toast({
+        title: "Error fetching query",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    }
   };
 
   const builderId = user && 'builderOrganization' in user 
@@ -146,6 +170,9 @@ const QueriesManagement = () => {
   // Fetch statuses for QUERY module
   const { data: statusData, isLoading: isLoadingStatuses } = useGetStatusByModuleQuery({ module: "QUERY" });
   const statuses = statusData?.data || [];
+
+  // Lazy query to fetch single query by ID
+  const [getQueryById, { isLoading: isLoadingQuery }] = useLazyGetQueryByIdQuery();
 
   // Fetch queries from API only when a specific status is selected
   const { data: queriesData, isLoading: loading, refetch } = useGetBuilderQueriesQuery(
@@ -237,7 +264,7 @@ const QueriesManagement = () => {
 
   const QueryCard = ({ query }: { query: Query }) => (
     <Card 
-      className="mb-4 cursor-pointer hover:shadow-md transition-shadow"
+      className={`mb-4 cursor-pointer hover:shadow-md transition-shadow ${isLoadingQuery ? 'opacity-50 pointer-events-none' : ''}`}
       onClick={() => handleCardClick(query)}
     >
       <CardHeader>

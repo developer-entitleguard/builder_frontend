@@ -42,6 +42,15 @@ export interface BuilderQuery {
           name: string;
           email: string;
           contact: string;
+          address?: {
+            id: string;
+            apt: string | null;
+            street: string | null;
+            city: string | null;
+            state: string | null;
+            zipCode: string | null;
+            country: string | null;
+          };
         };
         source?: {
           name: string;
@@ -50,6 +59,15 @@ export interface BuilderQuery {
       };
       property?: string;
       createdAt?: string;
+      shipToAddress?: {
+        id: string;
+        apt: string | null;
+        street: string | null;
+        city: string | null;
+        state: string | null;
+        zipCode: string | null;
+        country: string | null;
+      };
     };
     productName?: string;
     sku?: string;
@@ -61,6 +79,12 @@ export interface BuilderQueriesResponse {
   success: boolean;
   message: string;
   data: BuilderQuery[];
+}
+
+export interface BuilderQueryResponse {
+  success: boolean;
+  message: string;
+  data: BuilderQuery;
 }
 
 export const queryApi = api.injectEndpoints({
@@ -80,10 +104,22 @@ export const queryApi = api.injectEndpoints({
       }),
       providesTags: ['Query'],
     }),
+    // Get single query by ID
+    getQueryById: build.query<
+      BuilderQueryResponse,
+      { id: string }
+    >({
+      query: ({ id }) => ({
+        url: `/api/query/id?id=${id}`,
+        method: 'GET',
+      }),
+      providesTags: (result, error, { id }) => [{ type: 'Query', id }],
+    }),
   }),
 });
 
 export const {
   useGetBuilderQueriesQuery,
+  useLazyGetQueryByIdQuery,
 } = queryApi;
 

@@ -1,6 +1,10 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import type { BuilderQuery } from "@/lib/api/services/query";
+import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
+import { useUpdateQueryMutation } from "@/lib/api/services/query";
+import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +28,7 @@ import {
 import { format } from "date-fns";
 import { CalendarIcon, ChevronDown, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getApiBaseUrl, getApiBaseUrlWithPrefix } from "@/lib/config";
 
 interface CaseReview {
   id: string;
@@ -136,12 +141,65 @@ const mockHistory: CaseHistory[] = [
 const PendingQueries = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [selectedCase, setSelectedCase] = useState<CaseReview | null>(mockCases[0]);
+  const location = useLocation();
+  const [queryData, setQueryData] = useState<BuilderQuery | null>(null);
   const [selectedVendor, setSelectedVendor] = useState<string>("");
   const [vendorPhone, setVendorPhone] = useState<string>("");
   const [priorityLevel, setPriorityLevel] = useState<"Low" | "Medium" | "High" | "Critical">("Medium");
-  const [dueDate, setDueDate] = useState<Date | undefined>(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)); // 2 days from now
+  const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [comment, setComment] = useState<string>("");
+
+  const builderId = user && 'builderOrganization' in user 
+    ? user.builderOrganization.id 
+    : null;
+
+  // Fetch vendors from API
+  const { data: vendorsData, isLoading: isLoadingVendors } = useGetBuilderVendorsQuery(
+    { builderId: builderId || "" },
+    { 
+      skip: !builderId,
+      refetchOnMountOrArgChange: true,
+    }
+  );
+
+  const vendors = vendorsData?.data || [];
+
+  // Update query mutation
+  const [updateQuery, { isLoading: isUpdating }] = useUpdateQueryMutation();
+  
+  // Toast for notifications
+  const { toast } = useToast();
+
+  // Get query data from navigation state
+  useEffect(() => {
+    if (location.state?.query) {
+      const query = location.state.query as BuilderQuery;
+      setQueryData(query);
+      
+      // Update priority level from query data
+      if (query.priorityLevel) {
+        const priorityUpper = query.priorityLevel.toUpperCase();
+        let priority: "Low" | "Medium" | "High" | "Critical" = "Medium";
+        
+        if (priorityUpper === "LOW") {
+          priority = "Low";
+        } else if (priorityUpper === "MEDIUM") {
+          priority = "Medium";
+        } else if (priorityUpper === "HIGH") {
+          priority = "High";
+        } else if (priorityUpper === "CRITICAL") {
+          priority = "Critical";
+        }
+        
+        setPriorityLevel(priority);
+      }
+      
+      // Update due date from query data
+      if (query.dueDate) {
+        setDueDate(new Date(query.dueDate));
+      }
+    }
+  }, [location.state]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -153,9 +211,40 @@ const PendingQueries = () => {
     }
   };
 
-  const handleAssignCase = () => {
-    // Handle case assignment logic here
-    console.log("Assigning case to vendor:", selectedVendor, "Priority:", priorityLevel);
+  const handleAssignCase = async () => {
+    if (!queryData) {
+      console.error("No query data available");
+      return;
+    }
+
+    try {
+      // Call the update query API with only id, statusId, and vendorId
+      const result = await updateQuery({
+        id: queryData.id,
+        statusId: queryData.status?.id || undefined,
+        vendorId: selectedVendor?.trim() || undefined,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Query Updated Successfully",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to update query",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating query:", error);
+      toast({
+        title: "Error",
+        description: "An error occurred while updating the query",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleAddComment = () => {
@@ -172,10 +261,13 @@ const PendingQueries = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
-            Case Review #{selectedCase?.caseNumber}
+            {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
           </h1>
           <p className="text-gray-600 mt-2">
-            Submitted on {selectedCase?.submittedAt ? format(selectedCase.submittedAt, "MMM d, yyyy 'at' h:mm a") : ""}
+            {queryData?.orderItem?.order?.createdAt 
+              ? `Submitted on ${format(new Date(queryData.orderItem.order.createdAt), "MMM d, yyyy 'at' h:mm a")}`
+              : ""
+            }
           </p>
         </div>
 
@@ -187,50 +279,82 @@ const PendingQueries = () => {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Case Details</CardTitle>
                 <Button variant="outline" size="sm">
-                  Open
+                  {queryData?.status?.name || "Open"}
                 </Button>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4 mb-6">
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Submitted By</Label>
-                    <p className="text-gray-900">{selectedCase?.submittedBy}</p>
+                    <p className="text-gray-900">
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || "-"}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Contact Phone</Label>
-                    <p className="text-gray-900">{selectedCase?.contactPhone}</p>
+                    <p className="text-gray-900">
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.contact || "-"}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Contact Email</Label>
-                    <p className="text-gray-900">{selectedCase?.contactEmail}</p>
+                    <p className="text-gray-900">
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.email || "-"}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Priority</Label>
-                    <Badge className={getPriorityColor(selectedCase?.priority || "Medium")}>
-                      {selectedCase?.priority}
-                    </Badge>
+                    <div className="mt-1">
+                      <Badge className={getPriorityColor(priorityLevel)}>
+                        {queryData?.priorityLevel || priorityLevel}
+                      </Badge>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Category</Label>
-                    <Badge variant="outline">{selectedCase?.category}</Badge>
+                    <div className="mt-1">
+                      <Badge variant="outline">
+                        {queryData?.orderItem?.productName || "-"}
+                      </Badge>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Location</Label>
-                    <Badge variant="outline">{selectedCase?.location}</Badge>
+                    <div className="mt-1">
+                      <Badge variant="outline">
+                        {queryData?.orderItem?.order?.customerSourceMap?.customer?.address?.city || "-"}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
 
                 <div className="mb-6">
                   <Label className="text-sm font-medium text-gray-700">Description</Label>
-                  <p className="text-gray-900 mt-2">{selectedCase?.description}</p>
+                  <p className="text-gray-900 mt-2">
+                    {queryData?.description || "-"}
+                  </p>
                 </div>
 
                 <div>
                   <Label className="text-sm font-medium text-gray-700">Address</Label>
                   <div className="text-gray-900 mt-2">
-                    <p>{selectedCase?.address.street}</p>
-                    <p>{selectedCase?.address.suite}</p>
-                    <p>{selectedCase?.address.city}, {selectedCase?.address.state} {selectedCase?.address.zip}</p>
+                    {queryData?.orderItem?.order?.shipToAddress ? (
+                      <>
+                        {queryData.orderItem.order.shipToAddress.street && (
+                          <p>{queryData.orderItem.order.shipToAddress.street}</p>
+                        )}
+                        {queryData.orderItem.order.shipToAddress.apt && (
+                          <p>{queryData.orderItem.order.shipToAddress.apt}</p>
+                        )}
+                        <p>
+                          {queryData.orderItem.order.shipToAddress.city}
+                          {queryData.orderItem.order.shipToAddress.state && `, ${queryData.orderItem.order.shipToAddress.state}`}
+                          {queryData.orderItem.order.shipToAddress.zipCode && ` ${queryData.orderItem.order.shipToAddress.zipCode}`}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-gray-500">No address available</p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -239,24 +363,96 @@ const PendingQueries = () => {
             {/* Photos Submitted */}
             <Card>
               <CardHeader>
-                <CardTitle>Photos Submitted ({selectedCase?.photos.length})</CardTitle>
+                <CardTitle>
+                  Photos Submitted ({queryData?.queryFileMaps?.length || 0})
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-4">
-                  {selectedCase?.photos.map((photo, index) => (
-                    <div key={index} className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center">
-                      <img 
-                        src={photo} 
-                        alt={`Case photo ${index + 1}`}
-                        className="w-full h-full object-cover rounded-lg"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = "/placeholder.svg";
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
+                {queryData?.queryFileMaps && queryData.queryFileMaps.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-4">
+                    {queryData.queryFileMaps.map((fileMap) => {
+                      const filePath = fileMap.files?.filePath;
+                      const fileName = fileMap.files?.name || 'Query file';
+                      
+                      // Construct image URL - try /api/files endpoint first as it's most common
+                      let imageUrl: string | null = null;
+                      if (filePath) {
+                        if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+                          imageUrl = filePath;
+                        } else if (filePath.startsWith('/')) {
+                          const apiPrefix = getApiBaseUrlWithPrefix();
+                          const apiBaseUrl = getApiBaseUrl();
+                          // Try /api/files endpoint first as it's the most common pattern
+                          imageUrl = apiBaseUrl 
+                            ? `${apiBaseUrl}/api/files${filePath}`
+                            : `${apiPrefix}/files${filePath}`;
+                        } else {
+                          const apiPrefix = getApiBaseUrlWithPrefix();
+                          imageUrl = `${apiPrefix}/files/${filePath}`;
+                        }
+                      }
+                      
+                      // Track retry attempts to prevent infinite loops
+                      const retryKey = `retry_${fileMap.id}`;
+                      const maxRetries = 3;
+                      
+                      return (
+                        <div key={fileMap.id} className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                          {imageUrl ? (
+                            <img 
+                              src={imageUrl} 
+                              alt={fileName}
+                              className="w-full h-full object-cover rounded-lg"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                const retryCount = parseInt(target.dataset.retryCount || '0', 10);
+                                
+                                // Prevent infinite loops
+                                if (retryCount >= maxRetries) {
+                                  target.src = "/placeholder.svg";
+                                  target.onerror = null; // Remove error handler to stop retries
+                                  return;
+                                }
+                                
+                                // Try alternative endpoints
+                                if (filePath && filePath.startsWith('/')) {
+                                  const apiPrefix = getApiBaseUrlWithPrefix();
+                                  const apiBaseUrl = getApiBaseUrl();
+                                  const alternatives = [
+                                    apiBaseUrl ? `${apiBaseUrl}${filePath}` : `${apiPrefix}${filePath}`,
+                                    apiBaseUrl ? `${apiBaseUrl}/api/uploads${filePath}` : `${apiPrefix}/uploads${filePath}`,
+                                    apiBaseUrl ? `${apiBaseUrl}/api/file/download?path=${encodeURIComponent(filePath)}` : `${apiPrefix}/file/download?path=${encodeURIComponent(filePath)}`,
+                                  ];
+                                  
+                                  const currentSrc = target.src;
+                                  const nextAlt = alternatives.find(alt => alt !== currentSrc);
+                                  
+                                  if (nextAlt && retryCount < maxRetries) {
+                                    target.dataset.retryCount = String(retryCount + 1);
+                                    target.src = nextAlt;
+                                  } else {
+                                    target.src = "/placeholder.svg";
+                                    target.onerror = null; // Remove error handler to stop retries
+                                  }
+                                } else {
+                                  target.src = "/placeholder.svg";
+                                  target.onerror = null; // Remove error handler to stop retries
+                                }
+                              }}
+                              data-retry-count="0"
+                            />
+                          ) : (
+                            <div className="text-gray-400">No image</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    No photos submitted
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -271,28 +467,51 @@ const PendingQueries = () => {
               <CardContent className="space-y-4">
                 <div>
                   <Label htmlFor="vendor-select">Select Vendor</Label>
-                  <Select value={selectedVendor} onValueChange={setSelectedVendor}>
+                  <Select 
+                    value={selectedVendor} 
+                    onValueChange={(value) => {
+                      setSelectedVendor(value);
+                      // Auto-populate vendor phone when vendor is selected
+                      const selectedVendorData = vendors.find(v => v.id === value);
+                      if (selectedVendorData?.contact) {
+                        setVendorPhone(selectedVendorData.contact);
+                      }
+                    }}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a vendor..." />
+                      <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : "Select a vendor..."} />
                     </SelectTrigger>
                     <SelectContent>
-                      {mockVendors.map((vendor) => (
-                        <SelectItem key={vendor.id} value={vendor.id}>
-                          {vendor.name}
-                        </SelectItem>
-                      ))}
+                      {isLoadingVendors ? (
+                        <SelectItem value="loading" disabled>Loading vendors...</SelectItem>
+                      ) : vendors.length === 0 ? (
+                        <SelectItem value="no-vendors" disabled>No vendors available</SelectItem>
+                      ) : (
+                        vendors.map((vendor) => (
+                          <SelectItem key={vendor.id} value={vendor.id}>
+                            {vendor.name} {vendor.type && `(${vendor.type})`}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
-                  <Label htmlFor="vendor-phone">Or Enter Vendor Phone Number</Label>
+                  <Label htmlFor="vendor-phone">Vendor Contact</Label>
                   <Input
                     id="vendor-phone"
                     placeholder="(555) 555-5555"
                     value={vendorPhone}
                     onChange={(e) => setVendorPhone(e.target.value)}
                   />
+                  {selectedVendor && vendors.find(v => v.id === selectedVendor) && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {vendors.find(v => v.id === selectedVendor)?.email && (
+                        <>Email: {vendors.find(v => v.id === selectedVendor)?.email}</>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -355,8 +574,12 @@ const PendingQueries = () => {
                   </Popover>
                 </div>
 
-                <Button className="w-full" onClick={handleAssignCase}>
-                  Assign Case
+                <Button 
+                  className="w-full" 
+                  onClick={handleAssignCase}
+                  disabled={isUpdating || !queryData}
+                >
+                  {isUpdating ? "Assigning..." : "Assign Case"}
                 </Button>
               </CardContent>
             </Card>

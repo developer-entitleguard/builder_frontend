@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import type { BuilderQuery } from "@/lib/api/services/query";
+import { getApiBaseUrl, getApiBaseUrlWithPrefix } from "@/lib/config";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -128,9 +130,19 @@ const mockComments: Comment[] = [
 const AwaitingAction = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [queryData, setQueryData] = useState<BuilderQuery | null>(null);
   const [assessment, setAssessment] = useState<string>("");
   const [newComment, setNewComment] = useState<string>("");
   const [comments, setComments] = useState<Comment[]>(mockComments);
+
+  // Get query data from navigation state
+  useEffect(() => {
+    if (location.state?.query) {
+      const query = location.state.query as BuilderQuery;
+      setQueryData(query);
+    }
+  }, [location.state]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -185,10 +197,17 @@ const AwaitingAction = () => {
         <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              Case #{mockCase.caseNumber}
+              {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
             </h1>
             <p className="text-gray-600 mt-2">
-              Assigned to you on {mockCase.assignedDate}
+              {queryData?.orderItem?.order?.createdAt 
+                ? `Created on ${new Date(queryData.orderItem.order.createdAt).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric"
+                  })}`
+                : ""
+              }
             </p>
           </div>
           <div className="flex gap-3">
@@ -211,34 +230,47 @@ const AwaitingAction = () => {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Case Details</CardTitle>
                 <Badge variant="secondary" className="bg-gray-100 text-gray-700">
-                  {mockCase.status}
+                  {queryData?.status?.name || "-"}
                 </Badge>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Submitted by</Label>
-                    <p className="text-gray-900">{mockCase.submittedBy}</p>
+                    <p className="text-gray-900">
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || "-"}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Department</Label>
-                    <p className="text-gray-900">{mockCase.department}</p>
+                    <p className="text-gray-900">-</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Priority</Label>
-                    <Badge className={getPriorityColor(mockCase.priority)}>
-                      {mockCase.priority}
+                    <Badge className={getPriorityColor(queryData?.priorityLevel || "Medium")}>
+                      {queryData?.priorityLevel || "-"}
                     </Badge>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Due Date</Label>
-                    <p className="text-gray-900">{mockCase.dueDate}</p>
+                    <p className="text-gray-900">
+                      {queryData?.dueDate 
+                        ? new Date(queryData.dueDate).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric"
+                          })
+                        : "-"
+                      }
+                    </p>
                   </div>
                 </div>
 
                 <div>
                   <Label className="text-sm font-medium text-gray-700">Description</Label>
-                  <p className="text-gray-900 mt-2 leading-relaxed">{mockCase.description}</p>
+                  <p className="text-gray-900 mt-2 leading-relaxed">
+                    {queryData?.description || "-"}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -246,44 +278,95 @@ const AwaitingAction = () => {
             {/* Attached Images */}
             <Card>
               <CardHeader>
-                <CardTitle>Attached Images</CardTitle>
+                <CardTitle>
+                  Attached Images ({queryData?.queryFileMaps?.length || 0})
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center">
-                    <img 
-                      src="/placeholder.svg" 
-                      alt="Case image 1"
-                      className="w-full h-full object-cover rounded-lg"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = "/placeholder.svg";
-                      }}
-                    />
+                {queryData?.queryFileMaps && queryData.queryFileMaps.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-4">
+                    {queryData.queryFileMaps.map((fileMap) => {
+                      const filePath = fileMap.files?.filePath;
+                      const fileName = fileMap.files?.name || 'Query file';
+                      
+                      // Construct image URL - try /api/files endpoint first
+                      let imageUrl: string | null = null;
+                      if (filePath) {
+                        if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+                          imageUrl = filePath;
+                        } else if (filePath.startsWith('/')) {
+                          const apiPrefix = getApiBaseUrlWithPrefix();
+                          const apiBaseUrl = getApiBaseUrl();
+                          // Try /api/files endpoint first as it's the most common pattern
+                          imageUrl = apiBaseUrl 
+                            ? `${apiBaseUrl}/api/files${filePath}`
+                            : `${apiPrefix}/files${filePath}`;
+                        } else {
+                          const apiPrefix = getApiBaseUrlWithPrefix();
+                          imageUrl = `${apiPrefix}/files/${filePath}`;
+                        }
+                      }
+                      
+                      // Track retry attempts to prevent infinite loops
+                      const maxRetries = 3;
+                      
+                      return (
+                        <div key={fileMap.id} className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                          {imageUrl ? (
+                            <img 
+                              src={imageUrl} 
+                              alt={fileName}
+                              className="w-full h-full object-cover rounded-lg"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                const retryCount = parseInt(target.dataset.retryCount || '0', 10);
+                                
+                                // Prevent infinite loops
+                                if (retryCount >= maxRetries) {
+                                  target.src = "/placeholder.svg";
+                                  target.onerror = null; // Remove error handler to stop retries
+                                  return;
+                                }
+                                
+                                // Try alternative endpoints
+                                if (filePath && filePath.startsWith('/')) {
+                                  const apiPrefix = getApiBaseUrlWithPrefix();
+                                  const apiBaseUrl = getApiBaseUrl();
+                                  const alternatives = [
+                                    apiBaseUrl ? `${apiBaseUrl}${filePath}` : `${apiPrefix}${filePath}`,
+                                    apiBaseUrl ? `${apiBaseUrl}/api/uploads${filePath}` : `${apiPrefix}/uploads${filePath}`,
+                                    apiBaseUrl ? `${apiBaseUrl}/api/file/download?path=${encodeURIComponent(filePath)}` : `${apiPrefix}/file/download?path=${encodeURIComponent(filePath)}`,
+                                  ];
+                                  
+                                  const currentSrc = target.src;
+                                  const nextAlt = alternatives.find(alt => alt !== currentSrc);
+                                  
+                                  if (nextAlt && retryCount < maxRetries) {
+                                    target.dataset.retryCount = String(retryCount + 1);
+                                    target.src = nextAlt;
+                                  } else {
+                                    target.src = "/placeholder.svg";
+                                    target.onerror = null; // Remove error handler to stop retries
+                                  }
+                                } else {
+                                  target.src = "/placeholder.svg";
+                                  target.onerror = null; // Remove error handler to stop retries
+                                }
+                              }}
+                              data-retry-count="0"
+                            />
+                          ) : (
+                            <div className="text-gray-400">No image</div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center">
-                    <img 
-                      src="/placeholder.svg" 
-                      alt="Case image 2"
-                      className="w-full h-full object-cover rounded-lg"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = "/placeholder.svg";
-                      }}
-                    />
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    No images attached
                   </div>
-                  <div className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center">
-                    <img 
-                      src="/placeholder.svg" 
-                      alt="Case image 3"
-                      className="w-full h-full object-cover rounded-lg"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = "/placeholder.svg";
-                      }}
-                    />
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
 

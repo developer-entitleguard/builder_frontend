@@ -53,6 +53,7 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [approved, setApproved] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   // Use items passed from previous step instead of fetching from Supabase
   const selectedItems: SelectedItem[] = formData?.items?.selected_items || [];
 
@@ -267,11 +268,19 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
           {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''}  • Ready to send
         </p>
         <Button 
-          onClick={onNext}
-          disabled={!approved}
+          onClick={async () => {
+            if (isSending) return;
+            try {
+              setIsSending(true);
+              await Promise.resolve(onNext());
+            } finally {
+              setIsSending(false);
+            }
+          }}
+          disabled={!approved || isSending}
           className="min-w-[120px]"
         >
-          Send to Homeowner
+          {isSending ? "Sending..." : "Send to Homeowner"}
         </Button>
       </div>
     </div>

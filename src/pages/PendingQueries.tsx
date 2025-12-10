@@ -692,27 +692,52 @@ const PendingQueries = () => {
             {/* Add Comments */}
             <Card>
               <CardHeader>
-                <CardTitle>Add Comments</CardTitle>
+                <CardTitle>Comments ({queryData?.queryComments?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Textarea
-                  placeholder="Add your comments or notes about this case..."
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  rows={4}
-                />
-                <div className="flex gap-2">
-                  {/* <Button variant="outline" size="sm">
-                    <Paperclip className="h-4 w-4 mr-2" />
-                    Attach File
-                  </Button> */}
-                  <Button 
-                    size="sm" 
-                    onClick={handleAddComment}
-                    disabled={isAddingComment || !comment.trim()}
-                  >
-                    {isAddingComment ? "Adding..." : "Add Comment"}
-                  </Button>
+                {/* Display existing comments */}
+                {queryData?.queryComments && queryData.queryComments.length > 0 ? (
+                  <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                    {[...queryData.queryComments]
+                      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      .map((commentItem) => (
+                        <div key={commentItem.id} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
+                          <p className="text-sm text-gray-900 mb-1">{commentItem.comment}</p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>{format(new Date(commentItem.createdAt), "MMM d, yyyy 'at' h:mm a")}</span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm border rounded-lg bg-gray-50">
+                    No comments yet
+                  </div>
+                )}
+                
+                {/* Add new comment */}
+                <div className="space-y-2">
+                  <Label htmlFor="new-comment">Add a comment</Label>
+                  <Textarea
+                    id="new-comment"
+                    placeholder="Add your comments or notes about this case..."
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    rows={4}
+                  />
+                  <div className="flex gap-2">
+                    {/* <Button variant="outline" size="sm">
+                      <Paperclip className="h-4 w-4 mr-2" />
+                      Attach File
+                    </Button> */}
+                    <Button 
+                      size="sm" 
+                      onClick={handleAddComment}
+                      disabled={isAddingComment || !comment.trim()}
+                    >
+                      {isAddingComment ? "Adding..." : "Add Comment"}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

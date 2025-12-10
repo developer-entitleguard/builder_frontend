@@ -18,6 +18,14 @@ export interface QueryStatus {
   module: string;
 }
 
+export interface QueryComment {
+  id: string;
+  commentedBy: string;
+  comment: string;
+  createdAt: string;
+  isActive: boolean;
+}
+
 export interface BuilderQuery {
   id: string;
   title: string;
@@ -34,6 +42,7 @@ export interface BuilderQuery {
   status: QueryStatus;
   updatedAt: string | null;
   queryFileMaps: QueryFile[];
+  queryComments?: QueryComment[];
   orderItem?: {
     id: string;
     order?: {

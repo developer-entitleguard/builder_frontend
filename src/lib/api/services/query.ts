@@ -27,6 +27,8 @@ export interface BuilderQuery {
     id: string;
     name: string;
     email?: string;
+    contact?: string;
+    type?: string;
   } | null;
   dueDate: string;
   status: QueryStatus;

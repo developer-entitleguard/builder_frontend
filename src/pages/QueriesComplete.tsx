@@ -167,6 +167,16 @@ const QueriesComplete = () => {
       if (query.dueDate) {
         setDueDate(new Date(query.dueDate));
       }
+      
+      // Pre-select vendor if query already has a vendor assigned
+      if (query.vendor?.id) {
+        setSelectedVendor(query.vendor.id);
+      }
+      
+      // Set vendor contact from query data if available
+      if (query.vendor?.contact) {
+        setVendorPhone(query.vendor.contact);
+      }
     }
   }, [location.state]);
 
@@ -428,7 +438,7 @@ const QueriesComplete = () => {
                 <div>
                   <Label htmlFor="vendor-select">Select Vendor</Label>
                   <Select 
-                    value={selectedVendor} 
+                    value={selectedVendor || (queryData?.vendor?.id || "")} 
                     onValueChange={(value) => {
                       setSelectedVendor(value);
                       // Auto-populate vendor phone when vendor is selected
@@ -440,7 +450,7 @@ const QueriesComplete = () => {
                     disabled={isStatusDone}
                   >
                     <SelectTrigger disabled={isStatusDone}>
-                      <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : "Select a vendor..."} />
+                      <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : queryData?.vendor?.name || "Select a vendor..."} />
                     </SelectTrigger>
                     <SelectContent>
                       {isLoadingVendors ? (
@@ -448,7 +458,7 @@ const QueriesComplete = () => {
                       ) : vendors.length > 0 ? (
                         vendors.map((vendor) => (
                           <SelectItem key={vendor.id} value={vendor.id}>
-                            {vendor.name}
+                            {vendor.name} {vendor.type && `(${vendor.type})`}
                           </SelectItem>
                         ))
                       ) : (
@@ -456,6 +466,11 @@ const QueriesComplete = () => {
                       )}
                     </SelectContent>
                   </Select>
+                  {queryData?.vendor && !vendors.find(v => v.id === queryData.vendor?.id) && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Current vendor: {queryData.vendor.name}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -463,17 +478,29 @@ const QueriesComplete = () => {
                   <Input
                     id="vendor-phone"
                     placeholder="(555) 555-5555"
-                    value={vendorPhone}
+                    value={vendorPhone || queryData?.vendor?.contact || ''}
                     onChange={(e) => setVendorPhone(e.target.value)}
                     disabled={isStatusDone}
                   />
-                  {selectedVendor && vendors.find(v => v.id === selectedVendor) && (
-                    <p className="text-sm text-gray-500 mt-1">
-                      {vendors.find(v => v.id === selectedVendor)?.email && (
-                        <>Email: {vendors.find(v => v.id === selectedVendor)?.email}</>
-                      )}
-                    </p>
-                  )}
+                  {(selectedVendor && vendors.find(v => v.id === selectedVendor)) || queryData?.vendor ? (
+                    <div className="text-sm text-gray-500 mt-1 space-y-1">
+                      {(() => {
+                        const vendor = selectedVendor 
+                          ? vendors.find(v => v.id === selectedVendor)
+                          : queryData?.vendor;
+                        return (
+                          <>
+                            {vendor?.email && (
+                              <p>Email: {vendor.email}</p>
+                            )}
+                            {vendor?.contact && (
+                              <p>Contact: {vendor.contact}</p>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div>

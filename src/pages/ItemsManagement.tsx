@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useGetCategorysQuery, useGetBillOfMaterialsQuery, useGetBillMaterialsQuery, useCreateItemMutation, useDeleteItemMutation } from "@/store/api/items";
@@ -12,9 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, Upload, FileText, X } from "lucide-react";
 import Header from "@/components/Header";
 import { BOMUpload } from "@/components/BOMUpload";
+import { getApiBaseUrl } from "@/lib/config";
 
 interface BuilderItem {
   id: string;
@@ -63,6 +64,10 @@ const ItemsManagement = () => {
     notes: "",
     purchaser: ""
   });
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [uploadedImages, setUploadedImages] = useState<Array<{ name: string; url: string; path: string }>>([]);
+  const [uploadingImages, setUploadingImages] = useState<boolean>(false);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
 
   // Map API BOMs response to component format
   const boms = useMemo(() => {
@@ -120,6 +125,9 @@ const ItemsManagement = () => {
       purchaser: ""
     });
     setEditingItem(null);
+    setImageFiles([]);
+    setUploadedImages([]);
+    if (imageFileInputRef.current) imageFileInputRef.current.value = '';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -219,7 +227,120 @@ const ItemsManagement = () => {
       notes: item.notes || "",
       purchaser: item.purchaser || ""
     });
+    // Reset file uploads when editing
+    setImageFiles([]);
+    setUploadedImages([]);
+    if (imageFileInputRef.current) imageFileInputRef.current.value = '';
     setDialogOpen(true);
+  };
+
+  const handleFileSelect = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    setImageFiles(prev => [...prev, ...fileArray]);
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRemoveUploadedImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleFileUpload = async () => {
+    if (imageFiles.length === 0) {
+      toast({
+        title: "No files selected",
+        description: "Please select image files to upload.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!user) {
+      toast({
+        title: "Not signed in",
+        description: "Please log in and try again.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setUploadingImages(true);
+
+    try {
+      // Get JWT token from localStorage
+      const userData = localStorage.getItem('userData');
+      let authToken = '';
+      if (userData) {
+        try {
+          const parsedData = JSON.parse(userData);
+          if (parsedData.jwt) {
+            authToken = parsedData.jwt;
+          }
+        } catch (error) {
+          console.warn('Failed to parse userData:', error);
+        }
+      }
+
+      // Get API base URL
+      const apiBaseUrl = getApiBaseUrl();
+      const url = import.meta.env.DEV
+        ? `/api/upload/item-document`
+        : `${apiBaseUrl}/api/upload/item-document`;
+
+      // Upload all files
+      const uploadPromises = imageFiles.map(async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('documentType', 'warranty'); // Default type
+        // For master items, we might not have itemId or registrationId yet
+        // This will be handled when the item is saved
+        if (editingItem?.id) {
+          formData.append('itemId', editingItem.id);
+        }
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: authToken ? `Bearer ${authToken}` : '',
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `Failed to upload ${file.name}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        return {
+          name: file.name,
+          url: result.url || result.data?.url || '',
+          path: result.path || result.data?.path || ''
+        };
+      });
+
+      const uploadedDocs = await Promise.all(uploadPromises);
+      setUploadedImages(prev => [...prev, ...uploadedDocs]);
+      setImageFiles([]);
+      if (imageFileInputRef.current) imageFileInputRef.current.value = '';
+
+      toast({
+        title: "Images uploaded successfully",
+        description: `${uploadedDocs.length} image(s) uploaded.`,
+      });
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Failed to upload images",
+        variant: "destructive"
+      });
+    } finally {
+      setUploadingImages(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -413,6 +534,71 @@ const ItemsManagement = () => {
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     rows={3}
                   />
+                </div>
+                {/* Upload image */}
+                <div>
+                  <Label htmlFor="image-upload">Upload image</Label>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="image-upload"
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        ref={imageFileInputRef}
+                        onChange={(e) => handleFileSelect(e.target.files)}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleFileUpload}
+                        disabled={imageFiles.length === 0 || uploadingImages}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploadingImages ? 'Uploading...' : 'Upload'}
+                      </Button>
+                    </div>
+                    {imageFiles.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground mb-1">Selected files:</p>
+                        {imageFiles.map((file, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-sm bg-muted p-2 rounded">
+                            <FileText className="h-4 w-4" />
+                            <span className="flex-1 truncate">{file.name}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveFile(idx)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {uploadedImages.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground mb-1">Uploaded images:</p>
+                        {uploadedImages.map((doc, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded">
+                            <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            <span className="flex-1 truncate">{doc.name}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveUploadedImage(idx)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex justify-end space-x-2">
                   <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>

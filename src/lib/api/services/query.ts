@@ -26,6 +26,14 @@ export interface QueryComment {
   isActive: boolean;
 }
 
+export interface QueryHistoryEntry {
+  id: string;
+  status: QueryStatus;
+  changedAt: string;
+  customer: unknown | null;
+  userInfo: unknown | null;
+}
+
 export interface BuilderQuery {
   id: string;
   title: string;
@@ -43,6 +51,7 @@ export interface BuilderQuery {
   updatedAt: string | null;
   queryFileMaps: QueryFile[];
   queryComments?: QueryComment[];
+  queryhistory?: QueryHistoryEntry[];
   orderItem?: {
     id: string;
     order?: {

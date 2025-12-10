@@ -15,18 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import {
-  ArrowLeft,
-  Check,
-  Clock,
-  FileText,
-  MessageCircle,
-  User,
-  Wrench,
-  Upload,
-  Cloud,
-  Send,
-} from "lucide-react";
+import { ArrowLeft, Check, Upload, Cloud, Send } from "lucide-react";
 
 interface CaseAssessment {
   id: string;
@@ -63,50 +52,6 @@ const mockCase: CaseAssessment = {
   assignedTo: "TechPower Solutions (You)",
   assignedDate: "Nov 15, 2023"
 };
-
-const mockTimeline: TimelineEvent[] = [
-  {
-    id: "1",
-    type: "created",
-    timestamp: "Nov 15, 2023 - 09:14 AM",
-    user: "Michael Chen submitted the case",
-    description: "Case Created",
-    icon: <FileText className="h-4 w-4 text-blue-500" />
-  },
-  {
-    id: "2",
-    type: "assigned",
-    timestamp: "Nov 15, 2023 - 10:22 AM",
-    user: "Assigned to reviewer Emma Thompson",
-    description: "Case Assigned",
-    icon: <User className="h-4 w-4 text-blue-500" />
-  },
-  {
-    id: "3",
-    type: "comment",
-    timestamp: "Nov 15, 2023 - 11:45 AM",
-    user: "Reviewer Comment",
-    description: "Reviewer Comment",
-    comment: "This requires immediate attention from our hardware vendor. Please assess and repair ASAP.",
-    icon: <MessageCircle className="h-4 w-4 text-blue-500" />
-  },
-  {
-    id: "4",
-    type: "vendor_assigned",
-    timestamp: "Nov 15, 2023 - 01:30 PM",
-    user: "Assigned to TechPower Solutions (You)",
-    description: "Assigned to Vendor",
-    icon: <Wrench className="h-4 w-4 text-blue-500" />
-  },
-  {
-    id: "5",
-    type: "awaiting",
-    timestamp: "Current Status",
-    user: "Awaiting Vendor Action",
-    description: "Awaiting Vendor Action",
-    icon: <Clock className="h-4 w-4 text-orange-500" />
-  }
-];
 
 const AwaitingAction = () => {
   const { user } = useAuth();
@@ -320,10 +265,12 @@ const AwaitingAction = () => {
                     <p className="text-gray-900">-</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-gray-700">Priority</Label>
-                    <Badge className={getPriorityColor(queryData?.priorityLevel || "Medium")}>
-                      {queryData?.priorityLevel || "-"}
-                    </Badge>
+                    <Label className="text-sm font-medium text-gray-700 block mb-1">Priority</Label>
+                    <div className="mt-1">
+                      <Badge className={getPriorityColor(queryData?.priorityLevel || "Medium")}>
+                        {queryData?.priorityLevel || "-"}
+                      </Badge>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Due Date</Label>
@@ -498,36 +445,49 @@ const AwaitingAction = () => {
             {/* Case Timeline */}
             <Card>
               <CardHeader>
-                <CardTitle>Case Timeline</CardTitle>
+                <CardTitle>
+                  Case Timeline ({queryData?.queryhistory?.length || 0})
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {mockTimeline.map((event, index) => (
-                    <div key={event.id} className="flex items-start space-x-3">
-                      <div className="flex-shrink-0 mt-1">
-                        {event.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">
-                          {event.description}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {event.timestamp}
-                        </p>
-                        <p className="text-sm text-gray-700 mt-1">
-                          {event.user}
-                        </p>
-                        {event.comment && (
-                          <div className="mt-2 p-2 bg-blue-50 border-l-4 border-blue-200 rounded">
-                            <p className="text-sm text-gray-700 italic">
-                              "{event.comment}"
+                {queryData?.queryhistory && queryData.queryhistory.length > 0 ? (
+                  <div className="space-y-4">
+                    {[...queryData.queryhistory]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.changedAt).getTime() -
+                          new Date(a.changedAt).getTime()
+                      )
+                      .map((item) => (
+                        <div key={item.id} className="flex items-start space-x-3">
+                          <div className="flex-shrink-0 mt-1">
+                            <div className="h-3 w-3 rounded-full bg-blue-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900">
+                              {item.status?.name || "Unknown status"}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(item.changedAt).toLocaleString("en-US", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                            <p className="text-sm text-gray-700 mt-1">
+                              {item.userInfo ? "Updated by user" : "System update"}
                             </p>
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm border rounded-lg bg-gray-50">
+                    No history available
+                  </div>
+                )}
               </CardContent>
             </Card>
 

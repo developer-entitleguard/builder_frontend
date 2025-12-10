@@ -734,23 +734,41 @@ const QueriesComplete = () => {
             {/* Case History */}
             <Card>
               <CardHeader>
-                <CardTitle>Case History</CardTitle>
+                <CardTitle>
+                  Case History ({queryData?.queryhistory?.length || 0})
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {mockHistory.map((item, index) => (
-                    <div key={item.id} className="flex">
-                      <div className="flex-shrink-0 w-1 bg-blue-500 rounded-full mr-4"></div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{item.action}</p>
-                        <p className="text-sm text-gray-600">
-                          {format(item.timestamp, "MMM d, yyyy 'at' h:mm a")}
-                        </p>
-                        <p className="text-sm text-gray-500">By: {item.by}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                {queryData?.queryhistory && queryData.queryhistory.length > 0 ? (
+                  <div className="space-y-4">
+                    {[...queryData.queryhistory]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.changedAt).getTime() -
+                          new Date(a.changedAt).getTime()
+                      )
+                      .map((item) => (
+                        <div key={item.id} className="flex">
+                          <div className="flex-shrink-0 w-1 bg-blue-500 rounded-full mr-4"></div>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">
+                              {item.status?.name || "Unknown status"}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {format(new Date(item.changedAt), "MMM d, yyyy 'at' h:mm a")}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {item.userInfo ? "Updated by user" : "System update"}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm">
+                    No history available
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

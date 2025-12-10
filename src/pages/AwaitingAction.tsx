@@ -1,7 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import type { BuilderQuery } from "@/lib/api/services/query";
+import {
+  useAddQueryCommentMutation,
+  useLazyGetQueryByIdQuery,
+} from "@/lib/api/services/query";
 import { getApiBaseUrl, getApiBaseUrlWithPrefix } from "@/lib/config";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -44,14 +49,6 @@ interface TimelineEvent {
   description: string;
   comment?: string;
   icon: React.ReactNode;
-}
-
-interface Comment {
-  id: string;
-  user: string;
-  timestamp: string;
-  content: string;
-  highlighted?: boolean;
 }
 
 const mockCase: CaseAssessment = {
@@ -111,38 +108,53 @@ const mockTimeline: TimelineEvent[] = [
   }
 ];
 
-const mockComments: Comment[] = [
-  {
-    id: "1",
-    user: "Emma Thompson",
-    timestamp: "Nov 15, 2023 - 11:45 AM",
-    content: "This requires immediate attention from our hardware vendor. Please assess and repair ASAP. The power fluctuations are affecting our database performance.",
-    highlighted: true
-  },
-  {
-    id: "2",
-    user: "Michael Chen",
-    timestamp: "Nov 15, 2023 - 02:10 PM",
-    content: "I've implemented temporary monitoring to alert us if the fluctuations exceed critical thresholds. Please let me know when you'll be on-site."
-  }
-];
-
 const AwaitingAction = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [queryData, setQueryData] = useState<BuilderQuery | null>(null);
+  const [queryId, setQueryId] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<string>("");
   const [newComment, setNewComment] = useState<string>("");
-  const [comments, setComments] = useState<Comment[]>(mockComments);
+  // Toast notifications
+  const { toast } = useToast();
+  // Comment mutation and refetch
+  const [addComment, { isLoading: isAddingComment }] = useAddQueryCommentMutation();
+  const [getQueryById] = useLazyGetQueryByIdQuery();
 
-  // Get query data from navigation state
+  const fetchQueryById = useCallback(
+    async (id: string) => {
+      try {
+        const res = await getQueryById({ id }).unwrap();
+        if (res.success && res.data) {
+          setQueryData(res.data);
+        }
+      } catch (error) {
+        console.error("Error fetching query by id:", error);
+      }
+    },
+    [getQueryById]
+  );
+
+  // Get query data from navigation state or session storage, then refetch from API
   useEffect(() => {
-    if (location.state?.query) {
-      const query = location.state.query as BuilderQuery;
-      setQueryData(query);
+    const incomingId =
+      (location.state?.query as BuilderQuery | undefined)?.id ||
+      sessionStorage.getItem("queryDetailId");
+
+    if (incomingId) {
+      if (!queryId || queryId !== incomingId) {
+        setQueryId(incomingId);
+        sessionStorage.setItem("queryDetailId", incomingId);
+      }
+      // Set initial state from navigation (if available)
+      if (location.state?.query) {
+        setQueryData(location.state.query as BuilderQuery);
+      }
+      // Always refetch latest from API
+      fetchQueryById(incomingId);
     }
-  }, [location.state]);
+  }, [location.state, queryId, fetchQueryById]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -164,22 +176,84 @@ const AwaitingAction = () => {
     console.log("Marking case as complete");
   };
 
-  const handlePostComment = () => {
-    if (newComment.trim()) {
-      const comment: Comment = {
-        id: Date.now().toString(),
-        user: user?.email || "Current User",
-        timestamp: new Date().toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit"
-        }),
-        content: newComment
-      };
-      setComments([...comments, comment]);
-      setNewComment("");
+  const handlePostComment = async () => {
+    if (!newComment.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a comment",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const userId =
+      user && typeof user === "object" && "id" in user && typeof (user as { id?: unknown }).id === "string"
+        ? (user as { id: string }).id
+        : null;
+    const commentedBy =
+      user &&
+      typeof user === "object" &&
+      "builderOrganization" in user &&
+      (user as { builderOrganization?: { id?: unknown } }).builderOrganization?.id &&
+      typeof (user as { builderOrganization: { id: unknown } }).builderOrganization.id === "string"
+        ? (user as { builderOrganization: { id: string } }).builderOrganization.id
+        : null;
+
+    if (!userId || !commentedBy) {
+      toast({
+        title: "Error",
+        description: "User information not available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = await addComment({
+        comment: newComment.trim(),
+        commentedBy,
+        id: userId,
+        queryId: queryData.id,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Comment added successfully",
+        });
+        setNewComment("");
+
+        try {
+          const refreshed = await getQueryById({ id: queryData.id }).unwrap();
+          if (refreshed.success && refreshed.data) {
+            setQueryData(refreshed.data);
+          }
+        } catch (refetchError) {
+          console.error("Error refetching query:", refetchError);
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to add comment",
+          variant: "destructive",
+        });
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
     }
   };
 
@@ -460,33 +534,51 @@ const AwaitingAction = () => {
             {/* Comments */}
             <Card>
               <CardHeader>
-                <CardTitle>Comments</CardTitle>
+                <CardTitle>Comments ({queryData?.queryComments?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Existing Comments */}
-                <div className="space-y-4">
-                  {comments.map((comment) => (
-                    <div 
-                      key={comment.id} 
-                      className={`p-3 rounded-lg ${comment.highlighted ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50'}`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-sm text-gray-900">
-                          {comment.user}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {comment.timestamp}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-700">
-                        {comment.content}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                {queryData?.queryComments && queryData.queryComments.length > 0 ? (
+                  <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                    {[...queryData.queryComments]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.createdAt).getTime() -
+                          new Date(a.createdAt).getTime()
+                      )
+                      .map((commentItem) => (
+                        <div
+                          key={commentItem.id}
+                          className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0"
+                        >
+                          <p className="text-sm text-gray-900 mb-1">
+                            {commentItem.comment}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>
+                              {new Date(commentItem.createdAt).toLocaleString("en-US", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            <span className="text-[10px] uppercase tracking-wide bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">
+                              {commentItem.commentedBy}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm border rounded-lg bg-gray-50">
+                    No comments yet
+                  </div>
+                )}
 
                 {/* Add Comment */}
-                <div className="border-t pt-4">
+                <div className="border-t pt-4 space-y-2">
                   <Label className="text-sm font-medium text-gray-700 mb-2 block">
                     Add Comment
                   </Label>
@@ -497,9 +589,17 @@ const AwaitingAction = () => {
                     rows={3}
                     className="w-full mb-3"
                   />
-                  <Button onClick={handlePostComment} className="w-full">
-                    <Send className="h-4 w-4 mr-2" />
-                    Post Comment
+                  <Button
+                    onClick={handlePostComment}
+                    className="w-full"
+                    disabled={isAddingComment || !newComment.trim()}
+                  >
+                    {isAddingComment ? "Adding..." : (
+                      <>
+                        <Send className="h-4 w-4 mr-2" />
+                        Post Comment
+                      </>
+                    )}
                   </Button>
                 </div>
               </CardContent>

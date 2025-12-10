@@ -1,8 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import type { BuilderQuery } from "@/lib/api/services/query";
-import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
+import {
+  useGetBuilderVendorsQuery,
+} from "@/lib/api/services/builderVendor";
+import {
+  useAddQueryCommentMutation,
+  useLazyGetQueryByIdQuery,
+} from "@/lib/api/services/query";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -120,6 +127,9 @@ const QueriesComplete = () => {
   const [priorityLevel, setPriorityLevel] = useState<"Low" | "Medium" | "High" | "Critical">("Medium");
   const [dueDate, setDueDate] = useState<Date | undefined>(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)); // 2 days from now
   const [comment, setComment] = useState<string>("");
+  const { toast } = useToast();
+  const [addComment, { isLoading: isAddingComment }] = useAddQueryCommentMutation();
+  const [getQueryById] = useLazyGetQueryByIdQuery();
 
   const builderId = user && 'builderOrganization' in user 
     ? user.builderOrganization.id 
@@ -195,10 +205,88 @@ const QueriesComplete = () => {
     console.log("Assigning case to vendor:", selectedVendor, "Priority:", priorityLevel);
   };
 
-  const handleAddComment = () => {
-    // Handle adding comment logic here
-    console.log("Adding comment:", comment);
-    setComment("");
+  const handleAddComment = async () => {
+    if (!comment.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a comment",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get user ID and builder organization ID
+    const userId =
+      user && typeof user === "object" && "id" in user && typeof (user as { id?: unknown }).id === "string"
+        ? (user as { id: string }).id
+        : null;
+    const commentedBy =
+      user &&
+      typeof user === "object" &&
+      "builderOrganization" in user &&
+      (user as { builderOrganization?: { id?: unknown } }).builderOrganization?.id &&
+      typeof (user as { builderOrganization: { id: unknown } }).builderOrganization.id === "string"
+        ? (user as { builderOrganization: { id: string } }).builderOrganization.id
+        : null;
+
+    if (!userId || !commentedBy) {
+      toast({
+        title: "Error",
+        description: "User information not available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = await addComment({
+        comment: comment.trim(),
+        commentedBy,
+        id: userId,
+        queryId: queryData.id,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Comment added successfully",
+        });
+        setComment("");
+
+        // Refetch query data to show latest comments
+        try {
+          const refreshed = await getQueryById({ id: queryData.id }).unwrap();
+          if (refreshed.success && refreshed.data) {
+            setQueryData(refreshed.data);
+          }
+        } catch (refetchError) {
+          console.error("Error refetching query:", refetchError);
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to add comment",
+          variant: "destructive",
+        });
+      }
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "An unknown error occurred";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleMarkAsDone = () => {
@@ -579,24 +667,66 @@ const QueriesComplete = () => {
             {/* Add Comments */}
             <Card>
               <CardHeader>
-                <CardTitle>Add Comments</CardTitle>
+                <CardTitle>Comments ({queryData?.queryComments?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Textarea
-                  placeholder="Add your comments or notes about this case..."
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  rows={4}
-                  disabled={isStatusDone}
-                />
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={isStatusDone}>
-                    <Paperclip className="h-4 w-4 mr-2" />
-                    Attach File
-                  </Button>
-                  <Button size="sm" onClick={handleAddComment} disabled={isStatusDone}>
-                    Add Comment
-                  </Button>
+                {/* Existing Comments */}
+                {queryData?.queryComments && queryData.queryComments.length > 0 ? (
+                  <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                    {[...queryData.queryComments]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.createdAt).getTime() -
+                          new Date(a.createdAt).getTime()
+                      )
+                      .map((commentItem) => (
+                        <div
+                          key={commentItem.id}
+                          className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0"
+                        >
+                          <p className="text-sm text-gray-900 mb-1">
+                            {commentItem.comment}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>
+                              {format(
+                                new Date(commentItem.createdAt),
+                                "MMM d, yyyy 'at' h:mm a"
+                              )}
+                            </span>
+                            <span className="text-[10px] uppercase tracking-wide bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">
+                              {commentItem.commentedBy}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm border rounded-lg bg-gray-50">
+                    No comments yet
+                  </div>
+                )}
+
+                {/* Add Comment */}
+                <div className="space-y-2">
+                  <Label htmlFor="new-comment">Add a comment</Label>
+                  <Textarea
+                    id="new-comment"
+                    placeholder="Add your comments or notes about this case..."
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    rows={4}
+                    disabled={isStatusDone}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleAddComment}
+                      disabled={isStatusDone || isAddingComment || !comment.trim()}
+                    >
+                      {isAddingComment ? "Adding..." : "Add Comment"}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

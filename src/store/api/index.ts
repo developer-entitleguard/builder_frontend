@@ -40,6 +40,7 @@ export {
   useGetBuilderQueriesQuery,
   useLazyGetQueryByIdQuery,
   useUpdateQueryMutation,
+  useAddQueryCommentMutation,
 } from '@/lib/api/services/query';
 
 // Re-export types

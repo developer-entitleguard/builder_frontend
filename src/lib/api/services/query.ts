@@ -101,6 +101,18 @@ export interface UpdateQueryResponse {
   data?: BuilderQuery;
 }
 
+export interface AddCommentRequest {
+  comment: string;
+  commentedBy: string;
+  id: string;
+  queryId: string;
+}
+
+export interface AddCommentResponse {
+  success: boolean;
+  message: string;
+}
+
 export const queryApi = api.injectEndpoints({
   endpoints: (build) => ({
     // Get builder queries by builder and optional status
@@ -155,6 +167,26 @@ export const queryApi = api.injectEndpoints({
       },
       invalidatesTags: ['Query'],
     }),
+    // Add comment to query
+    addQueryComment: build.mutation<
+      AddCommentResponse,
+      AddCommentRequest
+    >({
+      query: (data) => {
+        const formData = new FormData();
+        formData.append('comment', data.comment);
+        formData.append('commentedBy', data.commentedBy);
+        formData.append('id', data.id);
+        formData.append('queryId', data.queryId);
+        
+        return {
+          url: '/api/querycomment',
+          method: 'POST',
+          body: formData,
+        };
+      },
+      invalidatesTags: ['Query'],
+    }),
   }),
 });
 
@@ -162,5 +194,6 @@ export const {
   useGetBuilderQueriesQuery,
   useLazyGetQueryByIdQuery,
   useUpdateQueryMutation,
+  useAddQueryCommentMutation,
 } = queryApi;
 

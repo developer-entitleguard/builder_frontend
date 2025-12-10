@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import type { BuilderQuery } from "@/lib/api/services/query";
 import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
-import { useUpdateQueryMutation } from "@/lib/api/services/query";
+import { useUpdateQueryMutation, useAddQueryCommentMutation, useLazyGetQueryByIdQuery } from "@/lib/api/services/query";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -167,6 +167,12 @@ const PendingQueries = () => {
   // Update query mutation
   const [updateQuery, { isLoading: isUpdating }] = useUpdateQueryMutation();
   
+  // Add comment mutation
+  const [addComment, { isLoading: isAddingComment }] = useAddQueryCommentMutation();
+  
+  // Lazy query to refetch query data after adding comment
+  const [getQueryById] = useLazyGetQueryByIdQuery();
+  
   // Toast for notifications
   const { toast } = useToast();
 
@@ -257,10 +263,82 @@ const PendingQueries = () => {
     }
   };
 
-  const handleAddComment = () => {
-    // Handle adding comment logic here
-    console.log("Adding comment:", comment);
-    setComment("");
+  const handleAddComment = async () => {
+    if (!comment.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a comment",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get user ID and builder organization ID
+    const userId = user && 'id' in user ? user.id : null;
+    const commentedBy = user && 'builderOrganization' in user 
+      ? user.builderOrganization.id 
+      : null;
+
+    if (!userId || !commentedBy) {
+      toast({
+        title: "Error",
+        description: "User information not available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = await addComment({
+        comment: comment.trim(),
+        commentedBy,
+        id: userId,
+        queryId: queryData.id,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Comment added successfully",
+        });
+        setComment("");
+        
+        // Refetch query data to get updated comments
+        if (queryData?.id) {
+          try {
+            const queryResult = await getQueryById({ id: queryData.id }).unwrap();
+            if (queryResult.success && queryResult.data) {
+              setQueryData(queryResult.data);
+            }
+          } catch (refetchError) {
+            console.error("Error refetching query:", refetchError);
+            // Don't show error toast for refetch failure, comment was already added
+          }
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to add comment",
+          variant: "destructive",
+        });
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -624,12 +702,16 @@ const PendingQueries = () => {
                   rows={4}
                 />
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
+                  {/* <Button variant="outline" size="sm">
                     <Paperclip className="h-4 w-4 mr-2" />
                     Attach File
-                  </Button>
-                  <Button size="sm" onClick={handleAddComment}>
-                    Add Comment
+                  </Button> */}
+                  <Button 
+                    size="sm" 
+                    onClick={handleAddComment}
+                    disabled={isAddingComment || !comment.trim()}
+                  >
+                    {isAddingComment ? "Adding..." : "Add Comment"}
                   </Button>
                 </div>
               </CardContent>

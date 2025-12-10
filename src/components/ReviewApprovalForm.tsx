@@ -47,9 +47,10 @@ interface FormData {
 interface ReviewApprovalFormProps {
   onNext: () => void;
   formData?: FormData;
+  registrationId?: string | null;
 }
 
-const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
+const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [approved, setApproved] = useState(false);
@@ -57,13 +58,15 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
   // Use items passed from previous step instead of fetching from Supabase
   const selectedItems: SelectedItem[] = formData?.items?.selected_items || [];
 
-  const customerId: string | undefined = formData?.customer?.customerId;
+  const customerId: string | undefined = formData?.customer?.customerId || registrationId || undefined;
 
-  // Fetch customer details from API when we have both builderId and customerId
   const { data: customerDetailsData } = useGetCustomerDetailsQuery(
     user?.id && customerId
       ? { builderId: user.id as string, customerId }
-      : skipToken
+      : skipToken,
+    {
+      refetchOnMountOrArgChange: true,
+    }
   );
 
   const apiCustomer = customerDetailsData?.data?.customer;

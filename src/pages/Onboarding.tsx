@@ -542,7 +542,7 @@ const Onboarding = () => {
         return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} billMaterialId={bomId || undefined} />;
       }
       case 'review':
-        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} />;
+        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} registrationId={registrationId} />;
       case 'send':
         return <SendConfirmationForm customerId={(formData.customer as CustomerFormData)?.customerId} />;
       default:

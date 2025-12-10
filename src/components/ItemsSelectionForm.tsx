@@ -76,9 +76,10 @@ interface ItemsSelectionFormProps {
     [key: string]: unknown;
   };
   registrationId?: string;
+  billMaterialId?: string;
 }
 
-const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelectionFormProps) => {
+const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialId }: ItemsSelectionFormProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [updateBuilderCustomerMap] = useUpdateBuilderCustomerMapMutation();
@@ -87,16 +88,19 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     Array.isArray(initialData?.selected_items) ? initialData.selected_items : []
   );
 
-  // Restore selectedBomId from initialData when component mounts or initialData changes
+  // Restore selectedBomId from billMaterialId prop or initialData when component mounts
   useEffect(() => {
-    if (initialData?.selected_items && Array.isArray(initialData.selected_items) && initialData.selected_items.length > 0) {
+    // Priority: billMaterialId prop > initialData items
+    if (billMaterialId) {
+      setSelectedBomId(billMaterialId);
+    } else if (initialData?.selected_items && Array.isArray(initialData.selected_items) && initialData.selected_items.length > 0) {
       // Get bom_id from the first item (all items should have the same bom_id)
       const firstItem = initialData.selected_items[0] as RegistrationItem;
       if (firstItem?.bom_id) {
         setSelectedBomId(firstItem.bom_id);
       }
     }
-  }, [initialData]);
+  }, [initialData, billMaterialId]);
   const [saving, setSaving] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showCustomItemModal, setShowCustomItemModal] = useState(false);

@@ -454,7 +454,8 @@ const Onboarding = () => {
       case 'customer':
         return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} customerId={registrationId || undefined} />;
       case 'items':
-        return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} />;
+        const bomId = searchParams.get('bomId');
+        return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} billMaterialId={bomId || undefined} />;
       case 'review':
         return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} />;
       case 'send':

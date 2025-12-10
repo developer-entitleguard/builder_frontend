@@ -83,12 +83,13 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
   const { user } = useAuth();
   const { toast } = useToast();
   const [updateBuilderCustomerMap] = useUpdateBuilderCustomerMapMutation();
-  const [selectedBomId, setSelectedBomId] = useState<string>("");
+  // Initialize selectedBomId from billMaterialId prop if available
+  const [selectedBomId, setSelectedBomId] = useState<string>(billMaterialId || "");
   const [selectedItems, setSelectedItems] = useState<RegistrationItem[]>(
     Array.isArray(initialData?.selected_items) ? initialData.selected_items : []
   );
 
-  // Restore selectedBomId from billMaterialId prop or initialData when component mounts
+  // Restore selectedBomId from billMaterialId prop or initialData when component mounts or props change
   useEffect(() => {
     // Priority: billMaterialId prop > initialData items
     if (billMaterialId) {
@@ -131,7 +132,9 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
     data: bomsData, 
     isLoading: loading, 
     error: bomsError 
-  } = useGetBillOfMaterialsQuery(undefined);
+  } = useGetBillOfMaterialsQuery(undefined, {
+    refetchOnMountOrArgChange: true
+  });
 
   // Transform API response to component format
   const boms: BillOfMaterials[] = bomsData?.data || [];
@@ -159,7 +162,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
       customerId: registrationId || '' 
     },
     { 
-      skip: !selectedBomId || !registrationId 
+      skip: !selectedBomId || !registrationId,
+      refetchOnMountOrArgChange: true
     }
   );
 

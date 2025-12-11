@@ -259,6 +259,24 @@ export const itemsApi = api.injectEndpoints({
     }),
 
     // Assign BOM to customers
+    // Check BOM restrictions for customers
+    checkBOMRestrictions: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{ customerId: string; customerName: string }>;
+    }, { customerIds: string[] }>({
+      query: ({ customerIds }) => {
+        const params = new URLSearchParams();
+        customerIds.forEach(id => {
+          params.append('customerId', id);
+        });
+        return {
+          url: `/api/checking/bomrestrict?${params.toString()}`,
+          method: 'GET',
+        };
+      },
+    }),
+
     assignBOM: build.mutation<{ success: boolean; message?: string }, { billOfMaterialId: string; customerIds: string[] }>({
       query: (data) => ({
         url: '/api/add/assignbom',
@@ -288,5 +306,7 @@ export const {
   useGetBuilderItemsByBOMQuery,
   useBulkUpdateItemsMutation,
   useImportItemsMutation,
+  useCheckBOMRestrictionsQuery,
+  useLazyCheckBOMRestrictionsQuery,
   useAssignBOMMutation,
 } = itemsApi;

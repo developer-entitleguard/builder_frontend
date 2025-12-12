@@ -352,8 +352,8 @@ const PendingQueries = () => {
             {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
           </h1>
           <p className="text-gray-600 mt-2">
-            {queryData?.orderItem?.order?.createdAt 
-              ? `Submitted on ${format(new Date(queryData.orderItem.order.createdAt), "MMM d, yyyy 'at' h:mm a")}`
+            {queryData?.createdAt 
+              ? `Submitted on ${format(new Date(queryData.createdAt), "MMM d, yyyy 'at' h:mm a")}`
               : ""
             }
           </p>

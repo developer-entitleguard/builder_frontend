@@ -9,6 +9,7 @@ import {
 import {
   useAddQueryCommentMutation,
   useLazyGetQueryByIdQuery,
+  useUpdateQueryMutation,
 } from "@/lib/api/services/query";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -127,9 +128,11 @@ const QueriesComplete = () => {
   const [priorityLevel, setPriorityLevel] = useState<"Low" | "Medium" | "High" | "Critical">("Medium");
   const [dueDate, setDueDate] = useState<Date | undefined>(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)); // 2 days from now
   const [comment, setComment] = useState<string>("");
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const { toast } = useToast();
   const [addComment, { isLoading: isAddingComment }] = useAddQueryCommentMutation();
   const [getQueryById] = useLazyGetQueryByIdQuery();
+  const [updateQuery, { isLoading: isUpdatingQuery }] = useUpdateQueryMutation();
 
   const builderId = user && 'builderOrganization' in user 
     ? user.builderOrganization.id 
@@ -289,10 +292,134 @@ const QueriesComplete = () => {
     }
   };
 
-  const handleMarkAsDone = () => {
-    // Handle marking case as done
-    console.log("Marking case as done");
-    navigate("/dashboard");
+  const handleMarkAsDone = async () => {
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Prepare file data if files are uploaded
+      const queryFileMapDto = uploadedFiles.length > 0
+        ? uploadedFiles.map((file) => ({
+            type: "BUILDER",
+            files: file,
+          }))
+        : undefined;
+
+      const result = await updateQuery({
+        id: queryData.id,
+        statusId: queryData.status?.id,
+        queryFileMapDto,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Query updated successfully",
+        });
+        
+        // Clear uploaded files
+        setUploadedFiles([]);
+        
+        // Refetch query data to get updated status
+        try {
+          const refreshed = await getQueryById({ id: queryData.id }).unwrap();
+          if (refreshed.success && refreshed.data) {
+            setQueryData(refreshed.data);
+          }
+        } catch (refetchError) {
+          console.error("Error refetching query:", refetchError);
+        }
+        
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to update query",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating query:", error);
+      toast({
+        title: "Error",
+        description: error && typeof error === 'object' && 'data' in error
+          ? String((error.data as { message?: string })?.message || "Failed to update query")
+          : error instanceof Error
+          ? error.message
+          : "Failed to update query",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleStatusButtonClick = async () => {
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Prepare file data if files are uploaded
+      const queryFileMapDto = uploadedFiles.length > 0
+        ? uploadedFiles.map((file) => ({
+            type: "BUILDER",
+            files: file,
+          }))
+        : undefined;
+
+      const result = await updateQuery({
+        id: queryData.id,
+        statusId: queryData.status?.id,
+        queryFileMapDto,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Query updated successfully",
+        });
+        
+        // Clear uploaded files
+        setUploadedFiles([]);
+        
+        // Refetch query data to get updated status
+        try {
+          const refreshed = await getQueryById({ id: queryData.id }).unwrap();
+          if (refreshed.success && refreshed.data) {
+            setQueryData(refreshed.data);
+          }
+        } catch (refetchError) {
+          console.error("Error refetching query:", refetchError);
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to update query",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating query:", error);
+      toast({
+        title: "Error",
+        description: error && typeof error === 'object' && 'data' in error
+          ? String((error.data as { message?: string })?.message || "Failed to update query")
+          : error instanceof Error
+          ? error.message
+          : "Failed to update query",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleBackToCases = () => {
@@ -312,8 +439,8 @@ const QueriesComplete = () => {
               {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
             </h1>
             <p className="text-gray-600 mt-2">
-              {queryData?.orderItem?.order?.createdAt 
-                ? `Submitted on ${format(new Date(queryData.orderItem.order.createdAt), "MMM d, yyyy 'at' h:mm a")}`
+              {queryData?.createdAt 
+                ? `Submitted on ${format(new Date(queryData.createdAt), "MMM d, yyyy 'at' h:mm a")}`
                 : ""
               }
             </p>
@@ -323,9 +450,9 @@ const QueriesComplete = () => {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to cases
             </Button>
-            <Button onClick={handleMarkAsDone} disabled={isStatusDone}>
+            <Button onClick={handleMarkAsDone} disabled={isStatusDone || isUpdatingQuery}>
               <Check className="h-4 w-4 mr-2" />
-              Mark as done
+              {isUpdatingQuery ? "Updating..." : "Mark as done"}
             </Button>
           </div>
         </div>
@@ -337,8 +464,13 @@ const QueriesComplete = () => {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Case Details</CardTitle>
-                <Button variant="outline" size="sm">
-                  {queryData?.status?.name || "Complete"}
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleStatusButtonClick}
+                  disabled={isUpdatingQuery}
+                >
+                  {isUpdatingQuery ? "Updating..." : (queryData?.status?.name || "Complete")}
                 </Button>
               </CardHeader>
               <CardContent>

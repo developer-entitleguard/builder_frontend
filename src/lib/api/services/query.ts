@@ -48,6 +48,7 @@ export interface BuilderQuery {
   } | null;
   dueDate: string;
   status: QueryStatus;
+  createdAt?: string;
   updatedAt: string | null;
   queryFileMaps: QueryFile[];
   queryComments?: QueryComment[];

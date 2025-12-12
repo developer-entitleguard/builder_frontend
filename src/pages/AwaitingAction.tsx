@@ -318,8 +318,8 @@ const AwaitingAction = () => {
               {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
             </h1>
             <p className="text-gray-600 mt-2">
-              {queryData?.orderItem?.order?.createdAt 
-                ? `Created on ${new Date(queryData.orderItem.order.createdAt).toLocaleDateString("en-US", {
+              {queryData?.createdAt 
+                ? `Created on ${new Date(queryData.createdAt).toLocaleDateString("en-US", {
                     year: "numeric",
                     month: "short",
                     day: "numeric"

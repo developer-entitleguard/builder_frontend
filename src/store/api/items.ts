@@ -285,6 +285,55 @@ export const itemsApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Item', 'Registration', 'Dashboard'],
     }),
+    checkExistingCustomerItemMap: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{
+        id: string;
+        billOfMaterials?: { id: string; bomName?: string; projectName?: string };
+        builderItem?: {
+          id: string;
+          name: string;
+          category: string;
+          make: string | null;
+          brand: string | null;
+          model: string | null;
+          text: string | null;
+          note: string | null;
+          price: string | null;
+          documentationUrl: string | null;
+          isActive: boolean;
+          status: string;
+          purchaser?: string | null;
+          billOfMaterials?: { id: string; bomName?: string; projectName?: string };
+        };
+        seller: string | null;
+        serialNumber: string | null;
+        make: string | null;
+        model: string | null;
+        brand: string | null;
+        color: string | null;
+        notes: string | null;
+        files: unknown;
+        builderCustomerItemFiles?: Array<{
+          id: string;
+          type: string;
+          files: {
+            id: string;
+            name: string;
+            type: string;
+            fileType: string;
+            filePath: string;
+          };
+        }>;
+      }>;
+    }, string>({
+      query: (customerId) => ({
+        url: '/api/check/customeritemmap/existing',
+        method: 'GET',
+        params: { customerId },
+      }),
+    }),
   }),
 });
 
@@ -304,9 +353,11 @@ export const {
   useGetBillOfMaterialsQuery,
   useGetBillMaterialsQuery,
   useGetBuilderItemsByBOMQuery,
+  useLazyGetBuilderItemsByBOMQuery,
   useBulkUpdateItemsMutation,
   useImportItemsMutation,
   useCheckBOMRestrictionsQuery,
   useLazyCheckBOMRestrictionsQuery,
   useAssignBOMMutation,
+  useCheckExistingCustomerItemMapQuery,
 } = itemsApi;

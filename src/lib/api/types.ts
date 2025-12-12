@@ -357,6 +357,11 @@ export interface BuilderCustomer {
   projectName?: string;
   settlementDate?: string;
   notes?: string;
+  billOfMaterials?: {
+    id: string;
+    bomName?: string;
+    projectName?: string;
+  };
   builderOrganization: {
     id: string;
     name: string;

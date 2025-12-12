@@ -107,10 +107,16 @@ export interface BuilderQueryResponse {
   data: BuilderQuery;
 }
 
+export interface QueryFileMapDto {
+  type: string;
+  files: File;
+}
+
 export interface UpdateQueryRequest {
   id: string;
   statusId?: string;
   vendorId?: string;
+  queryFileMapDto?: QueryFileMapDto[];
 }
 
 export interface UpdateQueryResponse {
@@ -167,7 +173,7 @@ export const queryApi = api.injectEndpoints({
       query: (data) => {
         const formData = new FormData();
         
-        // Add only required fields: id, statusId, vendorId
+        // Add required fields: id, statusId, vendorId
         formData.append('id', data.id);
         
         if (data.statusId) {
@@ -175,6 +181,14 @@ export const queryApi = api.injectEndpoints({
         }
         if (data.vendorId) {
           formData.append('vendorId', data.vendorId);
+        }
+        
+        // Add file data in the format queryFileMapDto[0].type and queryFileMapDto[0].files
+        if (data.queryFileMapDto && data.queryFileMapDto.length > 0) {
+          data.queryFileMapDto.forEach((fileDto, index) => {
+            formData.append(`queryFileMapDto[${index}].type`, fileDto.type);
+            formData.append(`queryFileMapDto[${index}].files`, fileDto.files);
+          });
         }
         
         return {

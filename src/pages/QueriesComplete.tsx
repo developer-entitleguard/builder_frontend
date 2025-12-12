@@ -694,9 +694,9 @@ const QueriesComplete = () => {
                                 "MMM d, yyyy 'at' h:mm a"
                               )}
                             </span>
-                            <span className="text-[10px] uppercase tracking-wide bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">
+                            {/* <span className="text-[10px] uppercase tracking-wide bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">
                               {commentItem.commentedBy}
-                            </span>
+                            </span> */}
                           </div>
                         </div>
                       ))}

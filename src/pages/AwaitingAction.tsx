@@ -6,6 +6,7 @@ import type { BuilderQuery } from "@/lib/api/services/query";
 import {
   useAddQueryCommentMutation,
   useLazyGetQueryByIdQuery,
+  useUpdateQueryMutation,
 } from "@/lib/api/services/query";
 import { getApiBaseUrl, getApiBaseUrlWithPrefix } from "@/lib/config";
 import Header from "@/components/Header";
@@ -61,11 +62,13 @@ const AwaitingAction = () => {
   const [queryId, setQueryId] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<string>("");
   const [newComment, setNewComment] = useState<string>("");
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   // Toast notifications
   const { toast } = useToast();
   // Comment mutation and refetch
   const [addComment, { isLoading: isAddingComment }] = useAddQueryCommentMutation();
   const [getQueryById] = useLazyGetQueryByIdQuery();
+  const [updateQuery, { isLoading: isUpdatingQuery }] = useUpdateQueryMutation();
 
   const fetchQueryById = useCallback(
     async (id: string) => {
@@ -116,9 +119,68 @@ const AwaitingAction = () => {
     console.log("Sending back to reviewer");
   };
 
-  const handleMarkComplete = () => {
-    // Handle marking as complete logic
-    console.log("Marking case as complete");
+  const handleMarkComplete = async () => {
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Prepare file data if files are uploaded
+      const queryFileMapDto = uploadedFiles.length > 0
+        ? uploadedFiles.map((file) => ({
+            type: "BUILDER",
+            files: file,
+          }))
+        : undefined;
+
+      const result = await updateQuery({
+        id: queryData.id,
+        statusId: queryData.status?.id,
+        queryFileMapDto,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Query marked as complete successfully",
+        });
+        
+        // Clear uploaded files
+        setUploadedFiles([]);
+        
+        // Refetch query data to get updated status
+        try {
+          const refreshed = await getQueryById({ id: queryData.id }).unwrap();
+          if (refreshed.success && refreshed.data) {
+            setQueryData(refreshed.data);
+          }
+        } catch (refetchError) {
+          console.error("Error refetching query:", refetchError);
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to mark query as complete",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating query:", error);
+      toast({
+        title: "Error",
+        description: error && typeof error === 'object' && 'data' in error
+          ? String((error.data as { message?: string })?.message || "Failed to update query")
+          : error instanceof Error
+          ? error.message
+          : "Failed to update query",
+        variant: "destructive",
+      });
+    }
   };
 
   const handlePostComment = async () => {
@@ -203,8 +265,45 @@ const AwaitingAction = () => {
   };
 
   const handleFileUpload = () => {
-    // Handle file upload logic
-    console.log("File upload triggered");
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,.pdf';
+    input.multiple = true;
+    input.onchange = (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (files) {
+        const fileArray = Array.from(files);
+        // Validate file count (max 5)
+        if (uploadedFiles.length + fileArray.length > 5) {
+          toast({
+            title: "Error",
+            description: "Maximum 5 files allowed. Please select fewer files.",
+            variant: "destructive",
+          });
+          return;
+        }
+        // Validate file size (max 10MB each)
+        const oversizedFiles = fileArray.filter(file => file.size > 10 * 1024 * 1024);
+        if (oversizedFiles.length > 0) {
+          toast({
+            title: "Error",
+            description: `Some files exceed 10MB limit: ${oversizedFiles.map(f => f.name).join(', ')}`,
+            variant: "destructive",
+          });
+          return;
+        }
+        setUploadedFiles(prev => [...prev, ...fileArray]);
+        toast({
+          title: "Files selected",
+          description: `${fileArray.length} file(s) selected successfully`,
+        });
+      }
+    };
+    input.click();
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -234,9 +333,9 @@ const AwaitingAction = () => {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Review
             </Button>
-            <Button onClick={handleMarkComplete}>
+            <Button onClick={handleMarkComplete} disabled={isUpdatingQuery}>
               <Check className="h-4 w-4 mr-2" />
-              Complete
+              {isUpdatingQuery ? "Updating..." : "Complete"}
             </Button>
           </div>
         </div>
@@ -425,6 +524,27 @@ const AwaitingAction = () => {
                       Maximum 5 files (JPG, PNG, PDF) up to 10MB each
                     </p>
                   </div>
+                  {uploadedFiles.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <Label className="text-sm font-medium text-gray-700">Selected Files:</Label>
+                      {uploadedFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                          <span className="text-sm text-gray-700 truncate flex-1">{file.name}</span>
+                          <span className="text-xs text-gray-500 mr-2">
+                            {(file.size / 1024 / 1024).toFixed(2)} MB
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveFile(index)}
+                            className="h-6 w-6 p-0"
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -434,8 +554,8 @@ const AwaitingAction = () => {
               <Button variant="outline" onClick={handleSendBack}>
                 Send Back to Reviewer
               </Button>
-              <Button onClick={handleMarkComplete}>
-                Mark as Complete
+              <Button onClick={handleMarkComplete} disabled={isUpdatingQuery}>
+                {isUpdatingQuery ? "Updating..." : "Mark as Complete"}
               </Button>
             </div>
           </div>
@@ -524,9 +644,9 @@ const AwaitingAction = () => {
                                 minute: "2-digit",
                               })}
                             </span>
-                            <span className="text-[10px] uppercase tracking-wide bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">
+                            {/* <span className="text-[10px] uppercase tracking-wide bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">
                               {commentItem.commentedBy}
-                            </span>
+                            </span> */}
                           </div>
                         </div>
                       ))}

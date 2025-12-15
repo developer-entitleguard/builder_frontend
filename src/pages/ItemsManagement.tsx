@@ -64,10 +64,15 @@ const ItemsManagement = () => {
     notes: "",
     purchaser: ""
   });
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [uploadedImages, setUploadedImages] = useState<Array<{ name: string; url: string; path: string }>>([]);
-  const [uploadingImages, setUploadingImages] = useState<boolean>(false);
-  const imageFileInputRef = useRef<HTMLInputElement>(null);
+  const [warrantyFiles, setWarrantyFiles] = useState<File[]>([]);
+  const [uploadedWarrantyDocs, setUploadedWarrantyDocs] = useState<Array<{ name: string; url: string; path: string }>>([]);
+  const [uploadingWarranty, setUploadingWarranty] = useState<boolean>(false);
+  const warrantyFileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [manualFiles, setManualFiles] = useState<File[]>([]);
+  const [uploadedManualDocs, setUploadedManualDocs] = useState<Array<{ name: string; url: string; path: string }>>([]);
+  const [uploadingManual, setUploadingManual] = useState<boolean>(false);
+  const manualFileInputRef = useRef<HTMLInputElement>(null);
 
   // Map API BOMs response to component format
   const boms = useMemo(() => {
@@ -125,9 +130,12 @@ const ItemsManagement = () => {
       purchaser: ""
     });
     setEditingItem(null);
-    setImageFiles([]);
-    setUploadedImages([]);
-    if (imageFileInputRef.current) imageFileInputRef.current.value = '';
+    setWarrantyFiles([]);
+    setUploadedWarrantyDocs([]);
+    setManualFiles([]);
+    setUploadedManualDocs([]);
+    if (warrantyFileInputRef.current) warrantyFileInputRef.current.value = '';
+    if (manualFileInputRef.current) manualFileInputRef.current.value = '';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -163,33 +171,68 @@ const ItemsManagement = () => {
     }
 
     try {
-      const payload: CreateBuilderItemRequest = {
-        name: formData.name,
-        category: formData.category,
-        make: formData.make || undefined,
-        brand: formData.brand || undefined,
-        model: formData.model || undefined,
-        text: formData.description || undefined, // Map description to text
-        note: formData.notes || null, // Map notes to note
-        price: formData.price ? parseFloat(formData.price) : null,
-        documentationUrl: formData.documentation_url || undefined, // Map to camelCase
-        purchaser: formData.purchaser || undefined,
-        builderOrganizationId: builderOrganizationId,
-      };
-
-      if (editingItem) {
-        // For update, use createItem with id (API uses same endpoint for create/update)
-        await createItem({
-          ...payload,
-          id: editingItem.id, // Include id for update
-        }).unwrap();
-        
-        toast({ title: "Item updated successfully" });
-      } else {
-        // For create, use createItem mutation without id
-        await createItem(payload).unwrap();
-        toast({ title: "Item added successfully" });
+      const formDataPayload = new FormData();
+      formDataPayload.append('name', formData.name);
+      formDataPayload.append('category', formData.category);
+      if (formData.make) formDataPayload.append('make', formData.make);
+      if (formData.brand) formDataPayload.append('brand', formData.brand);
+      if (formData.model) formDataPayload.append('model', formData.model);
+      if (formData.description) formDataPayload.append('text', formData.description);
+      formDataPayload.append('note', formData.notes || '');
+      formDataPayload.append('price', formData.price ? String(parseFloat(formData.price)) : '');
+      if (formData.documentation_url) formDataPayload.append('documentationUrl', formData.documentation_url);
+      if (formData.purchaser) formDataPayload.append('purchaser', formData.purchaser);
+      formDataPayload.append('builderOrganizationId', builderOrganizationId);
+      if (selectedBomId) {
+        formDataPayload.append('billMaterialId', selectedBomId);
       }
+
+      // Append files: warranty then manual
+      let fileIndex = 0;
+      warrantyFiles.forEach((file) => {
+        formDataPayload.append(`builderItemFilesDtos[${fileIndex}].type`, 'Warranty');
+        formDataPayload.append(`builderItemFilesDtos[${fileIndex}].file`, file);
+        fileIndex += 1;
+      });
+      manualFiles.forEach((file) => {
+        formDataPayload.append(`builderItemFilesDtos[${fileIndex}].type`, 'Manual');
+        formDataPayload.append(`builderItemFilesDtos[${fileIndex}].file`, file);
+        fileIndex += 1;
+      });
+      if (editingItem?.id) {
+        formDataPayload.append('id', editingItem.id);
+      }
+
+      const userData = localStorage.getItem('userData');
+      let authToken = '';
+      if (userData) {
+        try {
+          const parsedData = JSON.parse(userData);
+          if (parsedData.jwt) authToken = parsedData.jwt;
+        } catch (err) {
+          console.warn('Failed to parse userData:', err);
+        }
+      }
+
+      const apiBaseUrl = getApiBaseUrl();
+      const url = import.meta.env.DEV
+        ? `/api/builder/item`
+        : `${apiBaseUrl}/api/builder/item`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: authToken ? `Bearer ${authToken}` : '',
+        },
+        body: formDataPayload,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to save item');
+      }
+
+      toast({ title: editingItem ? "Item updated successfully" : "Item added successfully" });
 
       setDialogOpen(false);
       resetForm();
@@ -228,31 +271,48 @@ const ItemsManagement = () => {
       purchaser: item.purchaser || ""
     });
     // Reset file uploads when editing
-    setImageFiles([]);
-    setUploadedImages([]);
-    if (imageFileInputRef.current) imageFileInputRef.current.value = '';
+    setWarrantyFiles([]);
+    setUploadedWarrantyDocs([]);
+    setManualFiles([]);
+    setUploadedManualDocs([]);
+    if (warrantyFileInputRef.current) warrantyFileInputRef.current.value = '';
+    if (manualFileInputRef.current) manualFileInputRef.current.value = '';
     setDialogOpen(true);
   };
 
-  const handleFileSelect = (files: FileList | null) => {
+  const handleWarrantyFileSelect = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const fileArray = Array.from(files);
-    setImageFiles(prev => [...prev, ...fileArray]);
+    setWarrantyFiles(prev => [...prev, ...fileArray]);
   };
 
-  const handleRemoveFile = (index: number) => {
-    setImageFiles(prev => prev.filter((_, i) => i !== index));
+  const handleManualFileSelect = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    setManualFiles(prev => [...prev, ...fileArray]);
   };
 
-  const handleRemoveUploadedImage = (index: number) => {
-    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+  const handleRemoveWarrantyFile = (index: number) => {
+    setWarrantyFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleFileUpload = async () => {
-    if (imageFiles.length === 0) {
+  const handleRemoveManualFile = (index: number) => {
+    setManualFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRemoveUploadedWarranty = (index: number) => {
+    setUploadedWarrantyDocs(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRemoveUploadedManual = (index: number) => {
+    setUploadedManualDocs(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleWarrantyUpload = async () => {
+    if (warrantyFiles.length === 0) {
       toast({
         title: "No files selected",
-        description: "Please select image files to upload.",
+        description: "Please select warranty files to upload.",
         variant: "destructive"
       });
       return;
@@ -267,7 +327,7 @@ const ItemsManagement = () => {
       return;
     }
 
-    setUploadingImages(true);
+    setUploadingWarranty(true);
 
     try {
       // Get JWT token from localStorage
@@ -290,13 +350,11 @@ const ItemsManagement = () => {
         ? `/api/upload/item-document`
         : `${apiBaseUrl}/api/upload/item-document`;
 
-      // Upload all files
-      const uploadPromises = imageFiles.map(async (file) => {
+      // Upload all warranty files
+      const uploadPromises = warrantyFiles.map(async (file) => {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('documentType', 'warranty'); // Default type
-        // For master items, we might not have itemId or registrationId yet
-        // This will be handled when the item is saved
+        formData.append('documentType', 'warranty');
         if (editingItem?.id) {
           formData.append('itemId', editingItem.id);
         }
@@ -323,23 +381,116 @@ const ItemsManagement = () => {
       });
 
       const uploadedDocs = await Promise.all(uploadPromises);
-      setUploadedImages(prev => [...prev, ...uploadedDocs]);
-      setImageFiles([]);
-      if (imageFileInputRef.current) imageFileInputRef.current.value = '';
+      setUploadedWarrantyDocs(prev => [...prev, ...uploadedDocs]);
+      setWarrantyFiles([]);
+      if (warrantyFileInputRef.current) warrantyFileInputRef.current.value = '';
 
       toast({
-        title: "Images uploaded successfully",
-        description: `${uploadedDocs.length} image(s) uploaded.`,
+        title: "Warranty documents uploaded successfully",
+        description: `${uploadedDocs.length} document(s) uploaded.`,
       });
     } catch (error) {
-      console.error('Error uploading images:', error);
+      console.error('Error uploading warranty documents:', error);
       toast({
         title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to upload images",
+        description: error instanceof Error ? error.message : "Failed to upload warranty documents",
         variant: "destructive"
       });
     } finally {
-      setUploadingImages(false);
+      setUploadingWarranty(false);
+    }
+  };
+
+  const handleManualUpload = async () => {
+    if (manualFiles.length === 0) {
+      toast({
+        title: "No files selected",
+        description: "Please select manual files to upload.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!user) {
+      toast({
+        title: "Not signed in",
+        description: "Please log in and try again.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setUploadingManual(true);
+
+    try {
+      // Get JWT token from localStorage
+      const userData = localStorage.getItem('userData');
+      let authToken = '';
+      if (userData) {
+        try {
+          const parsedData = JSON.parse(userData);
+          if (parsedData.jwt) {
+            authToken = parsedData.jwt;
+          }
+        } catch (error) {
+          console.warn('Failed to parse userData:', error);
+        }
+      }
+
+      // Get API base URL
+      const apiBaseUrl = getApiBaseUrl();
+      const url = import.meta.env.DEV
+        ? `/api/upload/item-document`
+        : `${apiBaseUrl}/api/upload/item-document`;
+
+      // Upload all manual files
+      const uploadPromises = manualFiles.map(async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('documentType', 'manual');
+        if (editingItem?.id) {
+          formData.append('itemId', editingItem.id);
+        }
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: authToken ? `Bearer ${authToken}` : '',
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `Failed to upload ${file.name}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        return {
+          name: file.name,
+          url: result.url || result.data?.url || '',
+          path: result.path || result.data?.path || ''
+        };
+      });
+
+      const uploadedDocs = await Promise.all(uploadPromises);
+      setUploadedManualDocs(prev => [...prev, ...uploadedDocs]);
+      setManualFiles([]);
+      if (manualFileInputRef.current) manualFileInputRef.current.value = '';
+
+      toast({
+        title: "Manual documents uploaded successfully",
+        description: `${uploadedDocs.length} document(s) uploaded.`,
+      });
+    } catch (error) {
+      console.error('Error uploading manual documents:', error);
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Failed to upload manual documents",
+        variant: "destructive"
+      });
+    } finally {
+      setUploadingManual(false);
     }
   };
 
@@ -535,35 +686,23 @@ const ItemsManagement = () => {
                     rows={3}
                   />
                 </div>
-                {/* Upload image */}
+                {/* Upload Warranty and Manual */}
                 <div>
-                  <Label htmlFor="image-upload">Upload image</Label>
+                  <Label htmlFor="warranty-upload">Upload Warranty</Label>
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Input
-                        id="image-upload"
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        ref={imageFileInputRef}
-                        onChange={(e) => handleFileSelect(e.target.files)}
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleFileUpload}
-                        disabled={imageFiles.length === 0 || uploadingImages}
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        {uploadingImages ? 'Uploading...' : 'Upload'}
-                      </Button>
-                    </div>
-                    {imageFiles.length > 0 && (
+                    <Input
+                      id="warranty-upload"
+                      type="file"
+                      multiple
+                      accept="image/*,.pdf"
+                      ref={warrantyFileInputRef}
+                      onChange={(e) => handleWarrantyFileSelect(e.target.files)}
+                      className="flex-1"
+                    />
+                    {warrantyFiles.length > 0 && (
                       <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground mb-1">Selected files:</p>
-                        {imageFiles.map((file, idx) => (
+                        <p className="text-xs text-muted-foreground mb-1">Selected warranty files:</p>
+                        {warrantyFiles.map((file, idx) => (
                           <div key={idx} className="flex items-center gap-2 text-sm bg-muted p-2 rounded">
                             <FileText className="h-4 w-4" />
                             <span className="flex-1 truncate">{file.name}</span>
@@ -571,7 +710,7 @@ const ItemsManagement = () => {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleRemoveFile(idx)}
+                              onClick={() => handleRemoveWarrantyFile(idx)}
                             >
                               <X className="h-3 w-3" />
                             </Button>
@@ -579,10 +718,10 @@ const ItemsManagement = () => {
                         ))}
                       </div>
                     )}
-                    {uploadedImages.length > 0 && (
+                    {uploadedWarrantyDocs.length > 0 && (
                       <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground mb-1">Uploaded images:</p>
-                        {uploadedImages.map((doc, idx) => (
+                        <p className="text-xs text-muted-foreground mb-1">Uploaded warranty documents:</p>
+                        {uploadedWarrantyDocs.map((doc, idx) => (
                           <div key={idx} className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded">
                             <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
                             <span className="flex-1 truncate">{doc.name}</span>
@@ -590,7 +729,60 @@ const ItemsManagement = () => {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleRemoveUploadedImage(idx)}
+                              onClick={() => handleRemoveUploadedWarranty(idx)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="manual-upload">Upload Manual</Label>
+                  <div className="space-y-2">
+                    <Input
+                      id="manual-upload"
+                      type="file"
+                      multiple
+                      accept="image/*,.pdf"
+                      ref={manualFileInputRef}
+                      onChange={(e) => handleManualFileSelect(e.target.files)}
+                      className="flex-1"
+                    />
+                    {manualFiles.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground mb-1">Selected manual files:</p>
+                        {manualFiles.map((file, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-sm bg-muted p-2 rounded">
+                            <FileText className="h-4 w-4" />
+                            <span className="flex-1 truncate">{file.name}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveManualFile(idx)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {uploadedManualDocs.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground mb-1">Uploaded manual documents:</p>
+                        {uploadedManualDocs.map((doc, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded">
+                            <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            <span className="flex-1 truncate">{doc.name}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveUploadedManual(idx)}
                             >
                               <X className="h-3 w-3" />
                             </Button>

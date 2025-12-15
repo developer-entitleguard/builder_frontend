@@ -697,15 +697,20 @@ const ItemsManagement = () => {
                       accept="image/*,.pdf"
                       ref={warrantyFileInputRef}
                       onChange={(e) => handleWarrantyFileSelect(e.target.files)}
-                      className="flex-1"
+                      className="w-full max-w-full"
                     />
                     {warrantyFiles.length > 0 && (
                       <div className="space-y-1">
                         <p className="text-xs text-muted-foreground mb-1">Selected warranty files:</p>
                         {warrantyFiles.map((file, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-sm bg-muted p-2 rounded">
+                          <div
+                            key={idx}
+                            className="flex items-center gap-2 text-sm bg-muted p-2 rounded w-full max-w-full overflow-hidden"
+                          >
                             <FileText className="h-4 w-4" />
-                            <span className="flex-1 truncate">{file.name}</span>
+                            <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
+                              {file.name}
+                            </span>
                             <Button
                               type="button"
                               variant="ghost"
@@ -722,9 +727,14 @@ const ItemsManagement = () => {
                       <div className="space-y-1">
                         <p className="text-xs text-muted-foreground mb-1">Uploaded warranty documents:</p>
                         {uploadedWarrantyDocs.map((doc, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded">
+                          <div
+                            key={idx}
+                            className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded w-full max-w-full overflow-hidden"
+                          >
                             <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            <span className="flex-1 truncate">{doc.name}</span>
+                            <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
+                              {doc.name}
+                            </span>
                             <Button
                               type="button"
                               variant="ghost"
@@ -750,15 +760,20 @@ const ItemsManagement = () => {
                       accept="image/*,.pdf"
                       ref={manualFileInputRef}
                       onChange={(e) => handleManualFileSelect(e.target.files)}
-                      className="flex-1"
+                      className="w-full max-w-full"
                     />
                     {manualFiles.length > 0 && (
                       <div className="space-y-1">
                         <p className="text-xs text-muted-foreground mb-1">Selected manual files:</p>
                         {manualFiles.map((file, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-sm bg-muted p-2 rounded">
+                          <div
+                            key={idx}
+                            className="flex items-center gap-2 text-sm bg-muted p-2 rounded w-full max-w-full overflow-hidden"
+                          >
                             <FileText className="h-4 w-4" />
-                            <span className="flex-1 truncate">{file.name}</span>
+                            <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
+                              {file.name}
+                            </span>
                             <Button
                               type="button"
                               variant="ghost"
@@ -775,9 +790,14 @@ const ItemsManagement = () => {
                       <div className="space-y-1">
                         <p className="text-xs text-muted-foreground mb-1">Uploaded manual documents:</p>
                         {uploadedManualDocs.map((doc, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded">
+                          <div
+                            key={idx}
+                            className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded w-full max-w-full overflow-hidden"
+                          >
                             <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            <span className="flex-1 truncate">{doc.name}</span>
+                            <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
+                              {doc.name}
+                            </span>
                             <Button
                               type="button"
                               variant="ghost"

@@ -1138,7 +1138,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                                             {pendingFiles[item.id].warranty.map((file, idx) => (
                                               <div key={idx} className="flex items-center gap-2 text-sm">
                                                 <FileText className="h-4 w-4" />
-                                                <span className="flex-1">{file.name}</span>
+                                                <span className="flex-1 min-w-0 truncate break-all">{file.name}</span>
                                                 <Button
                                                   variant="ghost"
                                                   size="sm"
@@ -1160,7 +1160,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                                               return (
                                                 <div key={docIdentifier} className="flex items-center gap-2 text-sm">
                                                   <FileText className="h-4 w-4" />
-                                                  <span className="flex-1">{doc.name}</span>
+                                                  <span className="flex-1 min-w-0 truncate break-all">{doc.name}</span>
                                                   <Button
                                                     variant="ghost"
                                                     size="sm"
@@ -1202,7 +1202,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                                             {pendingFiles[item.id].manual.map((file, idx) => (
                                               <div key={idx} className="flex items-center gap-2 text-sm">
                                                 <FileText className="h-4 w-4" />
-                                                <span className="flex-1">{file.name}</span>
+                                                <span className="flex-1 min-w-0 truncate break-all">{file.name}</span>
                                                 <Button
                                                   variant="ghost"
                                                   size="sm"
@@ -1224,7 +1224,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                                               return (
                                                 <div key={docIdentifier} className="flex items-center gap-2 text-sm">
                                                   <FileText className="h-4 w-4" />
-                                                  <span className="flex-1">{doc.name}</span>
+                                                  <span className="flex-1 min-w-0 truncate break-all">{doc.name}</span>
                                                   <Button
                                                     variant="ghost"
                                                     size="sm"

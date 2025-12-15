@@ -9,7 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { useGetBillOfMaterialsQuery, useGetBuilderItemsByBOMQuery } from "@/store/api/items";
+import { useCheckExistingCustomerItemMapQuery, useGetBillOfMaterialsQuery, useLazyGetBuilderItemsByBOMQuery } from "@/store/api/items";
+import { useGetCustomerDetailsQuery, useLazyGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
+import { skipToken } from "@reduxjs/toolkit/query";
 import { getApiBaseUrl } from "@/lib/config";
 import { useUpdateBuilderCustomerMapMutation } from "@/lib/api/services/builderCustomer";
 import { 
@@ -69,6 +71,46 @@ interface FormData {
   selected_items: RegistrationItem[];
 }
 
+type CustomerItemMapEntry = {
+  id: string;
+  billOfMaterials?: { id: string; bomName?: string; projectName?: string };
+  builderItem?: {
+    id: string;
+    name: string;
+    category: string;
+    make: string | null;
+    brand: string | null;
+    model: string | null;
+    text: string | null;
+    note: string | null;
+    price: string | null;
+    documentationUrl: string | null;
+    isActive: boolean;
+    status: string;
+    purchaser?: string | null;
+    billOfMaterials?: { id: string; bomName?: string; projectName?: string };
+  };
+  seller: string | null;
+  serialNumber: string | null;
+  make: string | null;
+  model: string | null;
+  brand: string | null;
+  color: string | null;
+  notes: string | null;
+  files: unknown;
+  builderCustomerItemFiles?: Array<{
+    id: string;
+    type: string;
+    files: {
+      id: string;
+      name: string;
+      type: string;
+      fileType: string;
+      filePath: string;
+    };
+  }>;
+};
+
 interface ItemsSelectionFormProps {
   onNext: (data: FormData) => void;
   initialData?: {
@@ -76,30 +118,38 @@ interface ItemsSelectionFormProps {
     [key: string]: unknown;
   };
   registrationId?: string;
+  billMaterialId?: string;
 }
 
-const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelectionFormProps) => {
+const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialId }: ItemsSelectionFormProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [updateBuilderCustomerMap] = useUpdateBuilderCustomerMapMutation();
-  const [selectedBomId, setSelectedBomId] = useState<string>("");
+  // Initialize selectedBomId from billMaterialId prop if available
+  const [selectedBomId, setSelectedBomId] = useState<string>(billMaterialId || "");
   const [selectedItems, setSelectedItems] = useState<RegistrationItem[]>(
     Array.isArray(initialData?.selected_items) ? initialData.selected_items : []
   );
 
-  // Restore selectedBomId from initialData when component mounts or initialData changes
+  // Restore selectedBomId from billMaterialId prop or initialData when component mounts or props change
   useEffect(() => {
-    if (initialData?.selected_items && Array.isArray(initialData.selected_items) && initialData.selected_items.length > 0) {
+    // Priority: billMaterialId prop > initialData items
+    if (billMaterialId) {
+      setSelectedBomId(billMaterialId);
+    } else if (initialData?.selected_items && Array.isArray(initialData.selected_items) && initialData.selected_items.length > 0) {
       // Get bom_id from the first item (all items should have the same bom_id)
       const firstItem = initialData.selected_items[0] as RegistrationItem;
       if (firstItem?.bom_id) {
         setSelectedBomId(firstItem.bom_id);
       }
     }
-  }, [initialData]);
+  }, [initialData, billMaterialId]);
   const [saving, setSaving] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showCustomItemModal, setShowCustomItemModal] = useState(false);
+  const [showMappedWarning, setShowMappedWarning] = useState(false);
+  const [pendingBomId, setPendingBomId] = useState<string | null>(null);
+  const [warningLoading, setWarningLoading] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
   const [pendingFiles, setPendingFiles] = useState<Record<string, { warranty: File[]; manual: File[] }>>({});
   const fileInputRefs = useRef<Record<string, { warranty: HTMLInputElement | null; manual: HTMLInputElement | null }>>({});
@@ -127,7 +177,9 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     data: bomsData, 
     isLoading: loading, 
     error: bomsError 
-  } = useGetBillOfMaterialsQuery(undefined);
+  } = useGetBillOfMaterialsQuery(undefined, {
+    refetchOnMountOrArgChange: true
+  });
 
   // Transform API response to component format
   const boms: BillOfMaterials[] = bomsData?.data || [];
@@ -143,64 +195,79 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     }
   }, [bomsError, toast]);
 
-  // Fetch items by BOM and customer ID
   const { 
-    data: itemsData, 
+    data: existingItemsData, 
     isLoading: isLoadingItems,
-    error: itemsError,
+    error: existingItemsError,
     refetch: refetchItems
-  } = useGetBuilderItemsByBOMQuery(
-    { 
-      billMaterialId: selectedBomId, 
-      customerId: registrationId || '' 
-    },
-    { 
-      skip: !selectedBomId || !registrationId 
-    }
+  } = useCheckExistingCustomerItemMapQuery(registrationId || '', {
+    skip: !registrationId
+  });
+  const [triggerGetBuilderItems, { isFetching: isFetchingBomItems }] = useLazyGetBuilderItemsByBOMQuery();
+  const [triggerGetCustomerDetails] = useLazyGetCustomerDetailsQuery();
+  const { data: customerDetailsData } = useGetCustomerDetailsQuery(
+    user?.id && registrationId
+      ? { builderId: user.id as string, customerId: registrationId }
+      : skipToken
   );
 
-  // Transform API response to component format
   useEffect(() => {
-    if (itemsData && selectedBomId && registrationId) {
+    if (selectedBomId || !customerDetailsData?.data?.customer?.billOfMaterials?.id) return;
+    setSelectedBomId(customerDetailsData.data.customer.billOfMaterials.id);
+  }, [selectedBomId, customerDetailsData]);
+
+  useEffect(() => {
+    if (selectedBomId || !registrationId) return;
+    const mappedBomId =
+      existingItemsData?.data?.find(
+        (item: CustomerItemMapEntry) => item.billOfMaterials?.id || item.builderItem?.billOfMaterials?.id
+      )?.billOfMaterials?.id ??
+      existingItemsData?.data?.find(
+        (item: CustomerItemMapEntry) => item.builderItem?.billOfMaterials?.id
+      )?.builderItem?.billOfMaterials?.id;
+
+    if (mappedBomId) {
+      setSelectedBomId(mappedBomId);
+    }
+  }, [selectedBomId, registrationId, existingItemsData]);
+
+
+  useEffect(() => {
+    if (existingItemsData && registrationId) {
       try {
-        // Handle both success and "already mapped" cases - both return data
-        const items = itemsData.data || [];
-        
+        const items = existingItemsData.data || [];
+
         if (items.length === 0) {
-          // No items found or not yet mapped
           setSelectedItems([]);
           return;
         }
 
         const transformedItems: RegistrationItem[] = items
-          .filter((item) => item && item.id) // Filter out invalid items
-          .map((item) => {
-            // Handle items with builderItem (from BOM)
-            if (item.builderItem) {
-              const builderItem = item.builderItem;
+          .filter((item) => item && item.id)
+          .map((item: CustomerItemMapEntry) => {
+            const builderItem = item.builderItem;
 
-              const warranty_documents =
-                item.builderCustomerItemFiles
-                  ?.filter((f) => f.type === 'Warranty' && f.files)
-                  .map((f) => ({
-                    // Use builderCustomerItemFiles.id for delete API (/api/itemfile/{id})
-                    id: f.id,
-                    name: f.files.name,
-                    url: f.files.filePath,
-                    path: f.files.filePath,
-                  })) || [];
+            const warranty_documents =
+              item.builderCustomerItemFiles
+                ?.filter((f) => f.type === 'Warranty' && f.files)
+                .map((f) => ({
+                  id: f.id,
+                  name: f.files.name,
+                  url: f.files.filePath,
+                  path: f.files.filePath,
+                })) || [];
 
-              const manual_documents =
-                item.builderCustomerItemFiles
-                  ?.filter((f) => f.type === 'Manual' && f.files)
-                  .map((f) => ({
-                    // Use builderCustomerItemFiles.id for delete API (/api/itemfile/{id})
-                    id: f.id,
-                    name: f.files.name,
-                    url: f.files.filePath,
-                    path: f.files.filePath,
-                  })) || [];
+            const manual_documents =
+              item.builderCustomerItemFiles
+                ?.filter((f) => f.type === 'Manual' && f.files)
+                .map((f) => ({
+                  id: f.id,
+                  name: f.files.name,
+                  url: f.files.filePath,
+                  path: f.files.filePath,
+                })) || [];
 
+            if (builderItem) {
               return {
                 id: item.id,
                 name: builderItem.name,
@@ -210,7 +277,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                 make: item.make || builderItem.make || null,
                 description: builderItem.text || null,
                 price: builderItem.price ? parseFloat(builderItem.price) : null,
-                bom_id: selectedBomId,
+                bom_id: selectedBomId || item.billOfMaterials?.id || builderItem.billOfMaterials?.id || null,
                 color: item.color || null,
                 custom_notes: item.notes || null,
                 serial_number: item.serialNumber || null,
@@ -220,90 +287,64 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                 manual_documents,
                 is_custom: false
               } as RegistrationItem;
-            } else {
-              // Handle custom items (without builderItem)
-              const warranty_documents =
-                item.builderCustomerItemFiles
-                  ?.filter((f) => f.type === 'Warranty' && f.files)
-                  .map((f) => ({
-                    id: f.id,
-                    name: f.files.name,
-                    url: f.files.filePath,
-                    path: f.files.filePath,
-                  })) || [];
-
-              const manual_documents =
-                item.builderCustomerItemFiles
-                  ?.filter((f) => f.type === 'Manual' && f.files)
-                  .map((f) => ({
-                    id: f.id,
-                    name: f.files.name,
-                    url: f.files.filePath,
-                    path: f.files.filePath,
-                  })) || [];
-
-              // Construct a display name from available fields
-              const nameParts = [
-                item.brand,
-                item.model,
-                item.make
-              ].filter(Boolean);
-              
-              const displayName = nameParts.length > 0 
-                ? nameParts.join(' ') 
-                : (item.serialNumber ? `Item ${item.serialNumber}` : 'Custom Item');
-
-              return {
-                id: item.id,
-                name: displayName,
-                category: 'Other', // Default category for custom items
-                brand: item.brand || null,
-                model: item.model || null,
-                make: item.make || null,
-                description: null,
-                price: null,
-                bom_id: selectedBomId,
-                color: item.color || null,
-                custom_notes: item.notes || null,
-                serial_number: item.serialNumber || null,
-                builderItemId: null,
-                seller: item.seller || null,
-                warranty_documents,
-                manual_documents,
-                is_custom: true
-              } as RegistrationItem;
             }
+            const nameParts = [item.brand, item.model, item.make].filter(Boolean);
+            const displayName = nameParts.length > 0 
+              ? nameParts.join(' ') 
+              : (item.serialNumber ? `Item ${item.serialNumber}` : 'Custom Item');
+
+            return {
+              id: item.id,
+              name: displayName,
+              category: 'Other',
+              brand: item.brand || null,
+              model: item.model || null,
+              make: item.make || null,
+              description: null,
+              price: null,
+              bom_id: selectedBomId || item.billOfMaterials?.id || null,
+              color: item.color || null,
+              custom_notes: item.notes || null,
+              serial_number: item.serialNumber || null,
+              builderItemId: null,
+              seller: item.seller || null,
+              warranty_documents,
+              manual_documents,
+              is_custom: true
+            } as RegistrationItem;
           });
-        
-        console.log('Transformed items:', transformedItems);
+
         setSelectedItems(transformedItems);
       } catch (error) {
-        console.error('Error transforming items data:', error);
+        console.error('Error processing existing items data:', error);
         toast({
           title: "Error processing items",
-          description: "Failed to process items from BOM. Please try again.",
+          description: "Failed to process items from existing map. Please try again.",
           variant: "destructive"
         });
         setSelectedItems([]);
       }
-    } else if (itemsData && itemsData.data && itemsData.data.length === 0) {
-      // Explicitly handle empty data case
+    } else if (existingItemsData && existingItemsData.data && existingItemsData.data.length === 0) {
       setSelectedItems([]);
     }
-  }, [itemsData, selectedBomId, registrationId, toast]);
+  }, [existingItemsData, selectedBomId, registrationId, toast]);
 
   // Show error toast if items API call fails
   useEffect(() => {
-    if (itemsError && selectedBomId) {
+    if (existingItemsError) {
+      const message =
+        existingItemsError && typeof existingItemsError === 'object' && 'data' in existingItemsError
+          ? String((existingItemsError as { data?: { message?: string } }).data?.message || 'Failed to load items')
+          : 'Failed to load items';
       toast({
         title: "Error loading items",
-        description: itemsError instanceof Error ? itemsError.message : "Failed to load items from BOM",
+        description: message,
         variant: "destructive"
       });
     }
-  }, [itemsError, selectedBomId, toast]);
+  }, [existingItemsError, toast]);
 
-  const handleBOMSelect = (bomId: string) => {
+  const handleBOMSelect = async (bomId: string) => {
     if (!registrationId) {
       toast({
         title: "Registration ID required",
@@ -312,12 +353,82 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
       });
       return;
     }
-    setSelectedBomId(bomId);
-    // Items will be loaded automatically via the query hook
+    if (existingItemsData?.data && existingItemsData.data.length > 0) {
+      setPendingBomId(bomId);
+      setShowMappedWarning(true);
+      return;
+    }
+
+    try {
+      await triggerGetBuilderItems(
+        { billMaterialId: bomId, customerId: registrationId },
+        true
+      ).unwrap();
+      await refetchItems();
+      setSelectedBomId(bomId);
+      toast({
+        title: "BOM selected",
+        description: "Items have been loaded from the selected BOM."
+      });
+    } catch (error) {
+      const message =
+        error && typeof error === 'object' && 'data' in error
+          ? String((error as { data?: { message?: string } }).data?.message || 'Failed to load BOM items')
+          : 'Failed to load BOM items';
+      toast({
+        title: "Unable to load BOM items",
+        description: message,
+        variant: "destructive"
+      });
+    }
   };
 
   const handleRemoveItem = (itemId: string) => {
     setSelectedItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  const handleConfirmBomChange = async () => {
+    if (!pendingBomId || !registrationId) {
+      setShowMappedWarning(false);
+      setPendingBomId(null);
+      return;
+    }
+    setWarningLoading(true);
+    try {
+      await triggerGetBuilderItems({
+        billMaterialId: pendingBomId,
+        customerId: registrationId
+      }, true).unwrap();
+
+      await refetchItems();
+
+      if (user?.id) {
+        await triggerGetCustomerDetails({
+          builderId: user.id as string,
+          customerId: registrationId
+        }, true).unwrap();
+      }
+
+      setSelectedBomId(pendingBomId);
+      toast({
+        title: "BOM updated",
+        description: "Items have been refreshed for the selected BOM."
+      });
+    } catch (error) {
+      const message =
+        error && typeof error === 'object' && 'data' in error
+          ? String((error as { data?: { message?: string } }).data?.message || 'Failed to load BOM items')
+          : 'Failed to load BOM items';
+      toast({
+        title: "Unable to switch BOM",
+        description: message,
+        variant: "destructive"
+      });
+    } finally {
+      setWarningLoading(false);
+      setShowMappedWarning(false);
+      setPendingBomId(null);
+    }
   };
 
   const handleUpdateItem = (itemId: string, field: string, value: string) => {
@@ -804,7 +915,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
             </Card>
           )}
 
-          {isLoadingItems && selectedBomId && registrationId && (
+          {(isLoadingItems || isFetchingBomItems) && selectedBomId && registrationId && (
             <Card>
               <CardContent className="py-8">
                 <p className="text-center text-muted-foreground">Loading items from BOM...</p>
@@ -1027,7 +1138,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                                             {pendingFiles[item.id].warranty.map((file, idx) => (
                                               <div key={idx} className="flex items-center gap-2 text-sm">
                                                 <FileText className="h-4 w-4" />
-                                                <span className="flex-1">{file.name}</span>
+                                                <span className="flex-1 min-w-0 truncate break-all">{file.name}</span>
                                                 <Button
                                                   variant="ghost"
                                                   size="sm"
@@ -1049,7 +1160,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                                               return (
                                                 <div key={docIdentifier} className="flex items-center gap-2 text-sm">
                                                   <FileText className="h-4 w-4" />
-                                                  <span className="flex-1">{doc.name}</span>
+                                                  <span className="flex-1 min-w-0 truncate break-all">{doc.name}</span>
                                                   <Button
                                                     variant="ghost"
                                                     size="sm"
@@ -1091,7 +1202,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                                             {pendingFiles[item.id].manual.map((file, idx) => (
                                               <div key={idx} className="flex items-center gap-2 text-sm">
                                                 <FileText className="h-4 w-4" />
-                                                <span className="flex-1">{file.name}</span>
+                                                <span className="flex-1 min-w-0 truncate break-all">{file.name}</span>
                                                 <Button
                                                   variant="ghost"
                                                   size="sm"
@@ -1113,7 +1224,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
                                               return (
                                                 <div key={docIdentifier} className="flex items-center gap-2 text-sm">
                                                   <FileText className="h-4 w-4" />
-                                                  <span className="flex-1">{doc.name}</span>
+                                                  <span className="flex-1 min-w-0 truncate break-all">{doc.name}</span>
                                                   <Button
                                                     variant="ghost"
                                                     size="sm"
@@ -1288,6 +1399,31 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
             </Button>
             <Button onClick={handleSaveCustomItem}>
               Add Item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Warning modal when BOM is already mapped */}
+      <Dialog open={showMappedWarning} onOpenChange={setShowMappedWarning}>
+        <DialogContent className="sm:max-w-[420px] bg-background">
+          <DialogHeader>
+            <DialogTitle>Existing BOM Mapping</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {existingItemsData?.message || "BOM is already mapped for this customer. Do you want to replace it?"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Selecting "Yes" will reload items from the chosen Bill of Materials.
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowMappedWarning(false)} disabled={warningLoading}>
+              No
+            </Button>
+            <Button onClick={handleConfirmBomChange} disabled={warningLoading}>
+              {warningLoading ? "Loading..." : "Yes"}
             </Button>
           </DialogFooter>
         </DialogContent>

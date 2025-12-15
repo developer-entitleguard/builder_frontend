@@ -17,4 +17,5 @@ export const customerDetailsApi = api.injectEndpoints({
 
 export const {
   useGetCustomerDetailsQuery,
+  useLazyGetCustomerDetailsQuery,
 } = customerDetailsApi;

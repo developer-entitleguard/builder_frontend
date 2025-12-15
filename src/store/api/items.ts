@@ -259,6 +259,24 @@ export const itemsApi = api.injectEndpoints({
     }),
 
     // Assign BOM to customers
+    // Check BOM restrictions for customers
+    checkBOMRestrictions: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{ customerId: string; customerName: string }>;
+    }, { customerIds: string[] }>({
+      query: ({ customerIds }) => {
+        const params = new URLSearchParams();
+        customerIds.forEach(id => {
+          params.append('customerId', id);
+        });
+        return {
+          url: `/api/checking/bomrestrict?${params.toString()}`,
+          method: 'GET',
+        };
+      },
+    }),
+
     assignBOM: build.mutation<{ success: boolean; message?: string }, { billOfMaterialId: string; customerIds: string[] }>({
       query: (data) => ({
         url: '/api/add/assignbom',
@@ -266,6 +284,63 @@ export const itemsApi = api.injectEndpoints({
         body: data,
       }),
       invalidatesTags: ['Item', 'Registration', 'Dashboard'],
+    }),
+
+    deleteBuilderItemFiles: build.mutation<{ success: boolean; message?: string }, string>({
+      query: (id) => ({
+        url: `/api/delete/builderitem/files/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Item'],
+    }),
+    checkExistingCustomerItemMap: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{
+        id: string;
+        billOfMaterials?: { id: string; bomName?: string; projectName?: string };
+        builderItem?: {
+          id: string;
+          name: string;
+          category: string;
+          make: string | null;
+          brand: string | null;
+          model: string | null;
+          text: string | null;
+          note: string | null;
+          price: string | null;
+          documentationUrl: string | null;
+          isActive: boolean;
+          status: string;
+          purchaser?: string | null;
+          billOfMaterials?: { id: string; bomName?: string; projectName?: string };
+        };
+        seller: string | null;
+        serialNumber: string | null;
+        make: string | null;
+        model: string | null;
+        brand: string | null;
+        color: string | null;
+        notes: string | null;
+        files: unknown;
+        builderCustomerItemFiles?: Array<{
+          id: string;
+          type: string;
+          files: {
+            id: string;
+            name: string;
+            type: string;
+            fileType: string;
+            filePath: string;
+          };
+        }>;
+      }>;
+    }, string>({
+      query: (customerId) => ({
+        url: '/api/check/customeritemmap/existing',
+        method: 'GET',
+        params: { customerId },
+      }),
     }),
   }),
 });
@@ -286,7 +361,12 @@ export const {
   useGetBillOfMaterialsQuery,
   useGetBillMaterialsQuery,
   useGetBuilderItemsByBOMQuery,
+  useLazyGetBuilderItemsByBOMQuery,
   useBulkUpdateItemsMutation,
   useImportItemsMutation,
+  useCheckBOMRestrictionsQuery,
+  useLazyCheckBOMRestrictionsQuery,
   useAssignBOMMutation,
+  useCheckExistingCustomerItemMapQuery,
+  useDeleteBuilderItemFilesMutation,
 } = itemsApi;

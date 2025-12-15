@@ -1,6 +1,14 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import type { BuilderQuery } from "@/lib/api/services/query";
+import {
+  useAddQueryCommentMutation,
+  useLazyGetQueryByIdQuery,
+  useUpdateQueryMutation,
+} from "@/lib/api/services/query";
+import { getApiBaseUrl, getApiBaseUrlWithPrefix } from "@/lib/config";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,18 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import {
-  ArrowLeft,
-  Check,
-  Clock,
-  FileText,
-  MessageCircle,
-  User,
-  Wrench,
-  Upload,
-  Cloud,
-  Send,
-} from "lucide-react";
+import { ArrowLeft, Check, Upload, Cloud, Send } from "lucide-react";
 
 interface CaseAssessment {
   id: string;
@@ -44,14 +41,6 @@ interface TimelineEvent {
   icon: React.ReactNode;
 }
 
-interface Comment {
-  id: string;
-  user: string;
-  timestamp: string;
-  content: string;
-  highlighted?: boolean;
-}
-
 const mockCase: CaseAssessment = {
   id: "1",
   caseNumber: "CR-2023-0458",
@@ -65,72 +54,55 @@ const mockCase: CaseAssessment = {
   assignedDate: "Nov 15, 2023"
 };
 
-const mockTimeline: TimelineEvent[] = [
-  {
-    id: "1",
-    type: "created",
-    timestamp: "Nov 15, 2023 - 09:14 AM",
-    user: "Michael Chen submitted the case",
-    description: "Case Created",
-    icon: <FileText className="h-4 w-4 text-blue-500" />
-  },
-  {
-    id: "2",
-    type: "assigned",
-    timestamp: "Nov 15, 2023 - 10:22 AM",
-    user: "Assigned to reviewer Emma Thompson",
-    description: "Case Assigned",
-    icon: <User className="h-4 w-4 text-blue-500" />
-  },
-  {
-    id: "3",
-    type: "comment",
-    timestamp: "Nov 15, 2023 - 11:45 AM",
-    user: "Reviewer Comment",
-    description: "Reviewer Comment",
-    comment: "This requires immediate attention from our hardware vendor. Please assess and repair ASAP.",
-    icon: <MessageCircle className="h-4 w-4 text-blue-500" />
-  },
-  {
-    id: "4",
-    type: "vendor_assigned",
-    timestamp: "Nov 15, 2023 - 01:30 PM",
-    user: "Assigned to TechPower Solutions (You)",
-    description: "Assigned to Vendor",
-    icon: <Wrench className="h-4 w-4 text-blue-500" />
-  },
-  {
-    id: "5",
-    type: "awaiting",
-    timestamp: "Current Status",
-    user: "Awaiting Vendor Action",
-    description: "Awaiting Vendor Action",
-    icon: <Clock className="h-4 w-4 text-orange-500" />
-  }
-];
-
-const mockComments: Comment[] = [
-  {
-    id: "1",
-    user: "Emma Thompson",
-    timestamp: "Nov 15, 2023 - 11:45 AM",
-    content: "This requires immediate attention from our hardware vendor. Please assess and repair ASAP. The power fluctuations are affecting our database performance.",
-    highlighted: true
-  },
-  {
-    id: "2",
-    user: "Michael Chen",
-    timestamp: "Nov 15, 2023 - 02:10 PM",
-    content: "I've implemented temporary monitoring to alert us if the fluctuations exceed critical thresholds. Please let me know when you'll be on-site."
-  }
-];
-
 const AwaitingAction = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [queryData, setQueryData] = useState<BuilderQuery | null>(null);
+  const [queryId, setQueryId] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<string>("");
   const [newComment, setNewComment] = useState<string>("");
-  const [comments, setComments] = useState<Comment[]>(mockComments);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  // Toast notifications
+  const { toast } = useToast();
+  // Comment mutation and refetch
+  const [addComment, { isLoading: isAddingComment }] = useAddQueryCommentMutation();
+  const [getQueryById] = useLazyGetQueryByIdQuery();
+  const [updateQuery, { isLoading: isUpdatingQuery }] = useUpdateQueryMutation();
+
+  const fetchQueryById = useCallback(
+    async (id: string) => {
+      try {
+        const res = await getQueryById({ id }).unwrap();
+        if (res.success && res.data) {
+          setQueryData(res.data);
+        }
+      } catch (error) {
+        console.error("Error fetching query by id:", error);
+      }
+    },
+    [getQueryById]
+  );
+
+  // Get query data from navigation state or session storage, then refetch from API
+  useEffect(() => {
+    const incomingId =
+      (location.state?.query as BuilderQuery | undefined)?.id ||
+      sessionStorage.getItem("queryDetailId");
+
+    if (incomingId) {
+      if (!queryId || queryId !== incomingId) {
+        setQueryId(incomingId);
+        sessionStorage.setItem("queryDetailId", incomingId);
+      }
+      // Set initial state from navigation (if available)
+      if (location.state?.query) {
+        setQueryData(location.state.query as BuilderQuery);
+      }
+      // Always refetch latest from API
+      fetchQueryById(incomingId);
+    }
+  }, [location.state, queryId, fetchQueryById]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -147,33 +119,191 @@ const AwaitingAction = () => {
     console.log("Sending back to reviewer");
   };
 
-  const handleMarkComplete = () => {
-    // Handle marking as complete logic
-    console.log("Marking case as complete");
+  const handleMarkComplete = async () => {
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Prepare file data if files are uploaded
+      const queryFileMapDto = uploadedFiles.length > 0
+        ? uploadedFiles.map((file) => ({
+            type: "BUILDER",
+            files: file,
+          }))
+        : undefined;
+
+      const result = await updateQuery({
+        id: queryData.id,
+        statusId: queryData.status?.id,
+        queryFileMapDto,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Query marked as complete successfully",
+        });
+        
+        // Clear uploaded files
+        setUploadedFiles([]);
+        
+        // Refetch query data to get updated status
+        try {
+          const refreshed = await getQueryById({ id: queryData.id }).unwrap();
+          if (refreshed.success && refreshed.data) {
+            setQueryData(refreshed.data);
+          }
+        } catch (refetchError) {
+          console.error("Error refetching query:", refetchError);
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to mark query as complete",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating query:", error);
+      toast({
+        title: "Error",
+        description: error && typeof error === 'object' && 'data' in error
+          ? String((error.data as { message?: string })?.message || "Failed to update query")
+          : error instanceof Error
+          ? error.message
+          : "Failed to update query",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handlePostComment = () => {
-    if (newComment.trim()) {
-      const comment: Comment = {
-        id: Date.now().toString(),
-        user: user?.email || "Current User",
-        timestamp: new Date().toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit"
-        }),
-        content: newComment
-      };
-      setComments([...comments, comment]);
-      setNewComment("");
+  const handlePostComment = async () => {
+    if (!newComment.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a comment",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const userId =
+      user && typeof user === "object" && "id" in user && typeof (user as { id?: unknown }).id === "string"
+        ? (user as { id: string }).id
+        : null;
+    const commentedBy =
+      user &&
+      typeof user === "object" &&
+      "builderOrganization" in user &&
+      (user as { builderOrganization?: { id?: unknown } }).builderOrganization?.id &&
+      typeof (user as { builderOrganization: { id: unknown } }).builderOrganization.id === "string"
+        ? (user as { builderOrganization: { id: string } }).builderOrganization.id
+        : null;
+
+    if (!userId || !commentedBy) {
+      toast({
+        title: "Error",
+        description: "User information not available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = await addComment({
+        comment: newComment.trim(),
+        commentedBy,
+        id: userId,
+        queryId: queryData.id,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Comment added successfully",
+        });
+        setNewComment("");
+
+        try {
+          const refreshed = await getQueryById({ id: queryData.id }).unwrap();
+          if (refreshed.success && refreshed.data) {
+            setQueryData(refreshed.data);
+          }
+        } catch (refetchError) {
+          console.error("Error refetching query:", refetchError);
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to add comment",
+          variant: "destructive",
+        });
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
     }
   };
 
   const handleFileUpload = () => {
-    // Handle file upload logic
-    console.log("File upload triggered");
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,.pdf';
+    input.multiple = true;
+    input.onchange = (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (files) {
+        const fileArray = Array.from(files);
+        // Validate file count (max 5)
+        if (uploadedFiles.length + fileArray.length > 5) {
+          toast({
+            title: "Error",
+            description: "Maximum 5 files allowed. Please select fewer files.",
+            variant: "destructive",
+          });
+          return;
+        }
+        // Validate file size (max 10MB each)
+        const oversizedFiles = fileArray.filter(file => file.size > 10 * 1024 * 1024);
+        if (oversizedFiles.length > 0) {
+          toast({
+            title: "Error",
+            description: `Some files exceed 10MB limit: ${oversizedFiles.map(f => f.name).join(', ')}`,
+            variant: "destructive",
+          });
+          return;
+        }
+        setUploadedFiles(prev => [...prev, ...fileArray]);
+        toast({
+          title: "Files selected",
+          description: `${fileArray.length} file(s) selected successfully`,
+        });
+      }
+    };
+    input.click();
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -185,10 +315,17 @@ const AwaitingAction = () => {
         <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              Case #{mockCase.caseNumber}
+              {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
             </h1>
             <p className="text-gray-600 mt-2">
-              Assigned to you on {mockCase.assignedDate}
+              {queryData?.createdAt 
+                ? `Created on ${new Date(queryData.createdAt).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric"
+                  })}`
+                : ""
+              }
             </p>
           </div>
           <div className="flex gap-3">
@@ -196,9 +333,9 @@ const AwaitingAction = () => {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Review
             </Button>
-            <Button onClick={handleMarkComplete}>
+            <Button onClick={handleMarkComplete} disabled={isUpdatingQuery}>
               <Check className="h-4 w-4 mr-2" />
-              Complete
+              {isUpdatingQuery ? "Updating..." : "Complete"}
             </Button>
           </div>
         </div>
@@ -211,34 +348,49 @@ const AwaitingAction = () => {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Case Details</CardTitle>
                 <Badge variant="secondary" className="bg-gray-100 text-gray-700">
-                  {mockCase.status}
+                  {queryData?.status?.name || "-"}
                 </Badge>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Submitted by</Label>
-                    <p className="text-gray-900">{mockCase.submittedBy}</p>
+                    <p className="text-gray-900">
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || "-"}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Department</Label>
-                    <p className="text-gray-900">{mockCase.department}</p>
+                    <p className="text-gray-900">-</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-gray-700">Priority</Label>
-                    <Badge className={getPriorityColor(mockCase.priority)}>
-                      {mockCase.priority}
-                    </Badge>
+                    <Label className="text-sm font-medium text-gray-700 block mb-1">Priority</Label>
+                    <div className="mt-1">
+                      <Badge className={getPriorityColor(queryData?.priorityLevel || "Medium")}>
+                        {queryData?.priorityLevel || "-"}
+                      </Badge>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Due Date</Label>
-                    <p className="text-gray-900">{mockCase.dueDate}</p>
+                    <p className="text-gray-900">
+                      {queryData?.dueDate 
+                        ? new Date(queryData.dueDate).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric"
+                          })
+                        : "-"
+                      }
+                    </p>
                   </div>
                 </div>
 
                 <div>
                   <Label className="text-sm font-medium text-gray-700">Description</Label>
-                  <p className="text-gray-900 mt-2 leading-relaxed">{mockCase.description}</p>
+                  <p className="text-gray-900 mt-2 leading-relaxed">
+                    {queryData?.description || "-"}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -246,44 +398,95 @@ const AwaitingAction = () => {
             {/* Attached Images */}
             <Card>
               <CardHeader>
-                <CardTitle>Attached Images</CardTitle>
+                <CardTitle>
+                  Attached Images ({queryData?.queryFileMaps?.length || 0})
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center">
-                    <img 
-                      src="/placeholder.svg" 
-                      alt="Case image 1"
-                      className="w-full h-full object-cover rounded-lg"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = "/placeholder.svg";
-                      }}
-                    />
+                {queryData?.queryFileMaps && queryData.queryFileMaps.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-4">
+                    {queryData.queryFileMaps.map((fileMap) => {
+                      const filePath = fileMap.files?.filePath;
+                      const fileName = fileMap.files?.name || 'Query file';
+                      
+                      // Construct image URL - try /api/files endpoint first
+                      let imageUrl: string | null = null;
+                      if (filePath) {
+                        if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+                          imageUrl = filePath;
+                        } else if (filePath.startsWith('/')) {
+                          const apiPrefix = getApiBaseUrlWithPrefix();
+                          const apiBaseUrl = getApiBaseUrl();
+                          // Try /api/files endpoint first as it's the most common pattern
+                          imageUrl = apiBaseUrl 
+                            ? `${apiBaseUrl}/api/files${filePath}`
+                            : `${apiPrefix}/files${filePath}`;
+                        } else {
+                          const apiPrefix = getApiBaseUrlWithPrefix();
+                          imageUrl = `${apiPrefix}/files/${filePath}`;
+                        }
+                      }
+                      
+                      // Track retry attempts to prevent infinite loops
+                      const maxRetries = 3;
+                      
+                      return (
+                        <div key={fileMap.id} className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                          {imageUrl ? (
+                            <img 
+                              src={imageUrl} 
+                              alt={fileName}
+                              className="w-full h-full object-cover rounded-lg"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                const retryCount = parseInt(target.dataset.retryCount || '0', 10);
+                                
+                                // Prevent infinite loops
+                                if (retryCount >= maxRetries) {
+                                  target.src = "/placeholder.svg";
+                                  target.onerror = null; // Remove error handler to stop retries
+                                  return;
+                                }
+                                
+                                // Try alternative endpoints
+                                if (filePath && filePath.startsWith('/')) {
+                                  const apiPrefix = getApiBaseUrlWithPrefix();
+                                  const apiBaseUrl = getApiBaseUrl();
+                                  const alternatives = [
+                                    apiBaseUrl ? `${apiBaseUrl}${filePath}` : `${apiPrefix}${filePath}`,
+                                    apiBaseUrl ? `${apiBaseUrl}/api/uploads${filePath}` : `${apiPrefix}/uploads${filePath}`,
+                                    apiBaseUrl ? `${apiBaseUrl}/api/file/download?path=${encodeURIComponent(filePath)}` : `${apiPrefix}/file/download?path=${encodeURIComponent(filePath)}`,
+                                  ];
+                                  
+                                  const currentSrc = target.src;
+                                  const nextAlt = alternatives.find(alt => alt !== currentSrc);
+                                  
+                                  if (nextAlt && retryCount < maxRetries) {
+                                    target.dataset.retryCount = String(retryCount + 1);
+                                    target.src = nextAlt;
+                                  } else {
+                                    target.src = "/placeholder.svg";
+                                    target.onerror = null; // Remove error handler to stop retries
+                                  }
+                                } else {
+                                  target.src = "/placeholder.svg";
+                                  target.onerror = null; // Remove error handler to stop retries
+                                }
+                              }}
+                              data-retry-count="0"
+                            />
+                          ) : (
+                            <div className="text-gray-400">No image</div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center">
-                    <img 
-                      src="/placeholder.svg" 
-                      alt="Case image 2"
-                      className="w-full h-full object-cover rounded-lg"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = "/placeholder.svg";
-                      }}
-                    />
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    No images attached
                   </div>
-                  <div className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center">
-                    <img 
-                      src="/placeholder.svg" 
-                      alt="Case image 3"
-                      className="w-full h-full object-cover rounded-lg"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = "/placeholder.svg";
-                      }}
-                    />
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
 
@@ -321,6 +524,27 @@ const AwaitingAction = () => {
                       Maximum 5 files (JPG, PNG, PDF) up to 10MB each
                     </p>
                   </div>
+                  {uploadedFiles.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <Label className="text-sm font-medium text-gray-700">Selected Files:</Label>
+                      {uploadedFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                          <span className="text-sm text-gray-700 truncate flex-1">{file.name}</span>
+                          <span className="text-xs text-gray-500 mr-2">
+                            {(file.size / 1024 / 1024).toFixed(2)} MB
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveFile(index)}
+                            className="h-6 w-6 p-0"
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -330,8 +554,8 @@ const AwaitingAction = () => {
               <Button variant="outline" onClick={handleSendBack}>
                 Send Back to Reviewer
               </Button>
-              <Button onClick={handleMarkComplete}>
-                Mark as Complete
+              <Button onClick={handleMarkComplete} disabled={isUpdatingQuery}>
+                {isUpdatingQuery ? "Updating..." : "Mark as Complete"}
               </Button>
             </div>
           </div>
@@ -341,69 +565,100 @@ const AwaitingAction = () => {
             {/* Case Timeline */}
             <Card>
               <CardHeader>
-                <CardTitle>Case Timeline</CardTitle>
+                <CardTitle>
+                  Case Timeline ({queryData?.queryhistory?.length || 0})
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {mockTimeline.map((event, index) => (
-                    <div key={event.id} className="flex items-start space-x-3">
-                      <div className="flex-shrink-0 mt-1">
-                        {event.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">
-                          {event.description}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {event.timestamp}
-                        </p>
-                        <p className="text-sm text-gray-700 mt-1">
-                          {event.user}
-                        </p>
-                        {event.comment && (
-                          <div className="mt-2 p-2 bg-blue-50 border-l-4 border-blue-200 rounded">
-                            <p className="text-sm text-gray-700 italic">
-                              "{event.comment}"
+                {queryData?.queryhistory && queryData.queryhistory.length > 0 ? (
+                  <div className="space-y-4">
+                    {[...queryData.queryhistory]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.changedAt).getTime() -
+                          new Date(a.changedAt).getTime()
+                      )
+                      .map((item) => (
+                        <div key={item.id} className="flex items-start space-x-3">
+                          <div className="flex-shrink-0 mt-1">
+                            <div className="h-3 w-3 rounded-full bg-blue-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900">
+                              {item.status?.name || "Unknown status"}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(item.changedAt).toLocaleString("en-US", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                            <p className="text-sm text-gray-700 mt-1">
+                              {item.userInfo ? "Updated by user" : "System update"}
                             </p>
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm border rounded-lg bg-gray-50">
+                    No history available
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             {/* Comments */}
             <Card>
               <CardHeader>
-                <CardTitle>Comments</CardTitle>
+                <CardTitle>Comments ({queryData?.queryComments?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Existing Comments */}
-                <div className="space-y-4">
-                  {comments.map((comment) => (
-                    <div 
-                      key={comment.id} 
-                      className={`p-3 rounded-lg ${comment.highlighted ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50'}`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-sm text-gray-900">
-                          {comment.user}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {comment.timestamp}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-700">
-                        {comment.content}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                {queryData?.queryComments && queryData.queryComments.length > 0 ? (
+                  <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                    {[...queryData.queryComments]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.createdAt).getTime() -
+                          new Date(a.createdAt).getTime()
+                      )
+                      .map((commentItem) => (
+                        <div
+                          key={commentItem.id}
+                          className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0"
+                        >
+                          <p className="text-sm text-gray-900 mb-1">
+                            {commentItem.comment}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>
+                              {new Date(commentItem.createdAt).toLocaleString("en-US", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            {/* <span className="text-[10px] uppercase tracking-wide bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">
+                              {commentItem.commentedBy}
+                            </span> */}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm border rounded-lg bg-gray-50">
+                    No comments yet
+                  </div>
+                )}
 
                 {/* Add Comment */}
-                <div className="border-t pt-4">
+                <div className="border-t pt-4 space-y-2">
                   <Label className="text-sm font-medium text-gray-700 mb-2 block">
                     Add Comment
                   </Label>
@@ -414,9 +669,17 @@ const AwaitingAction = () => {
                     rows={3}
                     className="w-full mb-3"
                   />
-                  <Button onClick={handlePostComment} className="w-full">
-                    <Send className="h-4 w-4 mr-2" />
-                    Post Comment
+                  <Button
+                    onClick={handlePostComment}
+                    className="w-full"
+                    disabled={isAddingComment || !newComment.trim()}
+                  >
+                    {isAddingComment ? "Adding..." : (
+                      <>
+                        <Send className="h-4 w-4 mr-2" />
+                        Post Comment
+                      </>
+                    )}
                   </Button>
                 </div>
               </CardContent>

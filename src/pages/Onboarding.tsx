@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCreateBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
@@ -92,6 +93,7 @@ const Onboarding = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [createBuilderCustomer, { isLoading: isSaving }] = useCreateBuilderCustomerMutation();
   
   // Helper function to get step from URL
   const getStepFromUrl = (params: URLSearchParams) => {
@@ -384,11 +386,93 @@ const Onboarding = () => {
   };
 
   const handleSaveAndExit = async () => {
-    toast({
-      title: "Registration saved",
-      description: "You can continue this registration later from your dashboard."
-    });
-    navigate('/dashboard');
+    try {
+      // If we're on the customer step and have customer data, save it via API first
+      if (currentStep === 'customer' && formData.customer) {
+        const customerData = formData.customer;
+        
+        // Validate that we have at least some customer data
+        if (customerData.firstName || customerData.email) {
+          // Get builderOrganizationId from user
+          const builderOrganizationId = user && 'builderOrganization' in user && user.builderOrganization
+            ? user.builderOrganization.id
+            : user && 'id' in user 
+            ? user.id 
+            : null;
+
+          if (!builderOrganizationId) {
+            toast({
+              title: "Error",
+              description: "Organization ID is missing. Please log in again.",
+              variant: "destructive"
+            });
+            return;
+          }
+
+          // Map form data to API payload format
+          const apiPayload = {
+            firstName: customerData.firstName || '',
+            lastName: customerData.lastName || '',
+            email: customerData.email || '',
+            contact: customerData.phone || '',
+            address: customerData.propertyAddress || '',
+            city: customerData.city || '',
+            state: customerData.state || '',
+            zip: customerData.zipCode || '',
+            projectName: customerData.projectName || undefined,
+            settlementDate: customerData.settlementDate || undefined,
+            notes: customerData.notes || undefined,
+            builderOrganizationId: builderOrganizationId
+          };
+
+          // Call the API to save customer data
+          const response = await createBuilderCustomer(apiPayload).unwrap();
+          
+          // Update registrationId if we got one from the response
+          if (response.data?.id) {
+            setRegistrationId(response.data.id);
+            // Update formData with the registrationId
+            setFormData(prev => ({
+              ...prev,
+              customer: {
+                ...prev.customer,
+                customerId: response.data.id,
+                registrationId: response.data.id
+              }
+            }));
+          }
+
+          toast({
+            title: "Registration saved",
+            description: "Customer details have been saved. You can continue this registration later from your dashboard."
+          });
+        } else {
+          toast({
+            title: "Registration saved",
+            description: "You can continue this registration later from your dashboard."
+          });
+        }
+      } else {
+        // For other steps, just show the message
+        toast({
+          title: "Registration saved",
+          description: "You can continue this registration later from your dashboard."
+        });
+      }
+      
+      // Navigate to dashboard
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Error saving registration:', error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error 
+        ? (error.data as { message?: string })?.message 
+        : undefined;
+      toast({
+        title: "Error saving registration",
+        description: errorMessage || "Failed to save registration. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleNextStep = () => {
@@ -453,10 +537,12 @@ const Onboarding = () => {
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
       case 'customer':
         return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} customerId={registrationId || undefined} />;
-      case 'items':
-        return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} />;
+      case 'items': {
+        const bomId = searchParams.get('bomId');
+        return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} billMaterialId={bomId || undefined} />;
+      }
       case 'review':
-        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} />;
+        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} registrationId={registrationId} />;
       case 'send':
         return <SendConfirmationForm customerId={(formData.customer as CustomerFormData)?.customerId} />;
       default:
@@ -495,8 +581,8 @@ const Onboarding = () => {
                 <p className="text-muted-foreground mt-1">Create comprehensive documentation packages for your homebuyers</p>
               </div>
               <div className="flex items-center space-x-4">
-                <Button variant="outline" onClick={handleSaveAndExit}>
-                  Save & Exit
+                <Button variant="outline" onClick={handleSaveAndExit} disabled={isSaving}>
+                  {isSaving ? 'Saving...' : 'Save & Exit'}
                 </Button>
                 <div className="text-sm text-muted-foreground">
                   Step {['customer', 'items', 'review', 'send'].indexOf(currentStep) + 1} of 4

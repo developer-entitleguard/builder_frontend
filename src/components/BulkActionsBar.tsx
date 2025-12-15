@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useGetBillOfMaterialsQuery, useAssignBOMMutation } from '@/store/api/items';
-import { Package, Send, X } from 'lucide-react';
+import { useLazyCheckBOMRestrictionsQuery } from '@/store/api/items';
+import { Package, Send, X, AlertTriangle } from 'lucide-react';
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -22,6 +23,9 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
   const [bomDialogOpen, setBomDialogOpen] = useState(false);
   const [selectedBom, setSelectedBom] = useState('');
   const [loading, setLoading] = useState(false);
+  const [warningModalOpen, setWarningModalOpen] = useState(false);
+  const [mappedCustomers, setMappedCustomers] = useState<Array<{ customerId: string; customerName: string }>>([]);
+  const [checkBOMRestrictions] = useLazyCheckBOMRestrictionsQuery();
 
   const { 
     data: bomsData, 
@@ -45,7 +49,7 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
     }
   }, [bomsError, bomDialogOpen, toast]);
 
-  const handleAssignBOM = async () => {
+  const handleAssignBOM = async (skipCheck = false) => {
     if (!selectedBom) {
       toast({
         title: "No BOM selected",
@@ -64,6 +68,23 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
       return;
     }
 
+    // Check for BOM restrictions first (unless user confirmed)
+    if (!skipCheck) {
+      try {
+        const checkResult = await checkBOMRestrictions({ customerIds: selectedIds }).unwrap();
+        
+        if (checkResult.success && checkResult.data && checkResult.data.length > 0) {
+          // BOM is already mapped for some customers
+          setMappedCustomers(checkResult.data);
+          setWarningModalOpen(true);
+          return;
+        }
+      } catch (error) {
+        // If check fails, log but continue with assignment
+        console.error('Error checking BOM restrictions:', error);
+      }
+    }
+
     setLoading(true);
     try {
       const result = await assignBOM({
@@ -78,6 +99,8 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
 
       setBomDialogOpen(false);
       setSelectedBom('');
+      setWarningModalOpen(false);
+      setMappedCustomers([]);
       onClearSelection();
       onSuccess();
     } catch (error) {
@@ -89,6 +112,11 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleConfirmAssign = () => {
+    setWarningModalOpen(false);
+    handleAssignBOM(true); // Skip the check since user confirmed
   };
 
   const handleBulkSubmit = async () => {
@@ -230,11 +258,54 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
               <Button variant="outline" onClick={() => setBomDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAssignBOM} disabled={loading || isAssigningBOM || !selectedBom}>
+              <Button onClick={() => handleAssignBOM(false)} disabled={loading || isAssigningBOM || !selectedBom}>
                 {loading || isAssigningBOM ? 'Assigning...' : 'Assign BOM'}
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Warning Modal for BOM Already Mapped */}
+      <Dialog open={warningModalOpen} onOpenChange={setWarningModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-600" />
+              BOM Already Mapped
+            </DialogTitle>
+            <DialogDescription>
+              Bom Already Mapped for a customer
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              The following customer(s) already have a BOM mapped:
+            </p>
+            <ul className="list-disc list-inside space-y-2">
+              {mappedCustomers.map((customer) => (
+                <li key={customer.customerId} className="text-sm">
+                  <span className="font-medium">{customer.customerName}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm text-muted-foreground mt-4">
+              Do you want to proceed with assigning the BOM anyway?
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setWarningModalOpen(false);
+              setMappedCustomers([]);
+            }}>
+              No
+            </Button>
+            <Button onClick={handleConfirmAssign} disabled={loading || isAssigningBOM}>
+              Yes
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

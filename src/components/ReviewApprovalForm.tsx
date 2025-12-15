@@ -8,6 +8,7 @@ import { User, Home, FileText, Building, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
+import { useCreateCustomerEntitlementMutation } from "@/lib/api/services/customerEntitlement";
 import { skipToken } from "@reduxjs/toolkit/query";
 
 interface SelectedItem {
@@ -47,22 +48,27 @@ interface FormData {
 interface ReviewApprovalFormProps {
   onNext: () => void;
   formData?: FormData;
+  registrationId?: string | null;
 }
 
-const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
+const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [approved, setApproved] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
   // Use items passed from previous step instead of fetching from Supabase
   const selectedItems: SelectedItem[] = formData?.items?.selected_items || [];
 
-  const customerId: string | undefined = formData?.customer?.customerId;
+  const customerId: string | undefined = formData?.customer?.customerId || registrationId || undefined;
 
-  // Fetch customer details from API when we have both builderId and customerId
   const { data: customerDetailsData } = useGetCustomerDetailsQuery(
     user?.id && customerId
       ? { builderId: user.id as string, customerId }
-      : skipToken
+      : skipToken,
+    {
+      refetchOnMountOrArgChange: true,
+    }
   );
 
   const apiCustomer = customerDetailsData?.data?.customer;
@@ -95,6 +101,40 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
     acc[item.category].push(item);
     return acc;
   }, {} as Record<string, SelectedItem[]>);
+
+  const handleSendToHomeowner = async () => {
+    if (isSending) return;
+    if (!customerId) {
+      toast({
+        title: "Error",
+        description: "Customer ID is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    try {
+      setIsSending(true);
+      await createCustomerEntitlement({ builderCustomerId: customerId }).unwrap();
+      await Promise.resolve(onNext());
+      toast({
+        title: "Success",
+        description: "Customer entitlement created successfully"
+      });
+    } catch (error) {
+      console.error("Error creating customer entitlement:", error);
+      toast({
+        title: "Error",
+        description: error && typeof error === 'object' && 'data' in error
+          ? String((error.data as { message?: string })?.message || "Failed to create customer entitlement")
+          : error instanceof Error
+          ? error.message
+          : "Failed to create customer entitlement",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -267,11 +307,11 @@ const ReviewApprovalForm = ({ onNext, formData }: ReviewApprovalFormProps) => {
           {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''}  • Ready to send
         </p>
         <Button 
-          onClick={onNext}
-          disabled={!approved}
+          onClick={handleSendToHomeowner}
+          disabled={!approved || isSending}
           className="min-w-[120px]"
         >
-          Send to Homeowner
+          {isSending ? "Sending..." : "Send to Homeowner"}
         </Button>
       </div>
     </div>

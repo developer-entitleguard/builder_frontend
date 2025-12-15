@@ -55,6 +55,7 @@ interface HomeownerRegistration {
   statusName: string;
   created_at: string;
   entitlement_sent_at: string | null;
+  billMaterialId?: string;
 }
 
 interface OwnerRegistrationResponse {
@@ -72,6 +73,7 @@ interface OwnerRegistrationResponse {
   createdAt: string;
   builderId: string;
   builderName: string;
+  billMaterialId?: string;
 }
 
 interface ProjectGroup {
@@ -206,6 +208,7 @@ const Dashboard = () => {
         statusName: item.statusName || 'DRAFT',
         created_at: item.createdAt,
         entitlement_sent_at: item.statusName === 'SENT' ? item.createdAt : null,
+        billMaterialId: item.billMaterialId,
       };
     });
   }, [ownerRegistrationsData]);
@@ -769,9 +772,12 @@ const Dashboard = () => {
                         />
                         <div
                           className="flex items-center justify-between flex-1 cursor-pointer"
-                          onClick={() =>
-                            navigate(`/onboarding?id=${registration.id}`)
-                          }
+                          onClick={() => {
+                            const url = registration.billMaterialId 
+                              ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
+                              : `/onboarding?id=${registration.id}`;
+                            navigate(url);
+                          }}
                         >
                           <div className="flex items-center space-x-4 flex-1">
                             {getStatusIcon(registration.statusName)}
@@ -881,9 +887,12 @@ const Dashboard = () => {
                                   <div
                                     key={registration.id}
                                     className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                                    onClick={() =>
-                                      navigate(`/onboarding?id=${registration.id}`)
-                                    }
+                                    onClick={() => {
+                                      const url = registration.billMaterialId 
+                                        ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
+                                        : `/onboarding?id=${registration.id}`;
+                                      navigate(url);
+                                    }}
                                   >
                                     <div className="flex items-center space-x-3 flex-1">
                                       {getStatusIcon(registration.statusName)}
@@ -908,9 +917,10 @@ const Dashboard = () => {
                                         size="sm"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          navigate(
-                                            `/onboarding?id=${registration.id}`
-                                          );
+                                          const url = registration.billMaterialId 
+                                            ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
+                                            : `/onboarding?id=${registration.id}`;
+                                          navigate(url);
                                         }}
                                       >
                                         Edit

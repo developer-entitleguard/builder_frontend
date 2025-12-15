@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { useGetCategorysQuery, useGetBillOfMaterialsQuery, useGetBillMaterialsQuery, useCreateItemMutation, useDeleteItemMutation } from "@/store/api/items";
+import { useGetCategorysQuery, useGetBillOfMaterialsQuery, useGetBillMaterialsQuery, useCreateItemMutation, useDeleteItemMutation, useDeleteBuilderItemFilesMutation } from "@/store/api/items";
 import { CreateBuilderItemRequest } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,25 @@ interface BuilderItem {
   notes: string | null;
   purchaser: string | null;
   bom_id: string | null;
+  builderItemFiles?: Array<{
+    id: string;
+    type: string;
+    files: {
+      id: string;
+      name: string;
+      type: string;
+      fileType: string;
+      filePath: string;
+    };
+  }>;
+}
+
+interface UploadedDoc {
+  name: string;
+  url: string;
+  path: string;
+  type: 'Warranty' | 'Manual';
+  builderItemFileId?: string;
 }
 
 interface BillOfMaterials {
@@ -65,12 +84,13 @@ const ItemsManagement = () => {
     purchaser: ""
   });
   const [warrantyFiles, setWarrantyFiles] = useState<File[]>([]);
-  const [uploadedWarrantyDocs, setUploadedWarrantyDocs] = useState<Array<{ name: string; url: string; path: string }>>([]);
+  const [uploadedWarrantyDocs, setUploadedWarrantyDocs] = useState<UploadedDoc[]>([]);
   const [uploadingWarranty, setUploadingWarranty] = useState<boolean>(false);
   const warrantyFileInputRef = useRef<HTMLInputElement>(null);
   
   const [manualFiles, setManualFiles] = useState<File[]>([]);
-  const [uploadedManualDocs, setUploadedManualDocs] = useState<Array<{ name: string; url: string; path: string }>>([]);
+  const [uploadedManualDocs, setUploadedManualDocs] = useState<UploadedDoc[]>([]);
+  const [deleteBuilderItemFiles] = useDeleteBuilderItemFilesMutation();
   const [uploadingManual, setUploadingManual] = useState<boolean>(false);
   const manualFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,10 +104,29 @@ const ItemsManagement = () => {
   }, [bomsResponse?.data]);
 
   // Map API bill materials response to BuilderItem format
-  const items = useMemo(() => {
+  const items = useMemo<BuilderItem[]>(() => {
     if (!billMaterialsResponse?.data) return [];
     
-    return billMaterialsResponse.data.map(item => ({
+    // Treat raw API items as any to allow optional builderItemFiles field
+    type ApiBuilderItem = {
+      id: string;
+      name: string;
+      category: string;
+      make: string | null;
+      brand: string | null;
+      model: string | null;
+      text: string | null;
+      note: string | null;
+      price: string | null;
+      documentationUrl: string | null;
+      puchaser: string | null;
+      billOfMaterials?: { id: string };
+      builderItemFiles?: BuilderItem['builderItemFiles'];
+    };
+
+    const apiItems = billMaterialsResponse.data as ApiBuilderItem[];
+
+    return apiItems.map((item) => ({
       id: item.id,
       name: item.name,
       category: item.category,
@@ -100,6 +139,7 @@ const ItemsManagement = () => {
       notes: item.note || null,
       purchaser: item.puchaser || null,
       bom_id: item.billOfMaterials?.id || null,
+      builderItemFiles: item.builderItemFiles || [],
     })).sort((a, b) => {
       // Sort by category first, then by name
       if (a.category !== b.category) {
@@ -270,11 +310,35 @@ const ItemsManagement = () => {
       notes: item.notes || "",
       purchaser: item.purchaser || ""
     });
-    // Reset file uploads when editing
+    // When editing, clear any newly selected files but preload already uploaded docs from API
     setWarrantyFiles([]);
-    setUploadedWarrantyDocs([]);
     setManualFiles([]);
-    setUploadedManualDocs([]);
+
+    const warrantyDocsFromItem: UploadedDoc[] =
+      item.builderItemFiles
+        ?.filter((file) => file.type === 'Warranty' && file.files)
+        .map((file) => ({
+          name: file.files.name,
+          url: "",
+          path: file.files.filePath,
+          type: 'Warranty',
+          builderItemFileId: file.id,
+        })) || [];
+
+    const manualDocsFromItem: UploadedDoc[] =
+      item.builderItemFiles
+        ?.filter((file) => file.type === 'Manual' && file.files)
+        .map((file) => ({
+          name: file.files.name,
+          url: "",
+          path: file.files.filePath,
+          type: 'Manual',
+          builderItemFileId: file.id,
+        })) || [];
+
+    setUploadedWarrantyDocs(warrantyDocsFromItem);
+    setUploadedManualDocs(manualDocsFromItem);
+
     if (warrantyFileInputRef.current) warrantyFileInputRef.current.value = '';
     if (manualFileInputRef.current) manualFileInputRef.current.value = '';
     setDialogOpen(true);
@@ -300,11 +364,65 @@ const ItemsManagement = () => {
     setManualFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleRemoveUploadedWarranty = (index: number) => {
+  const handleRemoveUploadedWarranty = async (index: number) => {
+    const doc = uploadedWarrantyDocs[index];
+    if (!doc) return;
+
+    // If this doc is already stored in backend, delete via RTK Query mutation
+    if (doc.builderItemFileId) {
+      try {
+        const result = await deleteBuilderItemFiles(doc.builderItemFileId).unwrap();
+        if (!result.success) {
+          toast({
+            title: "Failed to delete file",
+            description: result.message || "Could not delete warranty document.",
+            variant: "destructive",
+          });
+          return;
+        }
+        await refetchBillMaterials();
+      } catch (error) {
+        console.error('Error deleting warranty document:', error);
+        toast({
+          title: "Failed to delete file",
+          description: error instanceof Error ? error.message : "Could not delete warranty document.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Remove from UI state
     setUploadedWarrantyDocs(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleRemoveUploadedManual = (index: number) => {
+  const handleRemoveUploadedManual = async (index: number) => {
+    const doc = uploadedManualDocs[index];
+    if (!doc) return;
+
+    if (doc.builderItemFileId) {
+      try {
+        const result = await deleteBuilderItemFiles(doc.builderItemFileId).unwrap();
+        if (!result.success) {
+          toast({
+            title: "Failed to delete file",
+            description: result.message || "Could not delete manual document.",
+            variant: "destructive",
+          });
+          return;
+        }
+        await refetchBillMaterials();
+      } catch (error) {
+        console.error('Error deleting manual document:', error);
+        toast({
+          title: "Failed to delete file",
+          description: error instanceof Error ? error.message : "Could not delete manual document.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setUploadedManualDocs(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -351,7 +469,7 @@ const ItemsManagement = () => {
         : `${apiBaseUrl}/api/upload/item-document`;
 
       // Upload all warranty files
-      const uploadPromises = warrantyFiles.map(async (file) => {
+      const uploadPromises = warrantyFiles.map<Promise<UploadedDoc>>(async (file) => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('documentType', 'warranty');
@@ -376,7 +494,9 @@ const ItemsManagement = () => {
         return {
           name: file.name,
           url: result.url || result.data?.url || '',
-          path: result.path || result.data?.path || ''
+          path: result.path || result.data?.path || '',
+          type: 'Warranty',
+          builderItemFileId: result.builderItemFileId || result.data?.id,
         };
       });
 
@@ -444,7 +564,7 @@ const ItemsManagement = () => {
         : `${apiBaseUrl}/api/upload/item-document`;
 
       // Upload all manual files
-      const uploadPromises = manualFiles.map(async (file) => {
+      const uploadPromises = manualFiles.map<Promise<UploadedDoc>>(async (file) => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('documentType', 'manual');
@@ -469,7 +589,9 @@ const ItemsManagement = () => {
         return {
           name: file.name,
           url: result.url || result.data?.url || '',
-          path: result.path || result.data?.path || ''
+          path: result.path || result.data?.path || '',
+          type: 'Manual',
+          builderItemFileId: result.builderItemFileId || result.data?.id,
         };
       });
 

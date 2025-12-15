@@ -285,6 +285,14 @@ export const itemsApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Item', 'Registration', 'Dashboard'],
     }),
+
+    deleteBuilderItemFiles: build.mutation<{ success: boolean; message?: string }, string>({
+      query: (id) => ({
+        url: `/api/delete/builderitem/files/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Item'],
+    }),
     checkExistingCustomerItemMap: build.query<{
       success: boolean;
       message: string;
@@ -360,4 +368,5 @@ export const {
   useLazyCheckBOMRestrictionsQuery,
   useAssignBOMMutation,
   useCheckExistingCustomerItemMapQuery,
+  useDeleteBuilderItemFilesMutation,
 } = itemsApi;

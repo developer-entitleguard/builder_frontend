@@ -14,7 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Upload, Download } from "lucide-react";
-import { getApiBaseUrl } from "@/lib/config";
+import { useDownTemp } from "@/lib/api/services/templateDownload";
 
 interface BOMUploadProps {
   onSuccess: () => void;
@@ -44,6 +44,8 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
     projectName: "",
     file: null as File | null,
   });
+  const { download: downloadBomTemplate, isLoading: downloadingTemplate } =
+    useDownTemp();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -64,99 +66,6 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
       }
     }
     setFormData({ ...formData, file });
-  };
-
-  const handleDownloadTemplate = async () => {
-    try {
-      // Get JWT token from localStorage
-      const userData = localStorage.getItem("userData");
-      let authToken = "";
-
-      if (userData) {
-        try {
-          const parsedData = JSON.parse(userData);
-          if (parsedData.jwt) {
-            authToken = parsedData.jwt;
-          }
-        } catch (error) {
-          console.warn("Failed to parse userData:", error);
-        }
-      }
-
-      // Get API base URL
-      const apiBaseUrl = getApiBaseUrl();
-      // Add cache-busting query parameter to prevent 304 responses
-      const timestamp = Date.now();
-      const url = import.meta.env.DEV
-        ? `/api/download-template`
-        // ?t=${timestamp}
-        : `${apiBaseUrl}/api/download-template`;
-
-      // Fetch the file with cache-busting headers
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: authToken ? `Bearer ${authToken}` : "",
-          Accept: "text/csv, application/octet-stream, */*",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-        },
-        cache: "no-store", // Force fresh request
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to download template: ${response.statusText}`);
-      }
-
-      // Get the blob from response
-      const blob = await response.blob();
-
-      // Verify blob is valid (not empty and has correct type)
-      if (blob.size === 0) {
-        throw new Error("Downloaded file is empty. Please try again.");
-      }
-
-      // Verify content type if available
-      const contentType = response.headers.get("content-type");
-      if (
-        contentType &&
-        !contentType.includes("csv") &&
-        !contentType.includes("octet-stream")
-      ) {
-        console.warn("Unexpected content type:", contentType);
-      }
-
-      // Create a download link with proper MIME type
-      const downloadUrl = window.URL.createObjectURL(
-        new Blob([blob], {
-          type: "text/csv",
-        })
-      );
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = "builder_template.csv";
-      document.body.appendChild(link);
-      link.click();
-
-      // Clean up
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
-
-      toast({
-        title: "Template downloaded",
-        description: "BOM template CSV file has been downloaded",
-      });
-    } catch (error) {
-      console.error("Error downloading template:", error);
-      toast({
-        title: "Error downloading template",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to download template",
-        variant: "destructive",
-      });
-    }
   };
 
   const parseCSV = (text: string): CSVItem[] => {
@@ -326,19 +235,26 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
               Upload a CSV (.csv) file with item data
             </p>
           </div>
+          {isUploading && (
+            <p className="text-sm text-muted-foreground text-right">
+              Uploading file, please wait...
+            </p>
+          )}
           <div className="flex justify-end gap-2">
             <Button
               type="button"
               variant="outline"
-              onClick={handleDownloadTemplate}
+              onClick={downloadBomTemplate}
+              disabled={isUploading || downloadingTemplate}
             >
               <Download className="w-4 h-4 mr-2" />
-              Download Template
+              {downloadingTemplate ? "Downloading..." : "Download Template"}
             </Button>
             <Button
               type="button"
               variant="outline"
               onClick={() => setDialogOpen(false)}
+              disabled={isUploading}
             >
               Cancel
             </Button>

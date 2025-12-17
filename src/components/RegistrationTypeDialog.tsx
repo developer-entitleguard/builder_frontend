@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { User, Users, Upload, Download } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/config";
+import { useRegTempDownload } from "@/lib/api/services/templateDownload";
 
 interface RegistrationTypeDialogProps {
   open: boolean;
@@ -35,6 +36,8 @@ export const RegistrationTypeDialog = ({
   );
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const { download: downloadRegistrationTemplate, isLoading: downloadingTemplate } =
+    useRegTempDownload();
 
   const handleSingleRegistration = () => {
     onOpenChange(false);
@@ -161,101 +164,6 @@ export const RegistrationTypeDialog = ({
     }
   };
 
-  const handleDownloadTemplate = async () => {
-    try {
-      // Get JWT token from localStorage
-      const userData = localStorage.getItem("userData");
-      let authToken = "";
-
-      if (userData) {
-        try {
-          const parsedData = JSON.parse(userData);
-          if (parsedData.jwt) {
-            authToken = parsedData.jwt;
-          }
-        } catch (error) {
-          console.warn("Failed to parse userData:", error);
-        }
-      }
-
-      // Get API base URL
-      const apiBaseUrl = getApiBaseUrl();
-      // Add cache-busting query parameter to prevent 304 responses
-      const timestamp = Date.now();
-      const url = import.meta.env.DEV
-        ? `/auth/download/registration-template?t=${timestamp}`
-        : `${apiBaseUrl}/auth/download/registration-template?t=${timestamp}`;
-
-      // Fetch the file with cache-busting headers
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: authToken ? `Bearer ${authToken}` : "",
-          Accept: "text/csv, application/octet-stream, */*",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-        },
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to download template: ${response.statusText}`);
-      }
-
-      // Get the blob from response
-      const blob = await response.blob();
-
-      // Verify blob is valid (not empty)
-      if (blob.size === 0) {
-        throw new Error("Downloaded file is empty. Please try again.");
-      }
-
-      // Optionally check content type
-      const contentType = response.headers.get("content-type");
-      if (
-        contentType &&
-        !contentType.includes("csv") &&
-        !contentType.includes("octet-stream")
-      ) {
-        console.warn(
-          "Unexpected content type for registration template:",
-          contentType
-        );
-      }
-
-      // Create a download link with proper MIME type
-      const downloadUrl = window.URL.createObjectURL(
-        new Blob([blob], {
-          type: "text/csv",
-        })
-      );
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = "registration-template.csv";
-      document.body.appendChild(link);
-      link.click();
-
-      // Clean up
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
-
-      toast({
-        title: "Template downloaded",
-        description: "Registration template CSV file has been downloaded",
-      });
-    } catch (error) {
-      console.error("Error downloading template:", error);
-      toast({
-        title: "Error downloading template",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to download template",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleBack = () => {
     setSelectedType(null);
   };
@@ -336,12 +244,12 @@ export const RegistrationTypeDialog = ({
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={handleDownloadTemplate}
+                onClick={downloadRegistrationTemplate}
                 className="flex-1"
-                disabled={uploading}
+                disabled={uploading || downloadingTemplate}
               >
                 <Download className="w-4 h-4 mr-2" />
-                Download Template
+                {downloadingTemplate ? "Downloading..." : "Download Template"}
               </Button>
               <Button
                 variant="outline"

@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Upload, FileText, X } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Plus, Edit, Trash2, Upload, FileText, X, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import { BOMUpload } from "@/components/BOMUpload";
 import { getApiBaseUrl } from "@/lib/config";
@@ -61,10 +62,10 @@ const ItemsManagement = () => {
   console.log('ItemsManagement - Component initialized');
   const { user } = useAuth();
   const { toast } = useToast();
-  const { data: categoriesResponse, isLoading: isLoadingCategories } = useGetCategorysQuery();
-  const { data: bomsResponse, isLoading: isLoadingBOMs } = useGetBillOfMaterialsQuery();
+  const { data: categoriesResponse, isLoading: isLoadingCategories, isFetching: isFetchingCategories } = useGetCategorysQuery();
+  const { data: bomsResponse, isLoading: isLoadingBOMs, isFetching: isFetchingBOMs } = useGetBillOfMaterialsQuery();
   const [selectedBomId, setSelectedBomId] = useState<string>("");
-  const { data: billMaterialsResponse, isLoading: isLoadingBillMaterials, refetch: refetchBillMaterials } = useGetBillMaterialsQuery(selectedBomId, {
+  const { data: billMaterialsResponse, isLoading: isLoadingBillMaterials, isFetching: isFetchingBillMaterials, refetch: refetchBillMaterials } = useGetBillMaterialsQuery(selectedBomId, {
     skip: !selectedBomId,
   });
   const [createItem, { isLoading: isCreating }] = useCreateItemMutation();
@@ -651,8 +652,8 @@ const ItemsManagement = () => {
     return acc;
   }, {} as Record<string, BuilderItem[]>);
 
-  if (isLoadingCategories || isLoadingBOMs || (selectedBomId && isLoadingBillMaterials)) {
-    console.log('ItemsManagement - Showing loading state');
+  // Show a simple full-page loading state only for the very first load of categories
+  if (isLoadingCategories && !categoriesResponse && !user) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
@@ -960,23 +961,87 @@ const ItemsManagement = () => {
           <>
             <div className="mb-6">
               <Label htmlFor="bomSelect">Select Bill of Materials</Label>
-              <Select value={selectedBomId} onValueChange={(value) => {
-                setSelectedBomId(value);
-              }}>
-                <SelectTrigger className="w-full max-w-md">
-                  <SelectValue placeholder={isLoadingBOMs ? "Loading BOMs..." : "Select a Bill of Materials"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {boms.map((bom) => (
-                    <SelectItem key={bom.id} value={bom.id}>
-                      {bom.name} {bom.project_name && `- ${bom.project_name}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {(isLoadingBOMs || isFetchingBOMs) ? (
+                <div className="w-full max-w-md">
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ) : (
+                <Select 
+                  value={selectedBomId} 
+                  onValueChange={(value) => {
+                    setSelectedBomId(value);
+                  }}
+                  disabled={isLoadingBOMs || isFetchingBOMs}
+                >
+                  <SelectTrigger className="w-full max-w-md">
+                    <SelectValue placeholder="Select a Bill of Materials" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {boms.map((bom) => (
+                      <SelectItem key={bom.id} value={bom.id}>
+                        {bom.name} {bom.project_name && `- ${bom.project_name}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
-            {items.length === 0 ? (
+            {(isLoadingBillMaterials || isFetchingBillMaterials) ? (
+              <div className="space-y-6">
+                {Array.from({ length: 3 }).map((_, cardIndex) => (
+                  <Card key={cardIndex}>
+                    <CardHeader>
+                      <CardTitle className="flex items-center justify-between">
+                        <Skeleton className="h-5 w-40" />
+                        <Skeleton className="h-5 w-20" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Make</TableHead>
+                            <TableHead>Brand</TableHead>
+                            <TableHead>Model</TableHead>
+                            <TableHead>Purchaser</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {Array.from({ length: 5 }).map((_, rowIndex) => (
+                            <TableRow key={rowIndex}>
+                              <TableCell>
+                                <Skeleton className="h-4 w-32" />
+                              </TableCell>
+                              <TableCell>
+                                <Skeleton className="h-4 w-24" />
+                              </TableCell>
+                              <TableCell>
+                                <Skeleton className="h-4 w-24" />
+                              </TableCell>
+                              <TableCell>
+                                <Skeleton className="h-4 w-24" />
+                              </TableCell>
+                              <TableCell>
+                                <Skeleton className="h-4 w-20" />
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex space-x-2">
+                                  <Skeleton className="h-8 w-8" />
+                                  <Skeleton className="h-8 w-8" />
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : items.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <p className="text-muted-foreground text-center">

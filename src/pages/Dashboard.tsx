@@ -753,7 +753,9 @@ const Dashboard = () => {
                         </span>
                       </div>
                     )}
-                    {filteredRegistrations.map((registration) => (
+                    {filteredRegistrations.map((registration) => {
+                      const isEntitlement = registration.statusName === "ENTITLEMENT";
+                      return (
                       <div
                         key={registration.id}
                         className="flex items-center gap-4 p-4 border rounded-lg hover:bg-accent/50 transition-colors"
@@ -771,8 +773,9 @@ const Dashboard = () => {
                           onClick={(e) => e.stopPropagation()}
                         />
                         <div
-                          className="flex items-center justify-between flex-1 cursor-pointer"
+                          className={`flex items-center justify-between flex-1 ${isEntitlement ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                           onClick={() => {
+                            if (isEntitlement) return;
                             const url = registration.billMaterialId 
                               ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
                               : `/onboarding?id=${registration.id}`;
@@ -821,7 +824,8 @@ const Dashboard = () => {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>
@@ -883,11 +887,14 @@ const Dashboard = () => {
                             </CardHeader>
                             <CardContent>
                               <div className="space-y-3">
-                                {projectRegs.map((registration) => (
+                                {projectRegs.map((registration) => {
+                                  const isEntitlement = registration.statusName === "ENTITLEMENT";
+                                  return (
                                   <div
                                     key={registration.id}
-                                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                                    className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${isEntitlement ? 'cursor-not-allowed opacity-60' : 'hover:bg-accent/50 cursor-pointer'}`}
                                     onClick={() => {
+                                      if (isEntitlement) return;
                                       const url = registration.billMaterialId 
                                         ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
                                         : `/onboarding?id=${registration.id}`;
@@ -915,8 +922,10 @@ const Dashboard = () => {
                                       <Button
                                         variant="ghost"
                                         size="sm"
+                                        disabled={isEntitlement}
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          if (isEntitlement) return;
                                           const url = registration.billMaterialId 
                                             ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
                                             : `/onboarding?id=${registration.id}`;
@@ -927,7 +936,8 @@ const Dashboard = () => {
                                       </Button>
                                     </div>
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </CardContent>
                           </Card>

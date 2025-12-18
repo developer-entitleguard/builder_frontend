@@ -13,7 +13,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Edit, Trash2, Upload, FileText, X, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2, Upload, FileText, X, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import Header from "@/components/Header";
 import { BOMUpload } from "@/components/BOMUpload";
 import { getApiBaseUrl } from "@/lib/config";
@@ -88,12 +89,15 @@ const ItemsManagement = () => {
   const [uploadedWarrantyDocs, setUploadedWarrantyDocs] = useState<UploadedDoc[]>([]);
   const [uploadingWarranty, setUploadingWarranty] = useState<boolean>(false);
   const warrantyFileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [manualFiles, setManualFiles] = useState<File[]>([]);
   const [uploadedManualDocs, setUploadedManualDocs] = useState<UploadedDoc[]>([]);
   const [deleteBuilderItemFiles] = useDeleteBuilderItemFilesMutation();
   const [uploadingManual, setUploadingManual] = useState<boolean>(false);
   const manualFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [isWarrantyFilesOpen, setIsWarrantyFilesOpen] = useState(false);
+  const [isManualFilesOpen, setIsManualFilesOpen] = useState(false);
 
   // Map API BOMs response to component format
   const boms = useMemo(() => {
@@ -175,6 +179,8 @@ const ItemsManagement = () => {
     setUploadedWarrantyDocs([]);
     setManualFiles([]);
     setUploadedManualDocs([]);
+    setIsWarrantyFilesOpen(false);
+    setIsManualFilesOpen(false);
     if (warrantyFileInputRef.current) warrantyFileInputRef.current.value = '';
     if (manualFileInputRef.current) manualFileInputRef.current.value = '';
   };
@@ -381,6 +387,10 @@ const ItemsManagement = () => {
           });
           return;
         }
+        toast({
+          title: "File deleted",
+          description: result.message || "Files Deleted Successfully",
+        });
         await refetchBillMaterials();
       } catch (error) {
         console.error('Error deleting warranty document:', error);
@@ -412,6 +422,10 @@ const ItemsManagement = () => {
           });
           return;
         }
+        toast({
+          title: "File deleted",
+          description: result.message || "Files Deleted Successfully",
+        });
         await refetchBillMaterials();
       } catch (error) {
         console.error('Error deleting manual document:', error);
@@ -700,7 +714,7 @@ const ItemsManagement = () => {
                   Add Item
                 </Button>
               </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingItem ? 'Edit Item' : 'Add New Item'}</DialogTitle>
                 <DialogDescription>
@@ -822,53 +836,80 @@ const ItemsManagement = () => {
                       onChange={(e) => handleWarrantyFileSelect(e.target.files)}
                       className="w-full max-w-full"
                     />
-                    {warrantyFiles.length > 0 && (
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground mb-1">Selected warranty files:</p>
-                        {warrantyFiles.map((file, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 text-sm bg-muted p-2 rounded w-full max-w-full overflow-hidden"
-                          >
-                            <FileText className="h-4 w-4" />
-                            <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
-                              {file.name}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveWarrantyFile(idx)}
-                            >
-                              <X className="h-3 w-3" />
+                    {(warrantyFiles.length > 0 || uploadedWarrantyDocs.length > 0) && (
+                      <Collapsible
+                        className="space-y-1"
+                        open={isWarrantyFilesOpen}
+                        onOpenChange={setIsWarrantyFilesOpen}
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-muted-foreground">
+                            Warranty files ({warrantyFiles.length + uploadedWarrantyDocs.length})
+                          </p>
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="sm" className="flex items-center gap-1">
+                              {isWarrantyFilesOpen ? (
+                                <ChevronDown className="h-3 w-3" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3" />
+                              )}
+                              <span className="text-xs">
+                                {isWarrantyFilesOpen ? "Hide" : "Show"}
+                              </span>
                             </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {uploadedWarrantyDocs.length > 0 && (
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground mb-1">Uploaded warranty documents:</p>
-                        {uploadedWarrantyDocs.map((doc, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded w-full max-w-full overflow-hidden"
-                          >
-                            <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
-                              {doc.name}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveUploadedWarranty(idx)}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
+                          </CollapsibleTrigger>
+                        </div>
+                        <CollapsibleContent className="space-y-1 pt-1">
+                          {warrantyFiles.length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground mb-1">Selected warranty files:</p>
+                              {warrantyFiles.map((file, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center gap-2 text-sm bg-muted p-2 rounded w-full max-w-full overflow-hidden"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                  <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
+                                    {file.name}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveWarrantyFile(idx)}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {uploadedWarrantyDocs.length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground mb-1">Uploaded warranty documents:</p>
+                              {uploadedWarrantyDocs.map((doc, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded w-full max-w-full overflow-hidden"
+                                >
+                                  <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                  <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
+                                    {doc.name}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveUploadedWarranty(idx)}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </CollapsibleContent>
+                      </Collapsible>
                     )}
                   </div>
                 </div>
@@ -885,53 +926,80 @@ const ItemsManagement = () => {
                       onChange={(e) => handleManualFileSelect(e.target.files)}
                       className="w-full max-w-full"
                     />
-                    {manualFiles.length > 0 && (
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground mb-1">Selected manual files:</p>
-                        {manualFiles.map((file, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 text-sm bg-muted p-2 rounded w-full max-w-full overflow-hidden"
-                          >
-                            <FileText className="h-4 w-4" />
-                            <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
-                              {file.name}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveManualFile(idx)}
-                            >
-                              <X className="h-3 w-3" />
+                    {(manualFiles.length > 0 || uploadedManualDocs.length > 0) && (
+                      <Collapsible
+                        className="space-y-1"
+                        open={isManualFilesOpen}
+                        onOpenChange={setIsManualFilesOpen}
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-muted-foreground">
+                            Manual files ({manualFiles.length + uploadedManualDocs.length})
+                          </p>
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="sm" className="flex items-center gap-1">
+                              {isManualFilesOpen ? (
+                                <ChevronDown className="h-3 w-3" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3" />
+                              )}
+                              <span className="text-xs">
+                                {isManualFilesOpen ? "Hide" : "Show"}
+                              </span>
                             </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {uploadedManualDocs.length > 0 && (
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground mb-1">Uploaded manual documents:</p>
-                        {uploadedManualDocs.map((doc, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded w-full max-w-full overflow-hidden"
-                          >
-                            <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
-                              {doc.name}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveUploadedManual(idx)}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
+                          </CollapsibleTrigger>
+                        </div>
+                        <CollapsibleContent className="space-y-1 pt-1">
+                          {manualFiles.length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground mb-1">Selected manual files:</p>
+                              {manualFiles.map((file, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center gap-2 text-sm bg-muted p-2 rounded w-full max-w-full overflow-hidden"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                  <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
+                                    {file.name}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveManualFile(idx)}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {uploadedManualDocs.length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground mb-1">Uploaded manual documents:</p>
+                              {uploadedManualDocs.map((doc, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded w-full max-w-full overflow-hidden"
+                                >
+                                  <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                  <span className="flex-1 min-w-0 overflow-hidden text-ellipsis break-words break-all whitespace-pre-wrap">
+                                    {doc.name}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveUploadedManual(idx)}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </CollapsibleContent>
+                      </Collapsible>
                     )}
                   </div>
                 </div>

@@ -276,29 +276,28 @@ const Dashboard = () => {
 
   // Helper function to format status name for display
   const formatStatusName = (statusName: string): string => {
+    // Handle both underscore and space-separated status names
     return statusName
-      .split('_')
+      .split(/[_\s]+/)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
   };
 
   // Helper function to convert API status name to filter value
+  // Use the actual status name as the filter value to distinguish between similar statuses
   const statusNameToFilterValue = (statusName: string): string => {
-    const normalized = statusName.toLowerCase();
-    // Map API status names to filter values
-    const statusMap: Record<string, string> = {
-      'draft': 'draft',
-      'entitlement': 'documents_pending',
-      'ready_for_review': 'ready_for_review',
-      'created': 'draft',
-      'sent': 'sent',
-      'delivered': 'delivered',
-    };
-    return statusMap[normalized] || normalized;
+    // Return the status name as-is (normalized to uppercase for consistency)
+    return statusName.toUpperCase();
   };
 
   // Get statuses from API
   const statuses = statusesData?.data || [];
+
+  const getFilterDisplayText = (filterValue: string): string => {
+    if (filterValue === "all") return "All Statuses";
+    const status = statuses.find(s => statusNameToFilterValue(s.name) === filterValue);
+    return status ? formatStatusName(status.name) : "Filter by status";
+  };
 
   const getStatusBadge = (status: string) => {
     // Normalize status to uppercase for API statusName values
@@ -360,7 +359,7 @@ const Dashboard = () => {
       reg.property_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
       reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesStatus = statusFilter === "all" || reg.status === statusFilter;
+    const matchesStatus = statusFilter === "all" || reg.statusName.toUpperCase() === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
@@ -393,7 +392,7 @@ const Dashboard = () => {
           reg.property_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
           reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesStatus = statusFilter === "all" || reg.status === statusFilter;
+        const matchesStatus = statusFilter === "all" || reg.statusName.toUpperCase() === statusFilter;
 
         return matchesSearch && matchesStatus;
       });

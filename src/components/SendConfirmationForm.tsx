@@ -27,12 +27,17 @@ const SendConfirmationForm = ({ onNext, customerId }: SendConfirmationFormProps)
     };
   }, []);
 
-  // Fetch customer details and summary from API (same as review)
-  const { data: customerDetailsData } = useGetCustomerDetailsQuery(
+  const { data: customerDetailsData, refetch } = useGetCustomerDetailsQuery(
     user?.id && customerId
       ? { builderId: user.id as string, customerId }
       : skipToken
   );
+
+  useEffect(() => {
+    if (user?.id && customerId) {
+      refetch();
+    }
+  }, [user?.id, customerId, refetch]);
 
   const apiCustomer = customerDetailsData?.data?.customer;
   const apiSummary = customerDetailsData?.data;

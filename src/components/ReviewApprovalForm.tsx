@@ -72,6 +72,7 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
   );
 
   const apiCustomer = customerDetailsData?.data?.customer;
+  const apiSummary = customerDetailsData?.data;
 
   const customerData = apiCustomer
     ? {
@@ -304,7 +305,7 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
 
       <div className="flex justify-between items-center pt-6 border-t">
         <p className="text-sm text-muted-foreground">
-          {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''}  • Ready to send
+          {apiSummary?.totalItems ?? selectedItems.length} item{(apiSummary?.totalItems ?? selectedItems.length) !== 1 ? 's' : ''}  • Ready to send
         </p>
         <Button 
           onClick={handleSendToHomeowner}

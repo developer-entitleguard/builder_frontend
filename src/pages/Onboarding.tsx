@@ -543,20 +543,43 @@ const Onboarding = () => {
       case 'overview':
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
       case 'customer':
-        return <CustomerDetailsForm 
-          onNext={handleCustomerNext} 
-          initialData={formData.customer} 
-          customerId={registrationId || undefined}
-          onFormDataChange={handleCustomerFormDataChange}
-        />;
+        return (
+          <CustomerDetailsForm 
+            onNext={handleCustomerNext} 
+            initialData={formData.customer} 
+            customerId={registrationId || undefined}
+            onFormDataChange={handleCustomerFormDataChange}
+          />
+        );
       case 'items': {
         const bomId = searchParams.get('bomId');
-        return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} billMaterialId={bomId || undefined} />;
+        return (
+          <ItemsSelectionForm 
+            onNext={handleItemsNext} 
+            initialData={formData.items} 
+            registrationId={registrationId} 
+            billMaterialId={bomId || undefined} 
+          />
+        );
       }
       case 'review':
-        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} registrationId={registrationId} />;
+        return (
+          <ReviewApprovalForm 
+            onNext={handleSendEntitlement} 
+            formData={formData} 
+            registrationId={registrationId} 
+          />
+        );
       case 'send':
-        return <SendConfirmationForm customerId={(formData.customer as CustomerFormData)?.customerId} />;
+        return (
+          <SendConfirmationForm 
+            customerId={
+              (formData.customer as CustomerFormData)?.customerId ||
+              registrationId ||
+              undefined
+            } 
+          />
+        );
       default:
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
     }

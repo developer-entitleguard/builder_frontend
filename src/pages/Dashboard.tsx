@@ -129,10 +129,14 @@ const Dashboard = () => {
   const { 
     data: dashboardCountData, 
     isLoading: isCountsLoading, 
-    error: countsError 
+    error: countsError,
+    refetch: refetchDashboardCount
   } = useGetDashboardCountQuery(
     { builderId: builderId || '' },
-    { skip: !builderId }
+    { 
+      skip: !builderId,
+      refetchOnMountOrArgChange: true
+    }
   );
 
   // Fetch registrations by type - fetch both for instant tab switching
@@ -143,7 +147,10 @@ const Dashboard = () => {
     refetch: refetchOwnerRegistrations
   } = useGetRegistrationsQuery(
     { builderId: builderId || '', type: 'owner' },
-    { skip: !builderId }
+    { 
+      skip: !builderId,
+      refetchOnMountOrArgChange: true
+    }
   );
 
   const { 
@@ -153,7 +160,10 @@ const Dashboard = () => {
     refetch: refetchProjectRegistrations
   } = useGetRegistrationsQuery(
     { builderId: builderId || '', type: 'project' },
-    { skip: !builderId }
+    { 
+      skip: !builderId,
+      refetchOnMountOrArgChange: true
+    }
   );
 
   // Fetch statuses for filter dropdown
@@ -177,6 +187,15 @@ const Dashboard = () => {
       return;
     }
   }, [user, navigate]);
+
+  useEffect(() => {
+    if (builderId) {
+      refetchOwnerRegistrations();
+      refetchProjectRegistrations();
+      refetchDashboardCount();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [builderId]);
 
   // Transform owner API response to component format
   const ownerRegistrations = useMemo(() => {
@@ -276,29 +295,28 @@ const Dashboard = () => {
 
   // Helper function to format status name for display
   const formatStatusName = (statusName: string): string => {
+    // Handle both underscore and space-separated status names
     return statusName
-      .split('_')
+      .split(/[_\s]+/)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
   };
 
   // Helper function to convert API status name to filter value
+  // Use the actual status name as the filter value to distinguish between similar statuses
   const statusNameToFilterValue = (statusName: string): string => {
-    const normalized = statusName.toLowerCase();
-    // Map API status names to filter values
-    const statusMap: Record<string, string> = {
-      'draft': 'draft',
-      'entitlement': 'documents_pending',
-      'ready_for_review': 'ready_for_review',
-      'created': 'draft',
-      'sent': 'sent',
-      'delivered': 'delivered',
-    };
-    return statusMap[normalized] || normalized;
+    // Return the status name as-is (normalized to uppercase for consistency)
+    return statusName.toUpperCase();
   };
 
   // Get statuses from API
   const statuses = statusesData?.data || [];
+
+  const getFilterDisplayText = (filterValue: string): string => {
+    if (filterValue === "all") return "All Statuses";
+    const status = statuses.find(s => statusNameToFilterValue(s.name) === filterValue);
+    return status ? formatStatusName(status.name) : "Filter by status";
+  };
 
   const getStatusBadge = (status: string) => {
     // Normalize status to uppercase for API statusName values
@@ -360,7 +378,7 @@ const Dashboard = () => {
       reg.property_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
       reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesStatus = statusFilter === "all" || reg.status === statusFilter;
+    const matchesStatus = statusFilter === "all" || reg.statusName.toUpperCase() === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
@@ -393,7 +411,7 @@ const Dashboard = () => {
           reg.property_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
           reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesStatus = statusFilter === "all" || reg.status === statusFilter;
+        const matchesStatus = statusFilter === "all" || reg.statusName.toUpperCase() === statusFilter;
 
         return matchesSearch && matchesStatus;
       });
@@ -753,7 +771,9 @@ const Dashboard = () => {
                         </span>
                       </div>
                     )}
-                    {filteredRegistrations.map((registration) => (
+                    {filteredRegistrations.map((registration) => {
+                      const isEntitlement = registration.statusName === "ENTITLEMENT";
+                      return (
                       <div
                         key={registration.id}
                         className="flex items-center gap-4 p-4 border rounded-lg hover:bg-accent/50 transition-colors"
@@ -771,8 +791,9 @@ const Dashboard = () => {
                           onClick={(e) => e.stopPropagation()}
                         />
                         <div
-                          className="flex items-center justify-between flex-1 cursor-pointer"
+                          className={`flex items-center justify-between flex-1 ${isEntitlement ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                           onClick={() => {
+                            if (isEntitlement) return;
                             const url = registration.billMaterialId 
                               ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
                               : `/onboarding?id=${registration.id}`;
@@ -821,7 +842,8 @@ const Dashboard = () => {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>
@@ -883,11 +905,14 @@ const Dashboard = () => {
                             </CardHeader>
                             <CardContent>
                               <div className="space-y-3">
-                                {projectRegs.map((registration) => (
+                                {projectRegs.map((registration) => {
+                                  const isEntitlement = registration.statusName === "ENTITLEMENT";
+                                  return (
                                   <div
                                     key={registration.id}
-                                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                                    className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${isEntitlement ? 'cursor-not-allowed opacity-60' : 'hover:bg-accent/50 cursor-pointer'}`}
                                     onClick={() => {
+                                      if (isEntitlement) return;
                                       const url = registration.billMaterialId 
                                         ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
                                         : `/onboarding?id=${registration.id}`;
@@ -915,8 +940,10 @@ const Dashboard = () => {
                                       <Button
                                         variant="ghost"
                                         size="sm"
+                                        disabled={isEntitlement}
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          if (isEntitlement) return;
                                           const url = registration.billMaterialId 
                                             ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
                                             : `/onboarding?id=${registration.id}`;
@@ -927,7 +954,8 @@ const Dashboard = () => {
                                       </Button>
                                     </div>
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </CardContent>
                           </Card>

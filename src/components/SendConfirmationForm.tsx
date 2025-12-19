@@ -191,15 +191,15 @@ const SendConfirmationForm = ({ onNext, customerId }: SendConfirmationFormProps)
         </Card>
       )} */}
 
-      <div className="flex justify-between items-center pt-6 border-t">
-        <Button 
+      <div className="flex justify-end items-center pt-6 border-t">
+        {/* <Button 
           variant="outline" 
           onClick={() => window.location.reload()}
           className="flex items-center space-x-2"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Create New Package</span>
-        </Button>
+        </Button> */}
         {status === 'delivered' && (
           <Badge className="bg-green-100 text-green-800 px-4 py-2">
             ✓ Documentation Package Delivered Successfully

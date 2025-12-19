@@ -772,7 +772,6 @@ const Dashboard = () => {
                       </div>
                     )}
                     {filteredRegistrations.map((registration) => {
-                      const isEntitlement = registration.statusName === "ENTITLEMENT";
                       return (
                       <div
                         key={registration.id}
@@ -791,9 +790,8 @@ const Dashboard = () => {
                           onClick={(e) => e.stopPropagation()}
                         />
                         <div
-                          className={`flex items-center justify-between flex-1 ${isEntitlement ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                          className="flex items-center justify-between flex-1 cursor-pointer"
                           onClick={() => {
-                            if (isEntitlement) return;
                             const url = registration.billMaterialId 
                               ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
                               : `/onboarding?id=${registration.id}`;
@@ -906,13 +904,11 @@ const Dashboard = () => {
                             <CardContent>
                               <div className="space-y-3">
                                 {projectRegs.map((registration) => {
-                                  const isEntitlement = registration.statusName === "ENTITLEMENT";
                                   return (
                                   <div
                                     key={registration.id}
-                                    className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${isEntitlement ? 'cursor-not-allowed opacity-60' : 'hover:bg-accent/50 cursor-pointer'}`}
+                                    className="flex items-center justify-between p-3 border rounded-lg transition-colors hover:bg-accent/50 cursor-pointer"
                                     onClick={() => {
-                                      if (isEntitlement) return;
                                       const url = registration.billMaterialId 
                                         ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
                                         : `/onboarding?id=${registration.id}`;
@@ -940,10 +936,8 @@ const Dashboard = () => {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        disabled={isEntitlement}
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          if (isEntitlement) return;
                                           const url = registration.billMaterialId 
                                             ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
                                             : `/onboarding?id=${registration.id}`;

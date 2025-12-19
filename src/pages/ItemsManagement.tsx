@@ -98,6 +98,7 @@ const ItemsManagement = () => {
 
   const [isWarrantyFilesOpen, setIsWarrantyFilesOpen] = useState(false);
   const [isManualFilesOpen, setIsManualFilesOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Map API BOMs response to component format
   const boms = useMemo(() => {
@@ -181,6 +182,7 @@ const ItemsManagement = () => {
     setUploadedManualDocs([]);
     setIsWarrantyFilesOpen(false);
     setIsManualFilesOpen(false);
+    setIsSubmitting(false);
     if (warrantyFileInputRef.current) warrantyFileInputRef.current.value = '';
     if (manualFileInputRef.current) manualFileInputRef.current.value = '';
   };
@@ -217,6 +219,7 @@ const ItemsManagement = () => {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const formDataPayload = new FormData();
       formDataPayload.append('name', formData.name);
@@ -300,6 +303,8 @@ const ItemsManagement = () => {
         description: errorMessage,
         variant: "destructive"
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -349,6 +354,14 @@ const ItemsManagement = () => {
     if (warrantyFileInputRef.current) warrantyFileInputRef.current.value = '';
     if (manualFileInputRef.current) manualFileInputRef.current.value = '';
     setDialogOpen(true);
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      // Reset form when dialog closes
+      resetForm();
+    }
   };
 
   const handleWarrantyFileSelect = (files: FileList | null) => {
@@ -707,7 +720,7 @@ const ItemsManagement = () => {
             <BOMUpload onSuccess={() => {
               // Items will automatically refetch when selectedBomId changes or cache is invalidated
             }} />
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
               <DialogTrigger asChild>
                 <Button onClick={resetForm}>
                   <Plus className="w-4 h-4 mr-2" />
@@ -1004,11 +1017,18 @@ const ItemsManagement = () => {
                   </div>
                 </div>
                 <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={isSubmitting}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isCreating}>
-                    {isCreating ? 'Saving...' : (editingItem ? 'Update Item' : 'Add Item')}
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {editingItem ? 'Updating...' : 'Adding...'}
+                      </>
+                    ) : (
+                      editingItem ? 'Update Item' : 'Add Item'
+                    )}
                   </Button>
                 </div>
               </form>

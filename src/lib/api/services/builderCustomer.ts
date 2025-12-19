@@ -40,7 +40,7 @@ export const builderCustomerApi = api.injectEndpoints({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['BuilderCustomer', 'CustomerDetails'],
+      invalidatesTags: ['BuilderCustomer', 'CustomerDetails', 'Dashboard', 'Registration'],
     }),
     deleteBuilderCustomer: build.mutation<{ success: boolean; message: string }, string>({
       query: (id) => ({

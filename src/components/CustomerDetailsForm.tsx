@@ -33,9 +33,10 @@ interface CustomerDetailsFormProps {
   onNext: (data: CustomerFormData) => void;
   initialData?: Partial<CustomerFormData>;
   customerId?: string;
+  onFormDataChange?: (data: Partial<CustomerFormData>) => void;
 }
 
-const CustomerDetailsForm = ({ onNext, initialData, customerId }: CustomerDetailsFormProps) => {
+const CustomerDetailsForm = ({ onNext, initialData, customerId, onFormDataChange }: CustomerDetailsFormProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [createBuilderCustomer, { isLoading: isCreating }] = useCreateBuilderCustomerMutation();
@@ -81,6 +82,13 @@ const CustomerDetailsForm = ({ onNext, initialData, customerId }: CustomerDetail
       });
     }
   }, [customerDetailsData]);
+
+  useEffect(() => {
+    if (onFormDataChange) {
+      onFormDataChange(formData);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));

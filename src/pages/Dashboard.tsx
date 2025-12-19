@@ -129,10 +129,14 @@ const Dashboard = () => {
   const { 
     data: dashboardCountData, 
     isLoading: isCountsLoading, 
-    error: countsError 
+    error: countsError,
+    refetch: refetchDashboardCount
   } = useGetDashboardCountQuery(
     { builderId: builderId || '' },
-    { skip: !builderId }
+    { 
+      skip: !builderId,
+      refetchOnMountOrArgChange: true
+    }
   );
 
   // Fetch registrations by type - fetch both for instant tab switching
@@ -143,7 +147,10 @@ const Dashboard = () => {
     refetch: refetchOwnerRegistrations
   } = useGetRegistrationsQuery(
     { builderId: builderId || '', type: 'owner' },
-    { skip: !builderId }
+    { 
+      skip: !builderId,
+      refetchOnMountOrArgChange: true
+    }
   );
 
   const { 
@@ -153,7 +160,10 @@ const Dashboard = () => {
     refetch: refetchProjectRegistrations
   } = useGetRegistrationsQuery(
     { builderId: builderId || '', type: 'project' },
-    { skip: !builderId }
+    { 
+      skip: !builderId,
+      refetchOnMountOrArgChange: true
+    }
   );
 
   // Fetch statuses for filter dropdown
@@ -177,6 +187,15 @@ const Dashboard = () => {
       return;
     }
   }, [user, navigate]);
+
+  useEffect(() => {
+    if (builderId) {
+      refetchOwnerRegistrations();
+      refetchProjectRegistrations();
+      refetchDashboardCount();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [builderId]);
 
   // Transform owner API response to component format
   const ownerRegistrations = useMemo(() => {

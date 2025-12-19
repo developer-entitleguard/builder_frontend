@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -353,6 +353,10 @@ const Onboarding = () => {
     handleNextStep();
   };
 
+  const handleCustomerFormDataChange = useCallback((data: Partial<CustomerFormData>) => {
+    setFormData(prev => ({ ...prev, customer: data as CustomerFormData }));
+  }, []);
+
   const confirmEmailChange = async () => {
     if (!pendingCustomerData) return;
     
@@ -391,8 +395,8 @@ const Onboarding = () => {
       if (currentStep === 'customer' && formData.customer) {
         const customerData = formData.customer;
         
-        // Validate that we have at least some customer data
-        if (customerData.firstName || customerData.email) {
+        const shouldSave = registrationId || customerData.firstName || customerData.email;
+        if (shouldSave) {
           // Get builderOrganizationId from user
           const builderOrganizationId = user && 'builderOrganization' in user && user.builderOrganization
             ? user.builderOrganization.id
@@ -411,6 +415,7 @@ const Onboarding = () => {
 
           // Map form data to API payload format
           const apiPayload = {
+            ...(registrationId && { id: registrationId }),
             firstName: customerData.firstName || '',
             lastName: customerData.lastName || '',
             email: customerData.email || '',
@@ -448,8 +453,9 @@ const Onboarding = () => {
           });
         } else {
           toast({
-            title: "Registration saved",
-            description: "You can continue this registration later from your dashboard."
+            title: "No data to save",
+            description: "Please fill in at least some customer information before saving.",
+            variant: "default"
           });
         }
       } else {
@@ -472,6 +478,7 @@ const Onboarding = () => {
         description: errorMessage || "Failed to save registration. Please try again.",
         variant: "destructive"
       });
+      // Don't navigate on error so user can retry
     }
   };
 
@@ -536,7 +543,12 @@ const Onboarding = () => {
       case 'overview':
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
       case 'customer':
-        return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} customerId={registrationId || undefined} />;
+        return <CustomerDetailsForm 
+          onNext={handleCustomerNext} 
+          initialData={formData.customer} 
+          customerId={registrationId || undefined}
+          onFormDataChange={handleCustomerFormDataChange}
+        />;
       case 'items': {
         const bomId = searchParams.get('bomId');
         return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} billMaterialId={bomId || undefined} />;

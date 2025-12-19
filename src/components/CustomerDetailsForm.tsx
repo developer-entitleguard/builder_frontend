@@ -157,6 +157,7 @@ const CustomerDetailsForm = ({ onNext, initialData, customerId }: CustomerDetail
     try {
       // Map form data to API payload format
       const customerData = {
+        ...(customerId && { id: customerId }),
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,

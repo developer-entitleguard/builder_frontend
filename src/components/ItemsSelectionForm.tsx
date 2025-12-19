@@ -915,6 +915,25 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
             </Card>
           )}
 
+          {/* Show message when no BOM is mapped for customer */}
+          {!isLoadingItems && 
+           existingItemsData?.success && 
+           existingItemsData?.message === "No Bom is mapped for customer" && 
+           (!existingItemsData?.data || existingItemsData.data === null || existingItemsData.data.length === 0) && (
+            <Card>
+              <CardContent className="py-8">
+                <div className="text-center space-y-2">
+                  <p className="text-muted-foreground">
+                    {existingItemsData.message || "No BOM is mapped for this customer."}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Please select a Bill of Materials above to get started.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {(isLoadingItems || isFetchingBomItems) && selectedBomId && registrationId && (
             <Card>
               <CardContent className="py-8">

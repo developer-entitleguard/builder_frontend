@@ -173,7 +173,7 @@ export const itemsApi = api.injectEndpoints({
         documentationUrl: string | null;
         isActive: boolean;
         status: string;
-        puchaser: string | null;
+        purchaser: string | null;
       }>;
     }, string>({
       query: (billId) => ({

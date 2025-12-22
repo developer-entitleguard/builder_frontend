@@ -125,7 +125,7 @@ const ItemsManagement = () => {
       note: string | null;
       price: string | null;
       documentationUrl: string | null;
-      puchaser: string | null;
+      purchaser: string | null;
       billOfMaterials?: { id: string };
       builderItemFiles?: BuilderItem['builderItemFiles'];
     };
@@ -143,7 +143,7 @@ const ItemsManagement = () => {
       price: item.price ? parseFloat(item.price) : null,
       documentation_url: item.documentationUrl || null,
       notes: item.note || null,
-      purchaser: item.puchaser || null,
+      purchaser: item.purchaser || null,
       bom_id: item.billOfMaterials?.id || null,
       builderItemFiles: item.builderItemFiles || [],
     })).sort((a, b) => {

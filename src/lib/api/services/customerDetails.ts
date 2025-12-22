@@ -1,7 +1,7 @@
 import { api } from '@/store/api/apiSlice';
 import type { 
   CustomerDetailsResponse
-} from '@/lib/api/types';
+} from '@/lib/api/types.ts';
 
 export const customerDetailsApi = api.injectEndpoints({
   endpoints: (build) => ({
@@ -17,4 +17,5 @@ export const customerDetailsApi = api.injectEndpoints({
 
 export const {
   useGetCustomerDetailsQuery,
+  useLazyGetCustomerDetailsQuery,
 } = customerDetailsApi;

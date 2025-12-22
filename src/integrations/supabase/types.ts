@@ -14,8 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      bill_of_materials: {
+        Row: {
+          builder_id: string
+          created_at: string
+          id: string
+          name: string
+          project_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          builder_id: string
+          created_at?: string
+          id?: string
+          name: string
+          project_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          builder_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          project_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       builder_items: {
         Row: {
+          bom_id: string | null
           brand: string | null
           builder_id: string | null
           category: string
@@ -33,6 +61,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bom_id?: string | null
           brand?: string | null
           builder_id?: string | null
           category: string
@@ -50,6 +79,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bom_id?: string | null
           brand?: string | null
           builder_id?: string | null
           category?: string
@@ -66,7 +96,15 @@ export type Database = {
           status?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "builder_items_bom_id_fkey"
+            columns: ["bom_id"]
+            isOneToOne: false
+            referencedRelation: "bill_of_materials"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       builder_organizations: {
         Row: {
@@ -357,14 +395,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      ensure_user_profile: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      get_user_organization: {
-        Args: { _user_id: string }
-        Returns: string
-      }
+      ensure_user_profile: { Args: never; Returns: undefined }
+      get_user_organization: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

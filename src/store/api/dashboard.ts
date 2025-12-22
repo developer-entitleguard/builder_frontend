@@ -6,7 +6,7 @@ import type {
   FilterOptions,
   DashboardCountResponse,
   CustomerListResponse
-} from '@/lib/api/types';
+} from '@/lib/api/types.ts';
 
 export const dashboardApi = api.injectEndpoints({
   endpoints: (build) => ({
@@ -126,6 +126,50 @@ export const dashboardApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Dashboard'],
     }),
+    getRegistrations: build.query<any, { builderId: string; type: 'owner' | 'project' }>({
+      query: (params) => ({
+        url: '/api/dashboard/getregistrations',
+        method: 'GET',
+        params,
+      }),
+      providesTags: ['Dashboard', 'Registration'],
+    }),
+
+    // Get statuses by type
+    getStatusesByType: build.query<{ success: boolean; message: string; data: Array<{ id: string; name: string; module: string }> }, { type: string }>({
+      query: (params) => ({
+        url: '/api/getstatus/bytype',
+        method: 'GET',
+        params,
+      }),
+      providesTags: ['Dashboard'],
+    }),
+
+    // Get statuses by module (e.g., QUERY)
+    getStatus: build.query<{ success: boolean; message: string; data: Array<{ id: string; name: string; module: string }> }, { module: string }>({
+      query: (params) => ({
+        url: '/api/status/bymodule',
+        method: 'GET',
+        params,
+      }),
+      providesTags: ['Dashboard'],
+    }),
+
+    // Get builder queries by builder and optional status
+    getBuilderQueries: build.query<
+      { success: boolean; message: string; data: any[] },
+      { builderId: string; statusId?: string }
+    >({
+      query: ({ builderId, statusId }) => ({
+        url: '/api/builder/query',
+        method: 'GET',
+        params: {
+          builderId,
+          ...(statusId ? { statusId } : {}),
+        },
+      }),
+      providesTags: ['Query'],
+    }),
   }),
 });
 
@@ -142,4 +186,8 @@ export const {
   useMarkAlertAsReadMutation,
   useGetWidgetsConfigQuery,
   useUpdateWidgetsConfigMutation,
+  useGetRegistrationsQuery,
+  useGetStatusesByTypeQuery,
+  useGetStatusQuery,
+  useGetBuilderQueriesQuery,
 } = dashboardApi;

@@ -2,7 +2,7 @@ import { api } from '@/store/api/apiSlice';
 import type { 
   ItemMapUpdate,
   ItemMapUpdateResponse
-} from '@/lib/api/types';
+} from '@/lib/api/types.ts';
 import { getApiBaseUrl } from '@/lib/config';
 
 export const itemMapApi = api.injectEndpoints({

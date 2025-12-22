@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,9 +10,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { validateEmail, validatePhone } from "@/utils/validation";
 import { useAuth } from "@/hooks/useAuth";
 import { useGetBuilderUsersQuery, useCreateOrUpdateBuilderUserMutation, useDeleteBuilderUserMutation } from "@/lib/api/services/builderUsers";
+import { validateEmail, validatePhone } from "@/utils/validation";
 import { Users, UserPlus, Edit, Trash2, Mail, Phone, User, Shield } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
@@ -20,8 +20,7 @@ const userSchema = z.object({
   email: z.string().refine((email) => validateEmail(email), {
     message: "Please enter a valid email address",
   }),
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().optional(),
+  contact_person: z.string().min(1, "Contact person is required"),
   phone: z.string().optional().refine((phone) => !phone || validatePhone(phone), {
     message: "Please enter a valid Australian phone number",
   }),
@@ -36,86 +35,148 @@ interface UserManagementProps {
 
 interface User {
   id: string;
-  firstName: string;
-  lastName: string | null;
   email: string;
-  contact: string;
+  company_name?: string;
+  contact_person?: string;
+  phone?: string;
   role: string;
-  createdAt?: string;
-  builderOrganization: {
-    id: string;
-    name: string;
-    address: string;
-    contact: string;
-    email: string;
-    abn: string | null;
-    description: string;
-    isActive: boolean;
-  };
+  created_at: string;
 }
 
 export function UserManagement({ organizationId }: UserManagementProps) {
+  const { user } = useAuth();
+  const [users, setUsers] = useState<User[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
-  const { getUserFromStorage } = useAuth();
-  
-  const userData = getUserFromStorage();
-  const builderId = userData?.builderOrganization?.id;
-  
-  const { data: usersResponse, isLoading: loading, refetch } = useGetBuilderUsersQuery(
+
+  // Get builderId from user (organization ID)
+  const builderId = user && 'builderOrganization' in user && user.builderOrganization
+    ? user.builderOrganization.id
+    : user && 'id' in user 
+    ? user.id 
+    : organizationId || null;
+
+  // Fetch users from API
+  const { 
+    data: apiResponse, 
+    isLoading: loading, 
+    error: apiError,
+    refetch: refetchUsers
+  } = useGetBuilderUsersQuery(
     { builderId: builderId || '' },
     { skip: !builderId }
   );
-  const [createOrUpdateUser, { isLoading: submitting }] = useCreateOrUpdateBuilderUserMutation();
-  const [deleteUser, { isLoading: deleting }] = useDeleteBuilderUserMutation();
-  
-  const users = usersResponse?.data || [];
+
+  // Mutations
+  const [createOrUpdateUser, { isLoading: isUpdating }] = useCreateOrUpdateBuilderUserMutation();
+  const [deleteUser, { isLoading: isDeleting }] = useDeleteBuilderUserMutation();
 
   const form = useForm<UserFormData>({
     resolver: zodResolver(userSchema),
     defaultValues: {
       email: "",
       role: "user",
-      firstName: "",
-      lastName: "",
+      contact_person: "",
       phone: "",
     },
   });
 
+  // Map API response to component format
+  useEffect(() => {
+    if (apiResponse?.data) {
+      const mappedUsers: User[] = apiResponse.data.map((apiUser) => {
+        const fullName = apiUser.lastName 
+          ? `${apiUser.firstName} ${apiUser.lastName}`
+          : apiUser.firstName;
+        
+        return {
+          id: apiUser.id,
+          email: apiUser.email,
+          company_name: apiUser.builderOrganization?.name || 'Organization',
+          contact_person: fullName,
+          phone: apiUser.contact || '',
+          role: apiUser.role,
+          created_at: new Date().toISOString(), // API doesn't provide created_at, using current date
+        };
+      });
+      setUsers(mappedUsers);
+    } else if (apiError) {
+      toast({
+        title: "Error",
+        description: "Failed to load users",
+        variant: "destructive",
+      });
+    }
+  }, [apiResponse, apiError, toast]);
 
   const onSubmit = async (data: UserFormData) => {
+    if (!builderId) {
+      toast({
+        title: "Error",
+        description: "Organization ID is missing",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
     try {
-      if (!builderId) {
-        throw new Error('No builder ID found in user data');
+      // Split contact_person into firstName and lastName
+      const nameParts = data.contact_person.trim().split(/\s+/);
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || undefined;
+
+      if (editingUser) {
+        // Update existing user
+        await createOrUpdateUser({
+          id: editingUser.id,
+          email: data.email,
+          firstName,
+          lastName,
+          contact: data.phone || undefined,
+          role: data.role,
+          builderOrganizationId: builderId,
+        }).unwrap();
+
+        toast({
+          title: "Success",
+          description: "User updated successfully",
+        });
+      } else {
+        // Create new user
+        await createOrUpdateUser({
+          email: data.email,
+          firstName,
+          lastName,
+          contact: data.phone || undefined,
+          role: data.role,
+          builderOrganizationId: builderId,
+        }).unwrap();
+
+        toast({
+          title: "Success",
+          description: "User added successfully",
+        });
       }
 
-      const userData = {
-        email: data.email,
-        firstName: data.firstName,
-        lastName: data.lastName || '',
-        contact: data.phone || '',
-        role: data.role,
-        builderOrganizationId: builderId,
-        ...(editingUser && { id: editingUser.id })
-      };
-
-      await createOrUpdateUser(userData).unwrap();
-
-      toast({
-        title: "Success",
-        description: editingUser ? "User updated successfully" : "User added successfully",
-      });
       setIsAddDialogOpen(false);
       setEditingUser(null);
       form.reset();
+      refetchUsers();
     } catch (error) {
       console.error('Error saving user:', error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error 
+        ? (error.data as { message?: string })?.message 
+        : undefined;
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save user",
+        description: errorMessage || "Failed to save user",
         variant: "destructive",
       });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -123,9 +184,8 @@ export function UserManagement({ organizationId }: UserManagementProps) {
     setEditingUser(user);
     form.reset({
       email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName || "",
-      phone: user.contact || "",
+      contact_person: user.contact_person || "",
+      phone: user.phone || "",
       role: user.role as 'admin' | 'user',
     });
     setIsAddDialogOpen(true);
@@ -134,16 +194,20 @@ export function UserManagement({ organizationId }: UserManagementProps) {
   const handleDelete = async (userId: string) => {
     try {
       await deleteUser(userId).unwrap();
-      
+
       toast({
         title: "Success",
-        description: "User removed successfully",
+        description: "User removed from organization",
       });
+      refetchUsers();
     } catch (error) {
       console.error('Error deleting user:', error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error 
+        ? (error.data as { message?: string })?.message 
+        : undefined;
       toast({
         title: "Error",
-        description: "Failed to remove user",
+        description: errorMessage || "Failed to remove user",
         variant: "destructive",
       });
     }
@@ -153,8 +217,7 @@ export function UserManagement({ organizationId }: UserManagementProps) {
     setEditingUser(null);
     form.reset({
       email: "",
-      firstName: "",
-      lastName: "",
+      contact_person: "",
       phone: "",
       role: "user",
     });
@@ -172,13 +235,13 @@ export function UserManagement({ organizationId }: UserManagementProps) {
     return role === "admin" ? "default" : "secondary";
   };
 
-  // if (loading) {
-  //   return (
-  //     <div className="flex items-center justify-center p-8">
-  //       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-  //     </div>
-  //   );
-  // }
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -237,53 +300,40 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="firstName"
+                    name="contact_person"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>First Name</FormLabel>
+                        <FormLabel>Full Name</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="John" />
+                          <Input {...field} placeholder="John Smith" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={form.control}
-                    name="lastName"
+                    name="role"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Last Name</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="Smith" />
-                        </FormControl>
+                        <FormLabel>Role</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a role" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="user">User</SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="role"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Role</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a role" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="user">User</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
                 <FormField
                   control={form.control}
@@ -307,8 +357,8 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting}>
-                    {submitting ? (editingUser ? 'Updating...' : 'Adding...') : (editingUser ? 'Update User' : 'Add User')}
+                  <Button type="submit" disabled={submitting || isUpdating}>
+                    {(submitting || isUpdating) ? (editingUser ? 'Updating...' : 'Adding...') : (editingUser ? 'Update User' : 'Add User')}
                   </Button>
                 </div>
               </form>
@@ -344,8 +394,8 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                         <User className="h-4 w-4 text-primary" />
                       </div>
                       <div>
-                        <div className="font-medium">{user.firstName} {user.lastName}</div>
-                        <div className="text-sm text-muted-foreground">{user.builderOrganization.name}</div>
+                        <div className="font-medium">{user.contact_person}</div>
+                        <div className="text-sm text-muted-foreground">{user.company_name}</div>
                       </div>
                     </div>
                   </TableCell>
@@ -355,10 +405,12 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                         <Mail className="h-3 w-3 text-muted-foreground" />
                         {user.email}
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Phone className="h-3 w-3" />
-                        {user.contact}
-                      </div>
+                      {user.phone && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Phone className="h-3 w-3" />
+                          {user.phone}
+                        </div>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -371,7 +423,7 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    N/A
+                    {new Date(user.created_at).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -384,7 +436,7 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm" disabled={deleting}>
+                          <Button variant="ghost" size="sm">
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </AlertDialogTrigger>
@@ -392,17 +444,14 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Remove User</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to remove {user.firstName} {user.lastName} from your organization? 
+                              Are you sure you want to remove {user.contact_person} from your organization? 
                               This action cannot be undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-                            <AlertDialogAction 
-                              onClick={() => handleDelete(user.id)}
-                              disabled={deleting}
-                            >
-                              {deleting ? "Removing..." : "Remove User"}
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(user.id)}>
+                              Remove User
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>

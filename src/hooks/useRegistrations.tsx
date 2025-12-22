@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -19,19 +18,14 @@ interface RegistrationData {
 }
 
 export const useRegistrations = () => {
-  const { organization } = useOrganization();
   const { user } = useAuth();
   const { toast } = useToast();
   const [registrations, setRegistrations] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (organization) {
-      fetchRegistrations();
-    }
-  }, [organization]);
-
+  // Removed automatic fetch on mount - now only fetches when explicitly called
   const fetchRegistrations = async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('homeowner_registrations')

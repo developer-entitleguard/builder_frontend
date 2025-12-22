@@ -18,18 +18,37 @@ interface UserRole {
 }
 
 export const useOrganization = () => {
-  const { user } = useAuth();
+  const { user, getUserFromStorage } = useAuth();
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const localUser = getUserFromStorage();
+
+    if (localUser) {
+      setUserRole(localUser.role);
+      if (localUser.builderOrganization) {
+        setOrganization({
+          id: localUser.builderOrganization.id,
+          name: localUser.builderOrganization.name,
+          address: localUser.builderOrganization.address,
+          contact_email: localUser.builderOrganization.email ?? localUser.builderOrganization.contact,
+          contact_phone: localUser.builderOrganization.contact,
+          abn: localUser.builderOrganization.abn ?? undefined,
+          description: localUser.builderOrganization.description,
+        });
+      }
+      setLoading(false);
+      return;
+    }
+
     if (user) {
       fetchUserOrganization();
     } else {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, getUserFromStorage]);
 
   const fetchUserOrganization = async () => {
     if (!user) return;

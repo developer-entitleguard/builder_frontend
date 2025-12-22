@@ -4,7 +4,7 @@ import type {
   CreateVendorRequest,
   UpdateVendorRequest,
   VendorResponse
-} from '@/lib/api/types';
+} from '@/lib/api/types.ts';
 
 export const builderVendorApi = api.injectEndpoints({
   endpoints: (build) => ({

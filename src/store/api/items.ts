@@ -7,7 +7,7 @@ import type {
   PaginatedResponse,
   PaginationParams,
   SearchParams
-} from '@/lib/api/types';
+} from '@/lib/api/types.ts';
 
 export const itemsApi = api.injectEndpoints({
   endpoints: (build) => ({
@@ -123,6 +123,116 @@ export const itemsApi = api.injectEndpoints({
       providesTags: ['Item'],
     }),
 
+    // Get categories from API
+    getCategorys: build.query<{ success: boolean; message: string; data: Array<{ id: string; name: string }> }, void>({
+      query: () => ({
+        url: '/api/getcategorys',
+        method: 'GET',
+      }),
+      providesTags: ['Item'],
+    }),
+
+    // Get Bill of Materials from API
+    getBillOfMaterials: build.query<{ success: boolean; message: string; data: Array<{ id: string; bomName: string; projectName: string }> }, void>({
+      query: () => ({
+        url: '/api/getbillofmaterials',
+        method: 'GET',
+      }),
+      providesTags: ['Item'],
+    }),
+
+    // Get Bill Materials (items) by billId
+    getBillMaterials: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{
+        id: string;
+        builderOrganization: {
+          id: string;
+          name: string;
+          address: string;
+          contact: string;
+          email: string;
+          abn: string | null;
+          description: string;
+          isActive: boolean;
+        };
+        billOfMaterials: {
+          id: string;
+          bomName: string;
+          projectName: string;
+        };
+        name: string;
+        category: string;
+        make: string | null;
+        brand: string | null;
+        model: string | null;
+        text: string | null;
+        note: string | null;
+        price: string | null;
+        documentationUrl: string | null;
+        isActive: boolean;
+        status: string;
+        puchaser: string | null;
+      }>;
+    }, string>({
+      query: (billId) => ({
+        url: '/api/getbillmaterials',
+        method: 'GET',
+        params: { billId },
+      }),
+      providesTags: ['Item'],
+    }),
+
+    // Get builder items by BOM and customer ID
+    getBuilderItemsByBOM: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{
+        id: string;
+        builderItem: {
+          id: string;
+          name: string;
+          category: string;
+          make: string | null;
+          brand: string | null;
+          model: string | null;
+          text: string | null;
+          note: string | null;
+          price: string | null;
+          documentationUrl: string | null;
+          isActive: boolean;
+          status: string;
+        };
+        seller: string | null;
+        serialNumber: string | null;
+        make: string | null;
+        model: string | null;
+        brand: string | null;
+        color: string | null;
+        notes: string | null;
+        files: unknown;
+        builderCustomerItemFiles?: Array<{
+          id: string; // id used for delete (/api/itemfile/{id})
+          type: 'Warranty' | 'Manual' | string;
+          files: {
+            id: string;
+            name: string;
+            type: string;
+            fileType: string;
+            filePath: string;
+          };
+        }>;
+      }>;
+    }, { billMaterialId: string; customerId: string }>({
+      query: (params) => ({
+        url: '/api/getbuilderitems/bybom',
+        method: 'GET',
+        params,
+      }),
+      providesTags: ['Item'],
+    }),
+
     // Bulk update items
     bulkUpdateItems: build.mutation<BuilderItem[], { updates: Array<{ id: string; data: UpdateBuilderItemRequest }> }>({
       query: (data) => ({
@@ -147,6 +257,91 @@ export const itemsApi = api.injectEndpoints({
       },
       invalidatesTags: ['Item'],
     }),
+
+    // Assign BOM to customers
+    // Check BOM restrictions for customers
+    checkBOMRestrictions: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{ customerId: string; customerName: string }>;
+    }, { customerIds: string[] }>({
+      query: ({ customerIds }) => {
+        const params = new URLSearchParams();
+        customerIds.forEach(id => {
+          params.append('customerId', id);
+        });
+        return {
+          url: `/api/checking/bomrestrict?${params.toString()}`,
+          method: 'GET',
+        };
+      },
+    }),
+
+    assignBOM: build.mutation<{ success: boolean; message?: string }, { billOfMaterialId: string; customerIds: string[] }>({
+      query: (data) => ({
+        url: '/api/add/assignbom',
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Item', 'Registration', 'Dashboard'],
+    }),
+
+    deleteBuilderItemFiles: build.mutation<{ success: boolean; message?: string }, string>({
+      query: (id) => ({
+        url: `/api/delete/builderitem/files/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Item'],
+    }),
+    checkExistingCustomerItemMap: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{
+        id: string;
+        billOfMaterials?: { id: string; bomName?: string; projectName?: string };
+        builderItem?: {
+          id: string;
+          name: string;
+          category: string;
+          make: string | null;
+          brand: string | null;
+          model: string | null;
+          text: string | null;
+          note: string | null;
+          price: string | null;
+          documentationUrl: string | null;
+          isActive: boolean;
+          status: string;
+          purchaser?: string | null;
+          billOfMaterials?: { id: string; bomName?: string; projectName?: string };
+        };
+        seller: string | null;
+        serialNumber: string | null;
+        make: string | null;
+        model: string | null;
+        brand: string | null;
+        color: string | null;
+        notes: string | null;
+        files: unknown;
+        builderCustomerItemFiles?: Array<{
+          id: string;
+          type: string;
+          files: {
+            id: string;
+            name: string;
+            type: string;
+            fileType: string;
+            filePath: string;
+          };
+        }>;
+      }>;
+    }, string>({
+      query: (customerId) => ({
+        url: '/api/check/customeritemmap/existing',
+        method: 'GET',
+        params: { customerId },
+      }),
+    }),
   }),
 });
 
@@ -162,6 +357,16 @@ export const {
   useGetItemsByBuilderQuery,
   useLazySearchItemsQuery,
   useGetCategoriesQuery,
+  useGetCategorysQuery,
+  useGetBillOfMaterialsQuery,
+  useGetBillMaterialsQuery,
+  useGetBuilderItemsByBOMQuery,
+  useLazyGetBuilderItemsByBOMQuery,
   useBulkUpdateItemsMutation,
   useImportItemsMutation,
+  useCheckBOMRestrictionsQuery,
+  useLazyCheckBOMRestrictionsQuery,
+  useAssignBOMMutation,
+  useCheckExistingCustomerItemMapQuery,
+  useDeleteBuilderItemFilesMutation,
 } = itemsApi;

@@ -18,6 +18,22 @@ export interface QueryStatus {
   module: string;
 }
 
+export interface QueryComment {
+  id: string;
+  commentedBy: string;
+  comment: string;
+  createdAt: string;
+  isActive: boolean;
+}
+
+export interface QueryHistoryEntry {
+  id: string;
+  status: QueryStatus;
+  changedAt: string;
+  customer: unknown | null;
+  userInfo: unknown | null;
+}
+
 export interface BuilderQuery {
   id: string;
   title: string;
@@ -27,11 +43,16 @@ export interface BuilderQuery {
     id: string;
     name: string;
     email?: string;
+    contact?: string;
+    type?: string;
   } | null;
   dueDate: string;
   status: QueryStatus;
+  createdAt?: string;
   updatedAt: string | null;
   queryFileMaps: QueryFile[];
+  queryComments?: QueryComment[];
+  queryhistory?: QueryHistoryEntry[];
   orderItem?: {
     id: string;
     order?: {
@@ -87,16 +108,34 @@ export interface BuilderQueryResponse {
   data: BuilderQuery;
 }
 
+export interface QueryFileMapDto {
+  type: string;
+  files: File;
+}
+
 export interface UpdateQueryRequest {
   id: string;
   statusId?: string;
   vendorId?: string;
+  queryFileMapDto?: QueryFileMapDto[];
 }
 
 export interface UpdateQueryResponse {
   success: boolean;
   message: string;
   data?: BuilderQuery;
+}
+
+export interface AddCommentRequest {
+  comment: string;
+  commentedBy: string;
+  id: string;
+  queryId: string;
+}
+
+export interface AddCommentResponse {
+  success: boolean;
+  message: string;
 }
 
 export const queryApi = api.injectEndpoints({
@@ -135,7 +174,7 @@ export const queryApi = api.injectEndpoints({
       query: (data) => {
         const formData = new FormData();
         
-        // Add only required fields: id, statusId, vendorId
+        // Add required fields: id, statusId, vendorId
         formData.append('id', data.id);
         
         if (data.statusId) {
@@ -145,8 +184,36 @@ export const queryApi = api.injectEndpoints({
           formData.append('vendorId', data.vendorId);
         }
         
+        // Add file data in the format queryFileMapDto[0].type and queryFileMapDto[0].files
+        if (data.queryFileMapDto && data.queryFileMapDto.length > 0) {
+          data.queryFileMapDto.forEach((fileDto, index) => {
+            formData.append(`queryFileMapDto[${index}].type`, fileDto.type);
+            formData.append(`queryFileMapDto[${index}].files`, fileDto.files);
+          });
+        }
+        
         return {
           url: '/api/query',
+          method: 'POST',
+          body: formData,
+        };
+      },
+      invalidatesTags: ['Query'],
+    }),
+    // Add comment to query
+    addQueryComment: build.mutation<
+      AddCommentResponse,
+      AddCommentRequest
+    >({
+      query: (data) => {
+        const formData = new FormData();
+        formData.append('comment', data.comment);
+        formData.append('commentedBy', data.commentedBy);
+        formData.append('id', data.id);
+        formData.append('queryId', data.queryId);
+        
+        return {
+          url: '/api/querycomment',
           method: 'POST',
           body: formData,
         };
@@ -160,5 +227,6 @@ export const {
   useGetBuilderQueriesQuery,
   useLazyGetQueryByIdQuery,
   useUpdateQueryMutation,
+  useAddQueryCommentMutation,
 } = queryApi;
 

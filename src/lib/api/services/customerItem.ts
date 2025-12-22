@@ -2,7 +2,7 @@ import { api } from '@/store/api/apiSlice';
 import type { 
   CustomerItemRequest,
   CustomerItemResponse
-} from '@/lib/api/types';
+} from '@/lib/api/types.ts';
 
 export const customerItemApi = api.injectEndpoints({
   endpoints: (build) => ({

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,193 +6,86 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Upload, FileText, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
-import { useUpdateItemMapMutation } from "@/lib/api/services/itemMap";
-
-interface BuilderItem {
-  id: string;
-  name: string;
-  category: string | null;
-  brand: string | null;
-  model: string | null;
-  make: string | null;
-  note: string | null;
-  price: string | null;
-  text: string | null;
-  documentationUrl: string | null;
-  status: string;
-  purchaser: string | null;
-  mapped: boolean;
-  builderCustomerMapId?: string | null;
-  seller?: string | null;
-  serialNumber?: string | null;
-  documentCount?: number | null;
-  fileResponseDto?: Array<{ id: string; fileName: string; fileUrl: string }> | null;
-}
-
-interface FormData {
-  documents: Record<string, string[]>;
-  itemDetails: Record<string, { seller: string; serialNumber: string }>;
-}
+import { supabase } from "@/integrations/supabase/client";
 
 interface DocumentUploadFormProps {
-  onNext: (data: FormData) => void;
-  initialData?: FormData & { customerId?: string; builderId?: string; selected_items?: string[] };
+  onNext: (data: any) => void;
+  initialData?: any;
   selectedItems?: string[];
-  onSaveExit?: () => void;
-  isSaving?: boolean;
 }
 
-const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemIds, onSaveExit, isSaving = false }: DocumentUploadFormProps) => {
+const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemIds }: DocumentUploadFormProps) => {
   const { toast } = useToast();
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>(initialData?.documents || {});
   const [itemDetails, setItemDetails] = useState<Record<string, { seller: string; serialNumber: string }>>(initialData?.itemDetails || {});
-  const [uploadedFiles, setUploadedFiles] = useState<Record<string, File[]>>({});
-  const [updateItemMap, { isLoading: isUpdating }] = useUpdateItemMapMutation();
-
-  const selectedIds = useMemo(() => 
-    initialData?.selected_items || selectedItemIds || [], 
-    [initialData?.selected_items, selectedItemIds]
-  );
-
-  const { 
-    data: customerDetails, 
-    isLoading: loading, 
-    error,
-    refetch: refetchCustomerDetails
-  } = useGetCustomerDetailsQuery(
-    { 
-      builderId: initialData?.builderId || '', 
-      customerId: initialData?.customerId || '' 
-    },
-    { 
-      skip: !initialData?.builderId || !initialData?.customerId,
-      refetchOnMountOrArgChange: false,
-      refetchOnFocus: false,
-      refetchOnReconnect: false,
-    }
-  );
-
-  const effectiveSelectedIds = useMemo((): string[] => {
-    if (selectedIds.length > 0) return selectedIds;
-    if (selectedItemIds && selectedItemIds.length > 0) return selectedItemIds;
-    
-    const ids: string[] = [];
-    if (customerDetails?.data?.dtos) {
-      customerDetails.data.dtos.forEach((categoryGroup) => {
-        categoryGroup.items.forEach((item) => {
-          if (item.mapped || item.builderCustomerMapId) {
-            ids.push(item.id);
-          }
-        });
-      });
-    }
-    console.log('DocumentUploadForm - selectedIds:', selectedIds);
-    console.log('DocumentUploadForm - selectedItemIds:', selectedItemIds);
-    console.log('DocumentUploadForm - effectiveSelectedIds:', ids);
-    return ids;
-  }, [selectedIds, selectedItemIds, customerDetails]);
+  const [availableItems, setAvailableItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (error) {
-      console.error('DocumentUploadForm - API error:', error);
+    if (selectedItemIds?.length) {
+      fetchSelectedItems();
+    } else {
+      setLoading(false);
+    }
+  }, [selectedItemIds]);
+
+  const fetchSelectedItems = async () => {
+    if (!selectedItemIds?.length) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('builder_items')
+        .select('*')
+        .in('id', selectedItemIds);
+
+      if (error) throw error;
+      setAvailableItems(data || []);
+    } catch (error: any) {
       toast({
-        title: "Error fetching items",
-        description: "Failed to load items from server",
+        title: "Error fetching selected items",
+        description: error.message,
         variant: "destructive"
       });
+    } finally {
+      setLoading(false);
     }
-  }, [error, toast]);
+  };
 
-  useEffect(() => {
-    if (customerDetails?.data?.dtos) {
-      const existingDetails: Record<string, { seller: string; serialNumber: string }> = {};
-      
-      customerDetails.data.dtos.forEach(categoryGroup => {
-        categoryGroup.items.forEach(item => {
-          // Only process mapped items
-          if (item.mapped === true && (item.seller || item.serialNumber)) {
-            existingDetails[item.id] = {
-              seller: item.seller || '',
-              serialNumber: item.serialNumber || ''
-            };
-          }
-        });
-      });
-      
-      // Update itemDetails with API data, preserving any user edits
-      if (Object.keys(existingDetails).length > 0) {
-        setItemDetails(prev => {
-          const updated = { ...prev };
-          Object.keys(existingDetails).forEach(itemId => {
-            // Only update if we don't have user-entered data, or if API has new data
-            if (!prev[itemId] || (existingDetails[itemId].seller || existingDetails[itemId].serialNumber)) {
-              updated[itemId] = {
-                seller: existingDetails[itemId].seller || prev[itemId]?.seller || '',
-                serialNumber: existingDetails[itemId].serialNumber || prev[itemId]?.serialNumber || ''
-              };
-            }
-          });
-          return updated;
-        });
-      }
+  // Group items by category
+  const groupedItems = availableItems.reduce((acc, item) => {
+    if (!acc[item.category]) {
+      acc[item.category] = [];
     }
-  }, [customerDetails?.data?.dtos]);
-
-  const groupedItems = customerDetails?.data?.dtos?.reduce((acc, categoryGroup) => {
-    // Only show items where mapped: true
-    const selectedCategoryItems = categoryGroup.items.filter(item => 
-      item.mapped === true
-    );
-    if (selectedCategoryItems.length > 0) {
-      acc[categoryGroup.category] = selectedCategoryItems;
-    }
-    
+    acc[item.category].push(item);
     return acc;
-  }, {} as Record<string, BuilderItem[]>) || {};
+  }, {} as Record<string, any[]>);
 
   const handleDetailChange = (itemId: string, field: 'seller' | 'serialNumber', value: string) => {
+    const key = itemId;
     setItemDetails(prev => ({
       ...prev,
-      [itemId]: {
-        seller: '',
-        serialNumber: '',
-        ...prev[itemId],
+      [key]: {
+        ...prev[key],
         [field]: value
       }
     }));
   };
 
-  const handleFileUpload = (itemId: string) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+  const handleFileUpload = (category: string, item: string) => {
+    // Mock file upload
+    const key = `${category}-${item}`;
+    setUploadedDocs(prev => ({
+      ...prev,
+      [key]: [...(prev[key] || []), `${item}_warranty.pdf`, `${item}_manual.pdf`]
+    }));
     
-    input.onchange = (e: Event) => {
-      const target = e.target as HTMLInputElement;
-      const files = Array.from(target.files || []);
-      
-      if (files.length > 0) {
-        setUploadedFiles(prev => ({
-          ...prev,
-          [itemId]: [...(prev[itemId] || []), ...files]
-        }));
-        
-        const fileNames = files.map(f => f.name);
-        setUploadedDocs(prev => ({
-          ...prev,
-          [itemId]: [...(prev[itemId] || []), ...fileNames]
-        }));
-        
-        toast({
-          title: "Files selected",
-          description: `${files.length} file(s) selected for upload`,
-        });
-      }
-    };
-    
-    input.click();
+    toast({
+      title: "Documents uploaded",
+      description: `Warranty and manual uploaded for ${item}`,
+    });
   };
 
   const getDocumentCount = () => {
@@ -200,7 +93,7 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
   };
 
   const getTotalItems = () => {
-    return Object.values(groupedItems).reduce((total, items) => total + items.length, 0);
+    return availableItems.length;
   };
 
   const getDetailsCount = () => {
@@ -210,93 +103,6 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
   };
 
   const isComplete = getDocumentCount() > 0 || getDetailsCount() > 0;
-
-  const handleContinue = async () => {
-    try {
-      const formData = new FormData();
-      
-      const itemsToUpdate = Object.entries(groupedItems).flatMap(([category, items]) => 
-        items.filter(item => itemDetails[item.id] || uploadedFiles[item.id])
-      );
-
-      itemsToUpdate.forEach((item, index) => {
-        const details = itemDetails[item.id] || { seller: '', serialNumber: '' };
-        const files = uploadedFiles[item.id] || [];
-
-        // Use builderCustomerMapId if available (for mapped items), otherwise use item.id (for new mappings)
-        const mapId = item.builderCustomerMapId || item.id;
-        formData.append(`builderMap[${index}].id`, mapId);
-        formData.append(`builderMap[${index}].seller`, details.seller || '');
-        formData.append(`builderMap[${index}].serialNumber`, details.serialNumber || '');
-        
-        files.forEach((file) => {
-          formData.append(`builderMap[${index}].files`, file);
-        });
-      });
-
-      // Log payload for debugging
-      console.log('Calling itemmap update API with data for', itemsToUpdate.length, 'items');
-      console.log('Items to update:', itemsToUpdate.map(item => ({
-        itemId: item.id,
-        builderCustomerMapId: item.builderCustomerMapId || 'N/A (new mapping)',
-        mapId: item.builderCustomerMapId || item.id,
-        seller: itemDetails[item.id]?.seller || '',
-        serialNumber: itemDetails[item.id]?.serialNumber || '',
-        filesCount: uploadedFiles[item.id]?.length || 0
-      })));
-      
-      await updateItemMap(formData).unwrap();
-      
-      // Call getCustomerDetails API after itemMap update succeeds
-      if (initialData?.builderId && initialData?.customerId) {
-        console.log('Calling getCustomerDetails after itemMap update');
-        await refetchCustomerDetails();
-      }
-      
-      toast({
-        title: "Item details saved",
-        description: "Moving to review"
-      });
-      
-      onNext({ documents: uploadedDocs, itemDetails });
-    } catch (error: unknown) {
-      console.error('Error saving item details:', error);
-      
-      let errorMessage = 'An error occurred while saving item details';
-      
-      if (error && typeof error === 'object') {
-        // Handle RTK Query error format
-        if ('data' in error) {
-          const errorData = error.data;
-          if (typeof errorData === 'string') {
-            errorMessage = errorData;
-          } else if (errorData && typeof errorData === 'object') {
-            if ('message' in errorData) {
-              errorMessage = String(errorData.message);
-            } else if ('error' in errorData) {
-              errorMessage = String(errorData.error);
-            } else if ('data' in errorData) {
-              errorMessage = String(errorData.data);
-            }
-          }
-        } else if ('status' in error) {
-          const status = error.status;
-          const statusText = 'statusText' in error ? error.statusText : 'Request failed';
-          errorMessage = `Error ${status}: ${statusText}`;
-        } else if ('message' in error) {
-          errorMessage = String(error.message);
-        }
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      
-      toast({
-        title: "Error saving item details",
-        description: errorMessage,
-        variant: "destructive"
-      });
-    }
-  };
 
   if (loading) {
     return (
@@ -329,7 +135,7 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
         </Card>
       ) : (
         <div className="grid gap-6">
-          {Object.entries(groupedItems).map(([category, items]: [string, BuilderItem[]]) => (
+          {Object.entries(groupedItems).map(([category, items]: [string, any[]]) => (
           <Card key={category}>
             <CardHeader>
               <CardTitle className="text-lg">{category}</CardTitle>
@@ -339,8 +145,9 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
             </CardHeader>
             <CardContent>
               <div className="grid gap-6">
-                {items.map((item: BuilderItem) => {
-                  const docs = uploadedDocs[item.id] || [];
+                {items.map((item: any) => {
+                  const key = `${category}-${item.name}`;
+                  const docs = uploadedDocs[key] || [];
                   const hasUploads = docs.length > 0;
                   const details = itemDetails[item.id] || { seller: '', serialNumber: '' };
 
@@ -355,14 +162,9 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
                           </div>
                           <div>
                             <h4 className="font-medium">{item.name}</h4>
-                            {(item.brand || item.model || item.make) && (
+                            {(item.brand || item.model) && (
                               <p className="text-xs text-muted-foreground">
-                                {[item.brand, item.model, item.make].filter(Boolean).join(' - ')}
-                              </p>
-                            )}
-                            {item.text && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {item.text}
+                                {[item.brand, item.model].filter(Boolean).join(' - ')}
                               </p>
                             )}
                             {hasUploads && (
@@ -375,7 +177,7 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
                         <Button
                           variant={hasUploads ? "outline" : "default"}
                           size="sm"
-                          onClick={() => handleFileUpload(item.id)}
+                          onClick={() => handleFileUpload(category, item.name)}
                           className="flex items-center space-x-2"
                         >
                           <Upload className="w-4 h-4" />
@@ -417,21 +219,13 @@ const DocumentUploadForm = ({ onNext, initialData, selectedItems: selectedItemId
         <p className="text-sm text-muted-foreground">
           Provide details and upload documentation for {getTotalItems()} selected items
         </p>
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            onClick={onSaveExit}
-            disabled={isUpdating || isSaving}
-          >
-            {isSaving ? 'Saving...' : 'Save & Exit'}
-          </Button>
-          <Button 
-            onClick={handleContinue}
-            className="min-w-[120px]"
-          >
-            {isUpdating ? 'Saving...' : 'Continue'}
-          </Button>
-        </div>
+        <Button 
+          onClick={() => onNext({ documents: uploadedDocs, itemDetails })}
+          disabled={!isComplete}
+          className="min-w-[120px]"
+        >
+          Continue
+        </Button>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import type {
   BuilderOrganization,
   UpdateBuilderOrganizationRequest,
   BuilderOrganizationResponse
-} from '@/lib/api/types';
+} from '@/lib/api/types.ts';
 
 export const builderOrganizationApi = api.injectEndpoints({
   endpoints: (build) => ({

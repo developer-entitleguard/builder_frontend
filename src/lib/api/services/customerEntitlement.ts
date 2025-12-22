@@ -1,7 +1,7 @@
 import { api } from '@/store/api/apiSlice';
 import type { 
   CustomerEntitlementResponse
-} from '@/lib/api/types';
+} from '@/lib/api/types.ts';
 
 export const customerEntitlementApi = api.injectEndpoints({
   endpoints: (build) => ({

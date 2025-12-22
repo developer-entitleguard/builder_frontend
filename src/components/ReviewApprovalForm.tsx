@@ -1,260 +1,141 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { User, Home, FileText, Building, CheckCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
 import { useCreateCustomerEntitlementMutation } from "@/lib/api/services/customerEntitlement";
-import { useToast } from "@/hooks/use-toast";
-import type { CustomerDetailsResponse } from "@/lib/api/types";
+import { skipToken } from "@reduxjs/toolkit/query";
 
-interface BuilderItem {
+interface SelectedItem {
   id: string;
   name: string;
-  category: string | null;
-  brand: string | null;
-  model: string | null;
-  make: string | null;
-  note: string | null;
-  price: string | null;
-  text: string | null;
-  documentationUrl: string | null;
-  status: string;
-  purchaser: string | null;
-  mapped: boolean;
-  builderCustomerMapId: string | null;
-  seller: string | null;
-  serialNumber: string | null;
-  fileId: string | null;
-  documentCount?: number | null;
-  fileResponseDto?: Array<{ id: string; fileName: string; fileUrl: string }> | null;
+  category: string;
+  brand?: string;
+  model?: string;
+  make?: string;
+  color?: string;
+  serial_number?: string;
+  custom_notes?: string;
+  warranty_documents?: Array<{ name: string; url: string; path: string }>;
+  manual_documents?: Array<{ name: string; url: string; path: string }>;
 }
 
 interface FormData {
-  customer: {
-    firstName?: string;
-    lastName?: string;
-    email?: string;
-    phone?: string;
-    propertyAddress?: string;
-    city?: string;
-    state?: string;
-    zipCode?: string;
-    projectName?: string;
-    settlementDate?: string;
-    notes?: string;
-    registrationId?: string;
+  customer?: {
     customerId?: string;
-    builderId?: string;
+    customer_name?: string;
+    customer_email?: string;
+    customer_phone?: string;
+    settlement_date?: string;
+    property_address?: string;
+    property_city?: string;
+    property_state?: string;
+    property_zip?: string;
+    notes?: string;
+    project_name?: string;
   };
-  items: {
-    selected_items: string[];
+  items?: {
+    selected_items?: SelectedItem[];
   };
-  documents: {
-    documents?: Record<string, string[]>;
-    itemDetails?: Record<string, { seller: string; serialNumber: string }>;
-  };
+  documents?: Record<string, unknown>;
 }
 
 interface ReviewApprovalFormProps {
   onNext: () => void;
   formData?: FormData;
-  onCustomerDetailsLoaded?: (data: CustomerDetailsResponse) => void;
+  registrationId?: string | null;
 }
 
-const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: ReviewApprovalFormProps) => {
+const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [approved, setApproved] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
+  // Use items passed from previous step instead of fetching from Supabase
+  const selectedItems: SelectedItem[] = formData?.items?.selected_items || [];
 
-  const { 
-    data: customerDetails, 
-    isLoading: loading, 
-    error,
-    refetch 
-  } = useGetCustomerDetailsQuery(
-    { 
-      builderId: formData?.customer?.builderId || '', 
-      customerId: formData?.customer?.customerId || '' 
-    },
-    { 
-      skip: !formData?.customer?.builderId || !formData?.customer?.customerId,
-      refetchOnMountOrArgChange: false,
-      refetchOnFocus: false,
-      refetchOnReconnect: false
+  const customerId: string | undefined = formData?.customer?.customerId || registrationId || undefined;
+
+  const { data: customerDetailsData } = useGetCustomerDetailsQuery(
+    user?.id && customerId
+      ? { builderId: user.id as string, customerId }
+      : skipToken,
+    {
+      refetchOnMountOrArgChange: true,
     }
   );
 
-  const [createCustomerEntitlement, { 
-    isLoading: isCreatingEntitlement 
-  }] = useCreateCustomerEntitlementMutation();
+  const apiCustomer = customerDetailsData?.data?.customer;
+  const apiSummary = customerDetailsData?.data;
 
-  useEffect(() => {
-    if (formData?.customer?.builderId && formData?.customer?.customerId) {
-      console.log('ReviewApprovalForm - Fetching customer details:', {
-        builderId: formData.customer.builderId,
-        customerId: formData.customer.customerId
-      });
-    }
-  }, [formData?.customer?.builderId, formData?.customer?.customerId]);
-
-  useEffect(() => {
-    if (error) {
-      console.error('ReviewApprovalForm - API error:', error);
-      toast({
-        title: "Error fetching customer details",
-        description: "Failed to load customer and items data",
-        variant: "destructive"
-      });
-    }
-  }, [error, toast]);
-
-  useEffect(() => {
-    if (customerDetails && onCustomerDetailsLoaded) {
-      onCustomerDetailsLoaded(customerDetails);
-    }
-  }, [customerDetails, onCustomerDetailsLoaded]);
-
-  const customerData = customerDetails?.data?.customer || formData?.customer || {};
-  
-  const uploadedDocs = useMemo(() => {
-    const docs = formData?.documents as { documents?: Record<string, string[]>; itemDetails?: Record<string, { seller: string; serialNumber: string }> };
-    return docs?.documents || {};
-  }, [formData?.documents]);
-  
-  const itemDetails = useMemo(() => {
-    const docs = formData?.documents as { documents?: Record<string, string[]>; itemDetails?: Record<string, { seller: string; serialNumber: string }> };
-    return docs?.itemDetails || {};
-  }, [formData?.documents]);
-  
-  const selectedItemIds = useMemo(() => {
-    return formData?.items?.selected_items || [];
-  }, [formData?.items?.selected_items]);
+  const customerData = apiCustomer
+    ? {
+        customer_name: `${apiCustomer.firstName} ${apiCustomer.lastName}`.trim(),
+        customer_email: apiCustomer.email,
+        customer_phone: apiCustomer.contact,
+        settlement_date: apiCustomer.settlementDate || null,
+        property_address: apiCustomer.address,
+        property_city: apiCustomer.city,
+        property_state: apiCustomer.state,
+        property_zip: apiCustomer.zip,
+        notes: apiCustomer.notes,
+        project_name: apiCustomer.projectName,
+      }
+    : formData?.customer || {};
+  const uploadedDocs = formData?.documents || {};
 
   // Count total uploaded documents
   const getTotalDocuments = () => {
-    return Object.values(uploadedDocs).reduce((total: number, docs: string[]) => {
-      if (Array.isArray(docs)) {
-        return total + docs.length;
-      }
-      return total;
+    return Object.values(uploadedDocs).reduce((total: number, docs: unknown) => {
+      return total + (Array.isArray(docs) ? docs.length : 0);
     }, 0);
   };
 
-  // Show items that were selected OR have details/documentation OR are mapped in API
-  const groupedItems = useMemo(() => {
-    if (!customerDetails?.data?.dtos) {
-      console.log('ReviewApprovalForm - No dtos in customerDetails');
-      return {};
-    }
-    
-    console.log('ReviewApprovalForm - Processing dtos:', customerDetails.data.dtos);
-    console.log('ReviewApprovalForm - selectedItemIds from formData:', selectedItemIds);
-    console.log('ReviewApprovalForm - itemDetails from formData:', itemDetails);
-    console.log('ReviewApprovalForm - uploadedDocs from formData:', uploadedDocs);
-    
-    const grouped = customerDetails.data.dtos.reduce((acc, categoryGroup) => {
-      // Show items that:
-      // 1. Are in selectedItemIds (were selected in ItemsSelectionForm)
-      // 2. Have details/documentation (seller, serialNumber, or files)
-      // 3. Are marked as mapped: true in API response
-      const relevantItems = categoryGroup.items.filter(item => {
-        const isSelected = selectedItemIds.includes(item.id);
-        const hasDetails = itemDetails[item.id] || uploadedDocs[item.id];
-        const isMapped = item.mapped === true;
-        
-        const shouldShow = isSelected || hasDetails || isMapped;
-        
-        if (shouldShow) {
-          console.log(`ReviewApprovalForm - Item ${item.name}: isSelected=${isSelected}, hasDetails=${!!hasDetails}, isMapped=${isMapped}`);
-        }
-        
-        return shouldShow;
-      });
-      
-      console.log(`ReviewApprovalForm - Category ${categoryGroup.category}: ${relevantItems.length} relevant items`);
-      
-      if (relevantItems.length > 0) {
-        acc[categoryGroup.category] = relevantItems;
-      }
-      
-      return acc;
-    }, {} as Record<string, BuilderItem[]>);
-    
-    console.log('ReviewApprovalForm - Final groupedItems:', grouped);
-    return grouped;
-  }, [customerDetails?.data?.dtos, selectedItemIds, itemDetails, uploadedDocs]);
-
-  const selectedItems = useMemo(() => {
-    return Object.values(groupedItems).flat();
-  }, [groupedItems]);
-
-  // Debug logging
-  useEffect(() => {
-    if (customerDetails?.data?.dtos) {
-      console.log('ReviewApprovalForm - customerDetails.dtos:', customerDetails.data.dtos);
-      const allMappedItems = customerDetails.data.dtos.flatMap(cat => cat.items.filter(item => item.mapped === true));
-      console.log('ReviewApprovalForm - mapped items found:', allMappedItems.length);
-      console.log('ReviewApprovalForm - mapped items:', allMappedItems);
-      console.log('ReviewApprovalForm - selectedItems:', selectedItems);
-      console.log('ReviewApprovalForm - groupedItems:', groupedItems);
-    }
-  }, [customerDetails, selectedItems, groupedItems]);
+  const groupedItems = selectedItems.reduce((acc, item) => {
+    if (!acc[item.category]) acc[item.category] = [];
+    acc[item.category].push(item);
+    return acc;
+  }, {} as Record<string, SelectedItem[]>);
 
   const handleSendToHomeowner = async () => {
-    if (!formData?.customer?.customerId) {
+    if (isSending) return;
+    if (!customerId) {
       toast({
         title: "Error",
-        description: "Customer ID is required to send entitlement",
+        description: "Customer ID is required",
         variant: "destructive"
       });
       return;
     }
-
-    setIsSubmitting(true);
-    
     try {
-      const result = await createCustomerEntitlement({
-        builderCustomerId: formData.customer.customerId
-      }).unwrap();
-
+      setIsSending(true);
+      await createCustomerEntitlement({ builderCustomerId: customerId }).unwrap();
+      await Promise.resolve(onNext());
       toast({
         title: "Success",
-        description: "Customer entitlement created successfully",
-        variant: "default"
+        description: "Customer entitlement created successfully"
       });
-
-      // Call the original onNext function to proceed to next step
-      onNext();
-    } catch (error: unknown) {
-      console.error('Error creating customer entitlement:', error);
-      const errorMessage = error && typeof error === 'object' && 'data' in error && 
-        error.data && typeof error.data === 'object' && 'message' in error.data
-        ? (error.data as { message: string }).message
-        : "Failed to create customer entitlement";
-      
+    } catch (error) {
+      console.error("Error creating customer entitlement:", error);
       toast({
         title: "Error",
-        description: errorMessage,
+        description: error && typeof error === 'object' && 'data' in error
+          ? String((error.data as { message?: string })?.message || "Failed to create customer entitlement")
+          : error instanceof Error
+          ? error.message
+          : "Failed to create customer entitlement",
         variant: "destructive"
       });
     } finally {
-      setIsSubmitting(false);
+      setIsSending(false);
     }
   };
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-foreground">Loading Review...</h2>
-          <p className="text-muted-foreground mt-1">Preparing review data</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -275,26 +156,26 @@ const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: Revie
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="font-medium">Name</p>
-              <p className="text-muted-foreground">{customerData.firstName && customerData.lastName ? `${customerData.firstName} ${customerData.lastName}` : 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.customer_name || 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Email</p>
-              <p className="text-muted-foreground">{customerData.email || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.customer_email || 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Phone</p>
-              <p className="text-muted-foreground">{(customerData as Record<string, string>).contact || (customerData as Record<string, string>).phone || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.customer_phone || 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Settlement Date</p>
-              <p className="text-muted-foreground">{(customerData as Record<string, string>).settlementDate || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.settlement_date || 'Not provided'}</p>
             </div>
           </div>
           <div>
             <p className="font-medium">Property Address</p>
             <p className="text-muted-foreground">
-              {((customerData as Record<string, string>).address || (customerData as Record<string, string>).propertyAddress) && (customerData as Record<string, string>).city && (customerData as Record<string, string>).state 
-                ? `${(customerData as Record<string, string>).address || (customerData as Record<string, string>).propertyAddress}, ${(customerData as Record<string, string>).city}, ${(customerData as Record<string, string>).state} ${(customerData as Record<string, string>).zip || (customerData as Record<string, string>).zipCode || ''}`
+              {customerData.property_address && customerData.property_city && customerData.property_state 
+                ? `${customerData.property_address}, ${customerData.property_city}, ${customerData.property_state} ${customerData.property_zip || ''}`
                 : 'Not provided'
               }
             </p>
@@ -302,7 +183,7 @@ const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: Revie
         </CardContent>
       </Card>
 
-      {!customerDetails?.data?.dtos && !loading ? (
+      {/* {selectedItems.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
@@ -311,25 +192,7 @@ const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: Revie
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">No customer details available</p>
-          </CardContent>
-        </Card>
-      ) : selectedItems.length === 0 && !loading ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Building className="w-5 h-5" />
-              <span>Selected Items</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">No mapped items found</p>
-            {customerDetails?.data?.dtos && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Total items: {customerDetails.data.dtos.reduce((sum, cat) => sum + cat.items.length, 0)} | 
-                Mapped items: {customerDetails.data.dtos.reduce((sum, cat) => sum + cat.items.filter(item => item.mapped === true).length, 0)}
-              </p>
-            )}
+            <p className="text-muted-foreground">No items selected</p>
           </CardContent>
         </Card>
       ) : (
@@ -349,23 +212,10 @@ const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: Revie
                 <div key={category}>
                   <h4 className="font-semibold mb-3">{category}</h4>
                   <div className="space-y-2">
-                    {items.map((item, index) => {
-                      // Get details from formData (uploaded in DocumentUploadForm) or from API response
-                      const formItemDetails = itemDetails[item.id] as { seller?: string; serialNumber?: string } | undefined;
-                      const formDocs = uploadedDocs[item.id] || [];
-                      
-                      // Use API response data if available, otherwise use formData
-                      const seller = item.seller || formItemDetails?.seller || '';
-                      const serialNumber = item.serialNumber || formItemDetails?.serialNumber || '';
-                      
-                      // Check documents from API response or formData
-                      // Prioritize documentCount from API, even if 0
-                      const apiDocumentCount = item.documentCount !== null && item.documentCount !== undefined ? item.documentCount : null;
-                      const apiFiles = item.fileResponseDto || [];
-                      const formDocsCount = Array.isArray(formDocs) ? formDocs.length : 0;
-                      // Use documentCount from API if available, otherwise fall back to file counts
-                      const totalDocCount = apiDocumentCount !== null ? apiDocumentCount : (apiFiles.length > 0 ? apiFiles.length : formDocsCount);
-                      const hasDocuments = totalDocCount > 0;
+                    {(items as any[]).map((item, index) => {
+                      const itemKey = `${category}-${item.name}`;
+                      const itemDocs = (uploadedDocs as any)[itemKey] || [];
+                      const hasDocuments = Array.isArray(itemDocs) && itemDocs.length > 0;
                       
                       return (
                         <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
@@ -378,29 +228,19 @@ const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: Revie
                                   {[item.brand, item.model].filter(Boolean).join(' - ')}
                                 </p>
                               )}
-                              {seller && (
-                                <p className="text-xs text-muted-foreground">
-                                  Seller: {seller}
-                                </p>
-                              )}
-                              {serialNumber && (
-                                <p className="text-xs text-muted-foreground">
-                                  Serial: {serialNumber}
-                                </p>
-                              )}
                               {hasDocuments && (
                                 <p className="text-xs text-green-600">
-                                  {totalDocCount} document{totalDocCount !== 1 ? 's' : ''} uploaded
+                                  {(itemDocs as any[]).length} document{(itemDocs as any[]).length !== 1 ? 's' : ''} uploaded
                                 </p>
                               )}
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <Badge 
-                              className={hasDocuments ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
-                            >
-                              {totalDocCount} Document{totalDocCount !== 1 ? 's' : ''}
-                            </Badge>
+                            {hasDocuments ? (
+                              <Badge className="bg-green-100 text-green-800">Documents Ready</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-yellow-600 border-yellow-600">No Documents</Badge>
+                            )}
                           </div>
                         </div>
                       );
@@ -414,7 +254,7 @@ const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: Revie
             </div>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       {/* Documentation Status */}
       {/* <Card>
@@ -425,7 +265,7 @@ const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: Revie
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {getTotalDocuments() > 0 ? (
+          {(getTotalDocuments() as number) > 0 ? (
             <div className="flex items-center space-x-2 text-green-600">
               <CheckCircle className="w-5 h-5" />
               <span className="font-medium">Documents uploaded</span>
@@ -437,7 +277,7 @@ const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: Revie
             </div>
           )}
           <p className="text-sm text-muted-foreground mt-2">
-            {getTotalDocuments()} document{getTotalDocuments() !== 1 ? 's' : ''} ready for delivery
+            {getTotalDocuments() as number} document{(getTotalDocuments() as number) !== 1 ? 's' : ''} ready for delivery
           </p>
         </CardContent>
       </Card> */}
@@ -465,14 +305,14 @@ const ReviewApprovalForm = ({ onNext, formData, onCustomerDetailsLoaded }: Revie
 
       <div className="flex justify-between items-center pt-6 border-t">
         <p className="text-sm text-muted-foreground">
-          {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} • {getTotalDocuments() as number} document{(getTotalDocuments() as number) !== 1 ? 's' : ''} • Ready to send
+          {apiSummary?.totalItems ?? selectedItems.length} item{(apiSummary?.totalItems ?? selectedItems.length) !== 1 ? 's' : ''}  • Ready to send
         </p>
         <Button 
           onClick={handleSendToHomeowner}
-          disabled={!approved || isSubmitting || isCreatingEntitlement}
+          disabled={!approved || isSending}
           className="min-w-[120px]"
         >
-          {isSubmitting || isCreatingEntitlement ? "Sending..." : "Send to Homeowner"}
+          {isSending ? "Sending..." : "Send to Homeowner"}
         </Button>
       </div>
     </div>

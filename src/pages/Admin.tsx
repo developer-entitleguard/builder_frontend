@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,8 +11,7 @@ import { Shield, ArrowLeft, Truck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function Admin() {
-  const { isAdmin } = useAuth();
-  const { organization, loading } = useOrganization();
+  const { organization, userRole, loading, isAdmin } = useOrganization();
   const navigate = useNavigate();
 
   if (loading) {
@@ -43,7 +41,7 @@ export default function Admin() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {/* <Shield className="h-6 w-6 text-primary" /> */}
+          <Shield className="h-6 w-6 text-primary" />
           <h1 className="text-3xl font-bold">Organization Administration</h1>
         </div>
         <Button 

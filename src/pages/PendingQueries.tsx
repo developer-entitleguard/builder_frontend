@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import type { BuilderQuery } from "@/lib/api/services/query";
 import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
-import { useUpdateQueryMutation } from "@/lib/api/services/query";
+import { useUpdateQueryMutation, useAddQueryCommentMutation, useLazyGetQueryByIdQuery } from "@/lib/api/services/query";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -167,6 +167,12 @@ const PendingQueries = () => {
   // Update query mutation
   const [updateQuery, { isLoading: isUpdating }] = useUpdateQueryMutation();
   
+  // Add comment mutation
+  const [addComment, { isLoading: isAddingComment }] = useAddQueryCommentMutation();
+  
+  // Lazy query to refetch query data after adding comment
+  const [getQueryById] = useLazyGetQueryByIdQuery();
+  
   // Toast for notifications
   const { toast } = useToast();
 
@@ -197,6 +203,16 @@ const PendingQueries = () => {
       // Update due date from query data
       if (query.dueDate) {
         setDueDate(new Date(query.dueDate));
+      }
+      
+      // Pre-select vendor if query already has a vendor assigned
+      if (query.vendor?.id) {
+        setSelectedVendor(query.vendor.id);
+      }
+      
+      // Set vendor contact from query data if available
+      if (query.vendor?.contact) {
+        setVendorPhone(query.vendor.contact);
       }
     }
   }, [location.state]);
@@ -247,10 +263,82 @@ const PendingQueries = () => {
     }
   };
 
-  const handleAddComment = () => {
-    // Handle adding comment logic here
-    console.log("Adding comment:", comment);
-    setComment("");
+  const handleAddComment = async () => {
+    if (!comment.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a comment",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get user ID and builder organization ID
+    const userId = user && 'id' in user ? user.id : null;
+    const commentedBy = user && 'builderOrganization' in user 
+      ? user.builderOrganization.id 
+      : null;
+
+    if (!userId || !commentedBy) {
+      toast({
+        title: "Error",
+        description: "User information not available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = await addComment({
+        comment: comment.trim(),
+        commentedBy,
+        id: userId,
+        queryId: queryData.id,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Comment added successfully",
+        });
+        setComment("");
+        
+        // Refetch query data to get updated comments
+        if (queryData?.id) {
+          try {
+            const queryResult = await getQueryById({ id: queryData.id }).unwrap();
+            if (queryResult.success && queryResult.data) {
+              setQueryData(queryResult.data);
+            }
+          } catch (refetchError) {
+            console.error("Error refetching query:", refetchError);
+            // Don't show error toast for refetch failure, comment was already added
+          }
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to add comment",
+          variant: "destructive",
+        });
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -264,8 +352,8 @@ const PendingQueries = () => {
             {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
           </h1>
           <p className="text-gray-600 mt-2">
-            {queryData?.orderItem?.order?.createdAt 
-              ? `Submitted on ${format(new Date(queryData.orderItem.order.createdAt), "MMM d, yyyy 'at' h:mm a")}`
+            {queryData?.createdAt 
+              ? `Submitted on ${format(new Date(queryData.createdAt), "MMM d, yyyy 'at' h:mm a")}`
               : ""
             }
           </p>
@@ -468,7 +556,7 @@ const PendingQueries = () => {
                 <div>
                   <Label htmlFor="vendor-select">Select Vendor</Label>
                   <Select 
-                    value={selectedVendor} 
+                    value={selectedVendor || (queryData?.vendor?.id || "")} 
                     onValueChange={(value) => {
                       setSelectedVendor(value);
                       // Auto-populate vendor phone when vendor is selected
@@ -479,7 +567,7 @@ const PendingQueries = () => {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : "Select a vendor..."} />
+                      <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : queryData?.vendor?.name || "Select a vendor..."} />
                     </SelectTrigger>
                     <SelectContent>
                       {isLoadingVendors ? (
@@ -495,6 +583,11 @@ const PendingQueries = () => {
                       )}
                     </SelectContent>
                   </Select>
+                  {queryData?.vendor && !vendors.find(v => v.id === queryData.vendor?.id) && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Current vendor: {queryData.vendor.name}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -502,16 +595,28 @@ const PendingQueries = () => {
                   <Input
                     id="vendor-phone"
                     placeholder="(555) 555-5555"
-                    value={vendorPhone}
+                    value={vendorPhone || queryData?.vendor?.contact || ''}
                     onChange={(e) => setVendorPhone(e.target.value)}
                   />
-                  {selectedVendor && vendors.find(v => v.id === selectedVendor) && (
-                    <p className="text-sm text-gray-500 mt-1">
-                      {vendors.find(v => v.id === selectedVendor)?.email && (
-                        <>Email: {vendors.find(v => v.id === selectedVendor)?.email}</>
-                      )}
-                    </p>
-                  )}
+                  {(selectedVendor && vendors.find(v => v.id === selectedVendor)) || queryData?.vendor ? (
+                    <div className="text-sm text-gray-500 mt-1 space-y-1">
+                      {(() => {
+                        const vendor = selectedVendor 
+                          ? vendors.find(v => v.id === selectedVendor)
+                          : queryData?.vendor;
+                        return (
+                          <>
+                            {vendor?.email && (
+                              <p>Email: {vendor.email}</p>
+                            )}
+                            {vendor?.contact && (
+                              <p>Contact: {vendor.contact}</p>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div>
@@ -587,23 +692,52 @@ const PendingQueries = () => {
             {/* Add Comments */}
             <Card>
               <CardHeader>
-                <CardTitle>Add Comments</CardTitle>
+                <CardTitle>Comments ({queryData?.queryComments?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Textarea
-                  placeholder="Add your comments or notes about this case..."
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  rows={4}
-                />
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
-                    <Paperclip className="h-4 w-4 mr-2" />
-                    Attach File
-                  </Button>
-                  <Button size="sm" onClick={handleAddComment}>
-                    Add Comment
-                  </Button>
+                {/* Display existing comments */}
+                {queryData?.queryComments && queryData.queryComments.length > 0 ? (
+                  <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                    {[...queryData.queryComments]
+                      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      .map((commentItem) => (
+                        <div key={commentItem.id} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
+                          <p className="text-sm text-gray-900 mb-1">{commentItem.comment}</p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>{format(new Date(commentItem.createdAt), "MMM d, yyyy 'at' h:mm a")}</span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm border rounded-lg bg-gray-50">
+                    No comments yet
+                  </div>
+                )}
+                
+                {/* Add new comment */}
+                <div className="space-y-2">
+                  <Label htmlFor="new-comment">Add a comment</Label>
+                  <Textarea
+                    id="new-comment"
+                    placeholder="Add your comments or notes about this case..."
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    rows={4}
+                  />
+                  <div className="flex gap-2">
+                    {/* <Button variant="outline" size="sm">
+                      <Paperclip className="h-4 w-4 mr-2" />
+                      Attach File
+                    </Button> */}
+                    <Button 
+                      size="sm" 
+                      onClick={handleAddComment}
+                      disabled={isAddingComment || !comment.trim()}
+                    >
+                      {isAddingComment ? "Adding..." : "Add Comment"}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -611,23 +745,41 @@ const PendingQueries = () => {
             {/* Case History */}
             <Card>
               <CardHeader>
-                <CardTitle>Case History</CardTitle>
+                <CardTitle>
+                  Case History ({queryData?.queryhistory?.length || 0})
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {mockHistory.map((item, index) => (
-                    <div key={item.id} className="flex">
-                      <div className="flex-shrink-0 w-1 bg-blue-500 rounded-full mr-4"></div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{item.action}</p>
-                        <p className="text-sm text-gray-600">
-                          {format(item.timestamp, "MMM d, yyyy 'at' h:mm a")}
-                        </p>
-                        <p className="text-sm text-gray-500">By: {item.by}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                {queryData?.queryhistory && queryData.queryhistory.length > 0 ? (
+                  <div className="space-y-4">
+                    {[...queryData.queryhistory]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.changedAt).getTime() -
+                          new Date(a.changedAt).getTime()
+                      )
+                      .map((item) => (
+                        <div key={item.id} className="flex">
+                          <div className="flex-shrink-0 w-1 bg-blue-500 rounded-full mr-4"></div>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">
+                              {item.status?.name || "Unknown status"}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {format(new Date(item.changedAt), "MMM d, yyyy 'at' h:mm a")}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {item.userInfo ? "Updated by user" : "System update"}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm border rounded-lg bg-gray-50">
+                    No history available
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

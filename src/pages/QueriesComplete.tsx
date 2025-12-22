@@ -1,8 +1,16 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import type { BuilderQuery } from "@/lib/api/services/query";
-import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
+import {
+  useGetBuilderVendorsQuery,
+} from "@/lib/api/services/builderVendor";
+import {
+  useAddQueryCommentMutation,
+  useLazyGetQueryByIdQuery,
+  useUpdateQueryMutation,
+} from "@/lib/api/services/query";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -120,6 +128,11 @@ const QueriesComplete = () => {
   const [priorityLevel, setPriorityLevel] = useState<"Low" | "Medium" | "High" | "Critical">("Medium");
   const [dueDate, setDueDate] = useState<Date | undefined>(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)); // 2 days from now
   const [comment, setComment] = useState<string>("");
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const { toast } = useToast();
+  const [addComment, { isLoading: isAddingComment }] = useAddQueryCommentMutation();
+  const [getQueryById] = useLazyGetQueryByIdQuery();
+  const [updateQuery, { isLoading: isUpdatingQuery }] = useUpdateQueryMutation();
 
   const builderId = user && 'builderOrganization' in user 
     ? user.builderOrganization.id 
@@ -167,6 +180,16 @@ const QueriesComplete = () => {
       if (query.dueDate) {
         setDueDate(new Date(query.dueDate));
       }
+      
+      // Pre-select vendor if query already has a vendor assigned
+      if (query.vendor?.id) {
+        setSelectedVendor(query.vendor.id);
+      }
+      
+      // Set vendor contact from query data if available
+      if (query.vendor?.contact) {
+        setVendorPhone(query.vendor.contact);
+      }
     }
   }, [location.state]);
 
@@ -185,16 +208,218 @@ const QueriesComplete = () => {
     console.log("Assigning case to vendor:", selectedVendor, "Priority:", priorityLevel);
   };
 
-  const handleAddComment = () => {
-    // Handle adding comment logic here
-    console.log("Adding comment:", comment);
-    setComment("");
+  const handleAddComment = async () => {
+    if (!comment.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a comment",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get user ID and builder organization ID
+    const userId =
+      user && typeof user === "object" && "id" in user && typeof (user as { id?: unknown }).id === "string"
+        ? (user as { id: string }).id
+        : null;
+    const commentedBy =
+      user &&
+      typeof user === "object" &&
+      "builderOrganization" in user &&
+      (user as { builderOrganization?: { id?: unknown } }).builderOrganization?.id &&
+      typeof (user as { builderOrganization: { id: unknown } }).builderOrganization.id === "string"
+        ? (user as { builderOrganization: { id: string } }).builderOrganization.id
+        : null;
+
+    if (!userId || !commentedBy) {
+      toast({
+        title: "Error",
+        description: "User information not available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = await addComment({
+        comment: comment.trim(),
+        commentedBy,
+        id: userId,
+        queryId: queryData.id,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Comment added successfully",
+        });
+        setComment("");
+
+        // Refetch query data to show latest comments
+        try {
+          const refreshed = await getQueryById({ id: queryData.id }).unwrap();
+          if (refreshed.success && refreshed.data) {
+            setQueryData(refreshed.data);
+          }
+        } catch (refetchError) {
+          console.error("Error refetching query:", refetchError);
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to add comment",
+          variant: "destructive",
+        });
+      }
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "An unknown error occurred";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleMarkAsDone = () => {
-    // Handle marking case as done
-    console.log("Marking case as done");
-    navigate("/dashboard");
+  const handleMarkAsDone = async () => {
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Prepare file data if files are uploaded
+      const queryFileMapDto = uploadedFiles.length > 0
+        ? uploadedFiles.map((file) => ({
+            type: "BUILDER",
+            files: file,
+          }))
+        : undefined;
+
+      const result = await updateQuery({
+        id: queryData.id,
+        statusId: queryData.status?.id,
+        queryFileMapDto,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Query updated successfully",
+        });
+        
+        // Clear uploaded files
+        setUploadedFiles([]);
+        
+        // Refetch query data to get updated status
+        try {
+          const refreshed = await getQueryById({ id: queryData.id }).unwrap();
+          if (refreshed.success && refreshed.data) {
+            setQueryData(refreshed.data);
+          }
+        } catch (refetchError) {
+          console.error("Error refetching query:", refetchError);
+        }
+        
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to update query",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating query:", error);
+      toast({
+        title: "Error",
+        description: error && typeof error === 'object' && 'data' in error
+          ? String((error.data as { message?: string })?.message || "Failed to update query")
+          : error instanceof Error
+          ? error.message
+          : "Failed to update query",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleStatusButtonClick = async () => {
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Prepare file data if files are uploaded
+      const queryFileMapDto = uploadedFiles.length > 0
+        ? uploadedFiles.map((file) => ({
+            type: "BUILDER",
+            files: file,
+          }))
+        : undefined;
+
+      const result = await updateQuery({
+        id: queryData.id,
+        statusId: queryData.status?.id,
+        queryFileMapDto,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Query updated successfully",
+        });
+        
+        // Clear uploaded files
+        setUploadedFiles([]);
+        
+        // Refetch query data to get updated status
+        try {
+          const refreshed = await getQueryById({ id: queryData.id }).unwrap();
+          if (refreshed.success && refreshed.data) {
+            setQueryData(refreshed.data);
+          }
+        } catch (refetchError) {
+          console.error("Error refetching query:", refetchError);
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to update query",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating query:", error);
+      toast({
+        title: "Error",
+        description: error && typeof error === 'object' && 'data' in error
+          ? String((error.data as { message?: string })?.message || "Failed to update query")
+          : error instanceof Error
+          ? error.message
+          : "Failed to update query",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleBackToCases = () => {
@@ -214,8 +439,8 @@ const QueriesComplete = () => {
               {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
             </h1>
             <p className="text-gray-600 mt-2">
-              {queryData?.orderItem?.order?.createdAt 
-                ? `Submitted on ${format(new Date(queryData.orderItem.order.createdAt), "MMM d, yyyy 'at' h:mm a")}`
+              {queryData?.createdAt 
+                ? `Submitted on ${format(new Date(queryData.createdAt), "MMM d, yyyy 'at' h:mm a")}`
                 : ""
               }
             </p>
@@ -225,9 +450,9 @@ const QueriesComplete = () => {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to cases
             </Button>
-            <Button onClick={handleMarkAsDone} disabled={isStatusDone}>
+            <Button onClick={handleMarkAsDone} disabled={isStatusDone || isUpdatingQuery}>
               <Check className="h-4 w-4 mr-2" />
-              Mark as done
+              {isUpdatingQuery ? "Updating..." : "Mark as done"}
             </Button>
           </div>
         </div>
@@ -239,8 +464,13 @@ const QueriesComplete = () => {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Case Details</CardTitle>
-                <Button variant="outline" size="sm">
-                  {queryData?.status?.name || "Complete"}
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleStatusButtonClick}
+                  disabled={isUpdatingQuery}
+                >
+                  {isUpdatingQuery ? "Updating..." : (queryData?.status?.name || "Complete")}
                 </Button>
               </CardHeader>
               <CardContent>
@@ -428,7 +658,7 @@ const QueriesComplete = () => {
                 <div>
                   <Label htmlFor="vendor-select">Select Vendor</Label>
                   <Select 
-                    value={selectedVendor} 
+                    value={selectedVendor || (queryData?.vendor?.id || "")} 
                     onValueChange={(value) => {
                       setSelectedVendor(value);
                       // Auto-populate vendor phone when vendor is selected
@@ -440,7 +670,7 @@ const QueriesComplete = () => {
                     disabled={isStatusDone}
                   >
                     <SelectTrigger disabled={isStatusDone}>
-                      <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : "Select a vendor..."} />
+                      <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : queryData?.vendor?.name || "Select a vendor..."} />
                     </SelectTrigger>
                     <SelectContent>
                       {isLoadingVendors ? (
@@ -448,7 +678,7 @@ const QueriesComplete = () => {
                       ) : vendors.length > 0 ? (
                         vendors.map((vendor) => (
                           <SelectItem key={vendor.id} value={vendor.id}>
-                            {vendor.name}
+                            {vendor.name} {vendor.type && `(${vendor.type})`}
                           </SelectItem>
                         ))
                       ) : (
@@ -456,6 +686,11 @@ const QueriesComplete = () => {
                       )}
                     </SelectContent>
                   </Select>
+                  {queryData?.vendor && !vendors.find(v => v.id === queryData.vendor?.id) && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Current vendor: {queryData.vendor.name}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -463,17 +698,29 @@ const QueriesComplete = () => {
                   <Input
                     id="vendor-phone"
                     placeholder="(555) 555-5555"
-                    value={vendorPhone}
+                    value={vendorPhone || queryData?.vendor?.contact || ''}
                     onChange={(e) => setVendorPhone(e.target.value)}
                     disabled={isStatusDone}
                   />
-                  {selectedVendor && vendors.find(v => v.id === selectedVendor) && (
-                    <p className="text-sm text-gray-500 mt-1">
-                      {vendors.find(v => v.id === selectedVendor)?.email && (
-                        <>Email: {vendors.find(v => v.id === selectedVendor)?.email}</>
-                      )}
-                    </p>
-                  )}
+                  {(selectedVendor && vendors.find(v => v.id === selectedVendor)) || queryData?.vendor ? (
+                    <div className="text-sm text-gray-500 mt-1 space-y-1">
+                      {(() => {
+                        const vendor = selectedVendor 
+                          ? vendors.find(v => v.id === selectedVendor)
+                          : queryData?.vendor;
+                        return (
+                          <>
+                            {vendor?.email && (
+                              <p>Email: {vendor.email}</p>
+                            )}
+                            {vendor?.contact && (
+                              <p>Contact: {vendor.contact}</p>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div>
@@ -552,24 +799,66 @@ const QueriesComplete = () => {
             {/* Add Comments */}
             <Card>
               <CardHeader>
-                <CardTitle>Add Comments</CardTitle>
+                <CardTitle>Comments ({queryData?.queryComments?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Textarea
-                  placeholder="Add your comments or notes about this case..."
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  rows={4}
-                  disabled={isStatusDone}
-                />
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={isStatusDone}>
-                    <Paperclip className="h-4 w-4 mr-2" />
-                    Attach File
-                  </Button>
-                  <Button size="sm" onClick={handleAddComment} disabled={isStatusDone}>
-                    Add Comment
-                  </Button>
+                {/* Existing Comments */}
+                {queryData?.queryComments && queryData.queryComments.length > 0 ? (
+                  <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                    {[...queryData.queryComments]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.createdAt).getTime() -
+                          new Date(a.createdAt).getTime()
+                      )
+                      .map((commentItem) => (
+                        <div
+                          key={commentItem.id}
+                          className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0"
+                        >
+                          <p className="text-sm text-gray-900 mb-1">
+                            {commentItem.comment}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>
+                              {format(
+                                new Date(commentItem.createdAt),
+                                "MMM d, yyyy 'at' h:mm a"
+                              )}
+                            </span>
+                            {/* <span className="text-[10px] uppercase tracking-wide bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">
+                              {commentItem.commentedBy}
+                            </span> */}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm border rounded-lg bg-gray-50">
+                    No comments yet
+                  </div>
+                )}
+
+                {/* Add Comment */}
+                <div className="space-y-2">
+                  <Label htmlFor="new-comment">Add a comment</Label>
+                  <Textarea
+                    id="new-comment"
+                    placeholder="Add your comments or notes about this case..."
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    rows={4}
+                    disabled={isStatusDone}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleAddComment}
+                      disabled={isStatusDone || isAddingComment || !comment.trim()}
+                    >
+                      {isAddingComment ? "Adding..." : "Add Comment"}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -577,23 +866,41 @@ const QueriesComplete = () => {
             {/* Case History */}
             <Card>
               <CardHeader>
-                <CardTitle>Case History</CardTitle>
+                <CardTitle>
+                  Case History ({queryData?.queryhistory?.length || 0})
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {mockHistory.map((item, index) => (
-                    <div key={item.id} className="flex">
-                      <div className="flex-shrink-0 w-1 bg-blue-500 rounded-full mr-4"></div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{item.action}</p>
-                        <p className="text-sm text-gray-600">
-                          {format(item.timestamp, "MMM d, yyyy 'at' h:mm a")}
-                        </p>
-                        <p className="text-sm text-gray-500">By: {item.by}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                {queryData?.queryhistory && queryData.queryhistory.length > 0 ? (
+                  <div className="space-y-4">
+                    {[...queryData.queryhistory]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.changedAt).getTime() -
+                          new Date(a.changedAt).getTime()
+                      )
+                      .map((item) => (
+                        <div key={item.id} className="flex">
+                          <div className="flex-shrink-0 w-1 bg-blue-500 rounded-full mr-4"></div>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">
+                              {item.status?.name || "Unknown status"}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {format(new Date(item.changedAt), "MMM d, yyyy 'at' h:mm a")}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {item.userInfo ? "Updated by user" : "System update"}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm">
+                    No history available
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

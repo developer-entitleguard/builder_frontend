@@ -7,16 +7,54 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageSquare, Clock, CheckCircle } from "lucide-react";
 import Header from "@/components/Header";
-import { useGetStatusByModuleQuery } from "@/lib/api/services/status";
-import { useGetBuilderQueriesQuery, useLazyGetQueryByIdQuery, type BuilderQuery } from "@/lib/api/services/query";
+import { useGetStatusQuery, useGetBuilderQueriesQuery } from "@/store/api/dashboard";
+import { useLazyGetQueryByIdQuery } from "@/lib/api/services/query";
+
+// Shape from /api/builder/query
+interface BuilderQueryApi {
+  id: string;
+  title?: string;
+  description?: string;
+  priorityLevel?: string;
+  dueDate?: string;
+  updatedAt?: string;
+  status?: { id?: string; name?: string };
+  vendor?: { id: string; name: string; email?: string } | null;
+  queryFileMaps?: Array<{
+    id: string;
+    type: string;
+    files?: {
+      id: string;
+      name: string;
+      type: string;
+      fileType: string;
+      filePath: string;
+    };
+  }>;
+  orderItem?: {
+    id: string;
+    productName?: string;
+    sku?: string;
+    brand?: string;
+    order?: {
+      id: string;
+      property?: string;
+      createdAt?: string;
+      customerSourceMap?: {
+        customer?: { name?: string; email?: string; contact?: string };
+        source?: { name?: string; email?: string };
+      };
+    };
+  };
+}
 
 // Transform API query to component format
-const transformQuery = (query: BuilderQuery) => {
+const transformQuery = (query: BuilderQueryApi) => {
   const customerName = query.orderItem?.order?.customerSourceMap?.customer?.name || 
     query.orderItem?.order?.customerSourceMap?.source?.name || 'N/A';
   
@@ -25,20 +63,33 @@ const transformQuery = (query: BuilderQuery) => {
   
   const projectName = query.orderItem?.order?.property || 'N/A';
   const createdAt = query.orderItem?.order?.createdAt || new Date().toISOString();
+  const title = query.title || query.orderItem?.productName || "Untitled Query";
+  const description = query.description || "No description provided.";
+  const priority = query.priorityLevel || "N/A";
+  const vendor = query.vendor || null;
+  const statusObj: QueryStatusObj =
+    typeof query.status === "object" && query.status
+      ? query.status
+      : {
+          id: query.status?.id,
+          name: typeof query.status === "string" ? query.status : "UNKNOWN",
+          module: "QUERY",
+        };
 
   return {
     id: query.id,
-    subject: query.title,
-    message: query.description,
+    subject: title,
+    message: description,
+    description,
     response: null, // API doesn't return response in this structure
-    status: query.status?.name || 'UNKNOWN',
-    statusId: query.status?.id,
+    status: statusObj,
+    statusId: statusObj.id,
     created_at: createdAt,
     updated_at: query.updatedAt || createdAt,
     responded_at: null,
-    priorityLevel: query.priorityLevel,
+    priorityLevel: priority,
     dueDate: query.dueDate,
-    vendor: query.vendor,
+    vendor,
     queryFileMaps: query.queryFileMaps || [],
     orderItem: query.orderItem,
     homeowner_registrations: {
@@ -49,12 +100,20 @@ const transformQuery = (query: BuilderQuery) => {
   };
 };
 
+type QueryStatusObj = { id?: string; name?: string; module?: string };
+
+const getStatusName = (status: string | QueryStatusObj | undefined): string => {
+  if (typeof status === "string") return status;
+  return status?.name || "UNKNOWN";
+};
+
 interface Query {
   id: string;
   subject: string;
   message: string;
+  description: string;
   response: string | null;
-  status: string;
+  status: string | QueryStatusObj;
   statusId?: string;
   created_at: string;
   updated_at: string;
@@ -88,12 +147,14 @@ interface Query {
       createdAt?: string;
       customerSourceMap?: {
         customer?: {
-          name: string;
-          email: string;
+          name?: string;
+          email?: string;
+          contact?: string;
         };
         source?: {
-          name: string;
-          email: string;
+          name?: string;
+          email?: string;
+          contact?: string;
         };
       };
     };
@@ -113,20 +174,23 @@ const QueriesManagement = () => {
   const [response, setResponse] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedStatusId, setSelectedStatusId] = useState<string>("");
+  const [triggerGetQueryById] = useLazyGetQueryByIdQuery();
 
   // Map status name to route
   const getRouteByStatus = (statusName: string): string => {
-    const statusUpper = statusName?.toUpperCase() || '';
+    const statusUpper = statusName?.toUpperCase().replace(/\s+/g, '_') || '';
     switch (statusUpper) {
       case 'CREATED':
-        return '/pendingQueries';
-      case 'IN PROGRESS':
+      case 'REVIEW':
       case 'INPROGRESS':
+      case 'IN_PROGRESS':
         return '/pendingQueries';
-      case 'ASSIGNED TO VENDOR':
+      case 'ASSINGED':
+      case 'ASSIGNED':
+      case 'ASSIGNED_TO_VENDOR':
+      case 'AWAITING_VENDOR_ACTION':
         return '/awaitingAction';
       case 'COMPLETED':
-        return '/pendingQueries';
       case 'DONE':
         return '/queriesComplete';
       default:
@@ -136,30 +200,24 @@ const QueriesManagement = () => {
 
   const handleCardClick = async (query: Query) => {
     try {
-      // Fetch full query details by ID
-      const result = await getQueryById({ id: query.id }).unwrap();
-      
-      if (result.success && result.data) {
-        // Get route based on status from API response
-        const statusName = result.data.status?.name || query.status;
-        const route = getRouteByStatus(statusName);
-        
-        // Navigate to the appropriate page with the full query data
-        navigate(route, { state: { query: result.data } });
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to fetch query details",
-          variant: "destructive"
-        });
-      }
+      const result = await triggerGetQueryById({ id: query.id }).unwrap();
+      const payloadRaw = (result?.data as BuilderQueryApi) || (query as unknown as BuilderQueryApi);
+      const transformed = transformQuery(payloadRaw);
+      const statusName = getStatusName(transformed.status);
+      const route = getRouteByStatus(statusName);
+      // Pass the raw BuilderQuery shape to detail pages (they expect that contract)
+      navigate(route, { state: { query: payloadRaw } });
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({
         title: "Error fetching query",
-        description: errorMessage,
-        variant: "destructive"
+        description: error instanceof Error ? error.message : "Unable to load query details",
+        variant: "destructive",
       });
+      // Fallback to existing data if fetch fails
+      const transformed = transformQuery(query as BuilderQueryApi);
+      const statusName = getStatusName(transformed.status);
+      const route = getRouteByStatus(statusName);
+      navigate(route, { state: { query } });
     }
   };
 
@@ -168,11 +226,8 @@ const QueriesManagement = () => {
     : null;
 
   // Fetch statuses for QUERY module
-  const { data: statusData, isLoading: isLoadingStatuses } = useGetStatusByModuleQuery({ module: "QUERY" });
+  const { data: statusData, isLoading: isLoadingStatuses } = useGetStatusQuery({ module: "QUERY" });
   const statuses = statusData?.data || [];
-
-  // Lazy query to fetch single query by ID
-  const [getQueryById, { isLoading: isLoadingQuery }] = useLazyGetQueryByIdQuery();
 
   // Fetch queries from API only when a specific status is selected
   const { data: queriesData, isLoading: loading, refetch } = useGetBuilderQueriesQuery(
@@ -264,7 +319,7 @@ const QueriesManagement = () => {
 
   const QueryCard = ({ query }: { query: Query }) => (
     <Card 
-      className={`mb-4 cursor-pointer hover:shadow-md transition-shadow ${isLoadingQuery ? 'opacity-50 pointer-events-none' : ''}`}
+      className="mb-4 cursor-pointer hover:shadow-md transition-shadow"
       onClick={() => handleCardClick(query)}
     >
       <CardHeader>
@@ -300,7 +355,7 @@ const QueriesManagement = () => {
             </CardDescription>
           </div>
           <div className="flex items-center space-x-2">
-            {getStatusBadge(query.status)}
+            {getStatusBadge(getStatusName(query.status))}
             {/* <Button
               variant="outline"
               size="sm"

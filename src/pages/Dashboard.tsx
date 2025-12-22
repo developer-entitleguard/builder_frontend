@@ -1,12 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useGetDashboardCountQuery, useGetCustomerListQuery } from "@/store/api/dashboard";
-import { useDeleteBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
+import { useGetDashboardCountQuery, useGetRegistrationsQuery, useGetStatusesByTypeQuery } from "@/store/api/dashboard";
 import { useGetBuilderOrganizationQuery } from "@/lib/api/services/builderOrganization";
-import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
-import type { SerializedError } from '@reduxjs/toolkit';
 import Header from "@/components/Header";
+import { RegistrationTypeDialog } from "@/components/RegistrationTypeDialog";
+import { BulkActionsBar } from "@/components/BulkActionsBar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -17,11 +16,19 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
   Search,
-  Filter,
   Building2,
   FileText,
   Clock,
@@ -32,23 +39,9 @@ import {
   Package,
   MessageSquare,
   Settings,
-  MoreVertical,
-  Trash2,
-  Eye,
+  FolderKanban,
+  Filter,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 interface HomeownerRegistration {
   id: string;
@@ -57,11 +50,47 @@ interface HomeownerRegistration {
   property_address: string;
   property_city: string;
   property_state: string;
-  project_name: string | null;
+  project_name: string;
   status: string;
-  created_at?: string;
-  entitlement_sent_at?: string | null;
-  settlementDate?: string | null;
+  statusName: string;
+  created_at: string;
+  entitlement_sent_at: string | null;
+  billMaterialId?: string;
+}
+
+interface OwnerRegistrationResponse {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  email: string;
+  contact: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  projectName: string;
+  statusName: string;
+  createdAt: string;
+  builderId: string;
+  builderName: string;
+  billMaterialId?: string;
+}
+
+interface ProjectGroup {
+  projectName: string;
+  totalCount: number;
+  sentCount: number;
+  homeowners: Array<{
+    id: string;
+    firstName: string;
+    lastName: string | null;
+    email: string;
+    contact: string;
+    statusName: string;
+    createdAt: string;
+    builderId: string;
+    builderName: string;
+  }>;
 }
 
 const Dashboard = () => {
@@ -69,43 +98,87 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [deleteBuilderCustomer, { isLoading: isDeleting }] = useDeleteBuilderCustomerMutation();
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedRegistrations, setSelectedRegistrations] = useState<string[]>(
+    []
+  );
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"by-owner" | "by-project">("by-owner");
 
-  const builderId = user && 'builderOrganization' in user 
-    ? user.builderOrganization.id 
-    : null;
+  // Get builderId from localStorage (userData.userInfo.builderOrganization.id)
+  const builderId = useMemo(() => {
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+      try {
+        const parsedData = JSON.parse(userData);
+        if (parsedData.userInfo?.builderOrganization?.id) {
+          return parsedData.userInfo.builderOrganization.id;
+        }
+      } catch (error) {
+        console.warn('Failed to parse userData:', error);
+      }
+    }
+    // Fallback to user object if available
+    if (user && 'builderOrganization' in user && user.builderOrganization) {
+      return user.builderOrganization.id;
+    }
+    return null;
+  }, [user]);
 
-  // Fetch dashboard counts from API - called when navigating to /dashboard
-  const { data: dashboardCounts, isLoading: countsLoading, error: countsError } = useGetDashboardCountQuery(
-    { builderId: builderId || "" },
+  // Fetch dashboard counts from API
+  const { 
+    data: dashboardCountData, 
+    isLoading: isCountsLoading, 
+    error: countsError,
+    refetch: refetchDashboardCount
+  } = useGetDashboardCountQuery(
+    { builderId: builderId || '' },
     { 
       skip: !builderId,
-      refetchOnMountOrArgChange: true,
-      refetchOnFocus: false,
-      refetchOnReconnect: false
+      refetchOnMountOrArgChange: true
     }
   );
 
-  // Fetch customer list from API - called when navigating to /dashboard
-  const { data: customerListData, isLoading: customersLoading, error: customersError } = useGetCustomerListQuery(
-    { builderId: builderId || "" },
+  // Fetch registrations by type - fetch both for instant tab switching
+  const { 
+    data: ownerRegistrationsData, 
+    isLoading: isLoadingOwner,
+    error: ownerError,
+    refetch: refetchOwnerRegistrations
+  } = useGetRegistrationsQuery(
+    { builderId: builderId || '', type: 'owner' },
     { 
       skip: !builderId,
-      refetchOnMountOrArgChange: true,
-      refetchOnFocus: false,
-      refetchOnReconnect: false
+      refetchOnMountOrArgChange: true
     }
   );
 
-  const { data: organizationData, isLoading: organizationLoading } = useGetBuilderOrganizationQuery(
-    builderId || "",
-    {
+  const { 
+    data: projectRegistrationsData, 
+    isLoading: isLoadingProject,
+    error: projectError,
+    refetch: refetchProjectRegistrations
+  } = useGetRegistrationsQuery(
+    { builderId: builderId || '', type: 'project' },
+    { 
       skip: !builderId,
-      refetchOnMountOrArgChange: true,
-      refetchOnFocus: false,
-      refetchOnReconnect: false
+      refetchOnMountOrArgChange: true
     }
+  );
+
+  // Fetch statuses for filter dropdown
+  const { 
+    data: statusesData, 
+    isLoading: isLoadingStatuses 
+  } = useGetStatusesByTypeQuery(
+    { type: 'BUILDER' }
+  );
+
+  const { 
+    data: organizationData 
+  } = useGetBuilderOrganizationQuery(
+    builderId || '',
+    { skip: !builderId }
   );
 
   useEffect(() => {
@@ -113,198 +186,265 @@ const Dashboard = () => {
       navigate("/auth");
       return;
     }
-    
-    // Ensure APIs are called when navigating to dashboard
-    if (builderId) {
-      console.log('Dashboard: Calling getDashboardCount and getCustomerList APIs with builderId:', builderId);
-    }
-  }, [user, navigate, builderId]);
+  }, [user, navigate]);
 
-  // Redirect to auth page when API errors occur (especially connection errors)
   useEffect(() => {
-    if (builderId && (countsError || customersError)) {
-      // Check if it's a connection error or other critical error
-      // RTK Query errors can be FetchBaseQueryError or SerializedError
-      const isConnectionError = (error: FetchBaseQueryError | SerializedError | undefined) => {
-        if (!error) return false;
-        
-        // Check for FetchBaseQueryError (network/HTTP errors)
-        if ('status' in error) {
-          const fetchError = error as FetchBaseQueryError;
-          // Check for network/connection errors
-          if (fetchError.status === 'FETCH_ERROR' || fetchError.status === 'PARSING_ERROR') {
-            return true;
-          }
-          // Check for connection refused errors in the error message
-          // The 'error' property exists on TIMEOUT_ERROR and CUSTOM_ERROR types
-          if ('error' in fetchError && typeof fetchError.error === 'string') {
-            const errorMessage = fetchError.error.toLowerCase();
-            if (errorMessage.includes('econnrefused') || 
-                errorMessage.includes('network error') ||
-                errorMessage.includes('failed to fetch')) {
-              return true;
-            }
-          }
-        }
-        
-        // Check for SerializedError (other errors)
-        if ('message' in error) {
-          const serializedError = error as SerializedError;
-          if (serializedError.message) {
-            const errorMessage = serializedError.message.toLowerCase();
-            if (errorMessage.includes('econnrefused') || 
-                errorMessage.includes('network error') ||
-                errorMessage.includes('failed to fetch')) {
-              return true;
-            }
-          }
-        }
-        
-        return false;
-      };
-      
-      const hasConnectionError = isConnectionError(countsError) || isConnectionError(customersError);
-      
-      if (hasConnectionError) {
-        console.warn('Dashboard API connection error detected, redirecting to auth');
-        toast({
-          title: "Connection Error",
-          description: "Unable to connect to the server. Please try again later.",
-          variant: "destructive",
-        });
-        // Clear user data and redirect to auth
-        localStorage.removeItem('userData');
-        navigate("/auth", { replace: true });
-      }
+    if (builderId) {
+      refetchOwnerRegistrations();
+      refetchProjectRegistrations();
+      refetchDashboardCount();
     }
-  }, [countsError, customersError, builderId, navigate, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [builderId]);
 
-  // Map API data to HomeownerRegistration format
-  const registrations: HomeownerRegistration[] = customerListData?.data?.map((customer) => ({
-    id: customer.id,
-    customer_name: `${customer.firstName} ${customer.lastName || ''}`.trim(),
-    customer_email: customer.email || '',
-    property_address: customer.address || '',
-    property_city: customer.city || '',
-    property_state: customer.state || '',
-    project_name: customer.projectName,
-    status: customer.status?.name || 'DRAFT',
-    settlementDate: customer.settlementDate,
-  })) || [];
+  // Transform owner API response to component format
+  const ownerRegistrations = useMemo(() => {
+    if (!ownerRegistrationsData?.data || !Array.isArray(ownerRegistrationsData.data)) return [];
+    
+    return (ownerRegistrationsData.data as OwnerRegistrationResponse[]).map((item) => {
+      // Map status from API format to component format
+      let status = 'draft';
+      if (item.statusName) {
+        const statusLower = item.statusName.toLowerCase();
+        if (statusLower === 'entitlement') {
+          status = 'documents_pending';
+        } else if (statusLower === 'sent') {
+          status = 'sent';
+        } else if (statusLower === 'draft') {
+          status = 'draft';
+        }
+      }
+      
+      return {
+        id: item.id,
+        customer_name: `${item.firstName || ''} ${item.lastName || ''}`.trim(),
+        customer_email: item.email || '',
+        property_address: item.address || '',
+        property_city: item.city || '',
+        property_state: item.state || '',
+        project_name: item.projectName || 'No Project',
+        status: status,
+        statusName: item.statusName || 'DRAFT',
+        created_at: item.createdAt,
+        entitlement_sent_at: item.statusName === 'SENT' ? item.createdAt : null,
+        billMaterialId: item.billMaterialId,
+      };
+    });
+  }, [ownerRegistrationsData]);
+
+  // Transform project API response to component format
+  const projectGroups = useMemo(() => {
+    if (!projectRegistrationsData?.data || !Array.isArray(projectRegistrationsData.data)) return {};
+    
+    const groups: Record<string, HomeownerRegistration[]> = {};
+    
+    (projectRegistrationsData.data as ProjectGroup[]).forEach((project) => {
+      const projectName = project.projectName || 'No Project';
+      groups[projectName] = project.homeowners.map((homeowner) => {
+        // Map status from API format to component format
+        let status = 'draft';
+        if (homeowner.statusName) {
+          const statusLower = homeowner.statusName.toLowerCase();
+          if (statusLower === 'entitlement') {
+            status = 'documents_pending';
+          } else if (statusLower === 'sent') {
+            status = 'sent';
+          } else if (statusLower === 'draft') {
+            status = 'draft';
+          }
+        }
+        
+        return {
+          id: homeowner.id,
+          customer_name: `${homeowner.firstName || ''} ${homeowner.lastName || ''}`.trim(),
+          customer_email: homeowner.email || '',
+          property_address: homeowner.contact || '', // Using contact as fallback
+          property_city: '',
+          property_state: '',
+          project_name: projectName,
+          status: status,
+          statusName: homeowner.statusName || 'DRAFT',
+          created_at: homeowner.createdAt,
+          entitlement_sent_at: homeowner.statusName === 'SENT' ? homeowner.createdAt : null,
+        };
+      });
+    });
+    
+    return groups;
+  }, [projectRegistrationsData]);
+
+  // Determine which registrations to use based on active tab
+  const currentRegistrations = activeTab === 'by-owner' ? ownerRegistrations : [];
+  const isLoadingRegistrations = activeTab === 'by-owner' ? isLoadingOwner : isLoadingProject;
+  const registrationsError = activeTab === 'by-owner' ? ownerError : projectError;
+
+  // Get all registrations from project groups for filtering/search
+  const allProjectRegistrations = useMemo(() => {
+    return Object.values(projectGroups).flat();
+  }, [projectGroups]);
+
+  useEffect(() => {
+    if (registrationsError) {
+      toast({
+        title: "Error loading registrations",
+        description: "Failed to load registrations. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [registrationsError, toast]);
+
+  // Helper function to format status name for display
+  const formatStatusName = (statusName: string): string => {
+    // Handle both underscore and space-separated status names
+    return statusName
+      .split(/[_\s]+/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  // Helper function to convert API status name to filter value
+  // Use the actual status name as the filter value to distinguish between similar statuses
+  const statusNameToFilterValue = (statusName: string): string => {
+    // Return the status name as-is (normalized to uppercase for consistency)
+    return statusName.toUpperCase();
+  };
+
+  // Get statuses from API
+  const statuses = statusesData?.data || [];
+
+  const getFilterDisplayText = (filterValue: string): string => {
+    if (filterValue === "all") return "All Statuses";
+    const status = statuses.find(s => statusNameToFilterValue(s.name) === filterValue);
+    return status ? formatStatusName(status.name) : "Filter by status";
+  };
 
   const getStatusBadge = (status: string) => {
-    const formatStatusName = (statusName: string): string => {
-      if (!statusName) return 'DRAFT';
-      return statusName
-        .split('_')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
+    // Normalize status to uppercase for API statusName values
+    const normalizedStatus = status.toUpperCase();
+    
+    const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
+      DRAFT: { label: "Draft", variant: "secondary" },
+      ENTITLEMENT: { label: "Entitlement", variant: "default" },
+      SENT: { label: "Sent", variant: "default" },
+      DELIVERED: { label: "Delivered", variant: "default" },
+      // Also support lowercase/underscore format for backward compatibility
+      draft: { label: "Draft", variant: "secondary" },
+      documents_pending: { label: "Documents Pending", variant: "outline" },
+      ready_for_review: { label: "Ready for Review", variant: "default" },
+      sent: { label: "Sent", variant: "default" },
+      delivered: { label: "Delivered", variant: "default" },
+      entitlement: { label: "Entitlement", variant: "default" },
     };
 
-    const getStatusVariant = (statusName: string): "default" | "secondary" | "outline" => {
-      const statusUpper = statusName?.toUpperCase() || '';
-      if (statusUpper === 'DRAFT') return 'secondary';
-      if (statusUpper === 'DOCUMENTS_PENDING') return 'outline';
-      return 'default';
-    };
-
-    const formattedStatus = formatStatusName(status || 'DRAFT');
-    const variant = getStatusVariant(status || 'DRAFT');
-
-    return <Badge variant={variant}>{formattedStatus}</Badge>;
+    const config = statusConfig[normalizedStatus] || statusConfig[status.toLowerCase().replace(/\s+/g, '_')] || statusConfig.DRAFT;
+    return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
   const getStatusIcon = (status: string) => {
-    const statusUpper = status.toUpperCase();
-    switch (statusUpper) {
+    // Normalize status to uppercase for API statusName values
+    const normalizedStatus = status.toUpperCase();
+    
+    switch (normalizedStatus) {
       case "DRAFT":
         return <FileText className="h-4 w-4 text-muted-foreground" />;
-      case "DOCUMENTS_PENDING":
-        return <Clock className="h-4 w-4 text-orange-500" />;
-      case "READY_FOR_REVIEW":
-        return <CheckCircle className="h-4 w-4 text-blue-500" />;
       case "ENTITLEMENT":
+        return <CheckCircle className="h-4 w-4 text-blue-500" />;
       case "SENT":
         return <Send className="h-4 w-4 text-green-500" />;
       case "DELIVERED":
         return <CheckCircle className="h-4 w-4 text-green-500" />;
+      // Also support lowercase/underscore format for backward compatibility
+      case "draft":
+        return <FileText className="h-4 w-4 text-muted-foreground" />;
+      case "documents_pending":
+        return <Clock className="h-4 w-4 text-orange-500" />;
+      case "ready_for_review":
+        return <CheckCircle className="h-4 w-4 text-blue-500" />;
+      case "sent":
+        return <Send className="h-4 w-4 text-green-500" />;
+      case "delivered":
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case "entitlement":
+        return <CheckCircle className="h-4 w-4 text-blue-500" />;
       default:
         return <FileText className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
-  const handleDeleteCustomer = async (id: string, customerName: string) => {
-    if (!confirm(`Are you sure you want to delete ${customerName}? This action cannot be undone.`)) {
-      return;
-    }
+  const filteredRegistrations = currentRegistrations.filter((reg) => {
+    const matchesSearch =
+      reg.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reg.customer_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reg.property_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    try {
-      const result = await deleteBuilderCustomer(id).unwrap() as unknown;
-      // Use the message from API response if available
-      let successMessage = "Customer deleted successfully";
-      if (result && typeof result === 'object' && result !== null && 'message' in result) {
-        successMessage = String((result as { message: string }).message);
-      } else if (result && typeof result === 'string') {
-        successMessage = result;
-      }
-      toast({ title: successMessage });
-    } catch (error: unknown) {
-      let errorMessage = "Failed to delete customer";
-      
-      // Handle RTK Query error format
-      if (error && typeof error === 'object') {
-        // Check if error has data property (RTK Query standard error format)
-        if ('data' in error) {
-          const errorData = error.data;
-          // Check if errorData is an object with message property
-          if (errorData && typeof errorData === 'object' && 'message' in errorData) {
-            errorMessage = String(errorData.message);
-          } else if (typeof errorData === 'string') {
-            errorMessage = errorData;
-          }
-        } else if ('message' in error) {
-          errorMessage = String(error.message);
-        }
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      
-      toast({
-        title: "Error deleting customer",
-        description: errorMessage,
-        variant: "destructive"
-      });
-    }
-  };
+    const matchesStatus = statusFilter === "all" || reg.statusName.toUpperCase() === statusFilter;
 
-  const filteredRegistrations = registrations.filter((reg) => {
-    const normalizedSearch = searchTerm.toLowerCase();
-    const searchMatch =
-      reg.customer_name?.toLowerCase().includes(normalizedSearch) ||
-      reg.customer_email?.toLowerCase().includes(normalizedSearch) ||
-      reg.property_address?.toLowerCase().includes(normalizedSearch) ||
-      reg.project_name?.toLowerCase().includes(normalizedSearch);
-
-    const statusMatch =
-      statusFilter === "all" || reg.status?.toLowerCase() === statusFilter;
-
-    return searchMatch && statusMatch;
+    return matchesSearch && matchesStatus;
   });
 
-  const stats = {
-    totalHomeowners: dashboardCounts?.data?.totalHomeowners ?? registrations.length,
-    entitlementsSent: dashboardCounts?.data?.entitlementsSent ?? registrations.filter(
-      (r) => r.status?.toUpperCase() === "ENTITLEMENT" || r.status?.toUpperCase() === "SENT" || r.status?.toUpperCase() === "DELIVERED"
-    ).length,
-    pending: dashboardCounts?.data?.pending ?? registrations.filter(
-      (r) => r.status?.toUpperCase() === "DRAFT" || r.status?.toUpperCase() === "DOCUMENTS_PENDING"
-    ).length,
-    readyForReview: dashboardCounts?.data?.readyForReview ?? registrations.filter((r) => r.status?.toUpperCase() === "READY_FOR_REVIEW").length,
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedRegistrations(filteredRegistrations.map((r) => r.id));
+    } else {
+      setSelectedRegistrations([]);
+    }
   };
 
-  const isLoading = builderId && (countsLoading || customersLoading);
+  const handleSelectRegistration = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedRegistrations((prev) => [...prev, id]);
+    } else {
+      setSelectedRegistrations((prev) => prev.filter((regId) => regId !== id));
+    }
+  };
 
-  if (isLoading) {
+  // Filter project groups by search and status
+  const filteredProjectGroups = useMemo(() => {
+    const filtered: Record<string, HomeownerRegistration[]> = {};
+    
+    Object.entries(projectGroups).forEach(([projectName, regs]) => {
+      const filteredRegs = regs.filter((reg) => {
+        const matchesSearch =
+          reg.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          reg.customer_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          reg.property_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          reg.project_name?.toLowerCase().includes(searchTerm.toLowerCase());
+
+        const matchesStatus = statusFilter === "all" || reg.statusName.toUpperCase() === statusFilter;
+
+        return matchesSearch && matchesStatus;
+      });
+      
+      if (filteredRegs.length > 0) {
+        filtered[projectName] = filteredRegs;
+      }
+    });
+    
+    return filtered;
+  }, [projectGroups, searchTerm, statusFilter]);
+
+  // Use API data for stats, fallback to calculated values if API data not available
+  const stats = dashboardCountData?.data
+    ? {
+        total: dashboardCountData.data.totalHomeowners,
+        sent: dashboardCountData.data.entitlementsSent,
+        pending: dashboardCountData.data.pending,
+        ready: dashboardCountData.data.readyForReview,
+      }
+    : {
+    total: ownerRegistrations.length,
+    sent: ownerRegistrations.filter(
+      (r) => r.status === "sent" || r.status === "delivered" || r.status === "entitlement"
+    ).length,
+    pending: ownerRegistrations.filter(
+      (r) => r.status === "draft" || r.status === "documents_pending"
+    ).length,
+    ready: ownerRegistrations.filter((r) => r.status === "ready_for_review").length,
+  };
+
+  // Show loading if either registrations or dashboard counts are loading
+  if ((isCountsLoading && builderId) || isLoadingRegistrations) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -315,12 +455,22 @@ const Dashboard = () => {
     );
   }
 
+  // Show error if API call failed
+  if (countsError && builderId) {
+    toast({
+      title: "Error loading dashboard stats",
+      description: "Failed to load dashboard statistics. Showing local data.",
+      variant: "destructive",
+    });
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
         {/* Organization Welcome Message */}
         {organizationData?.data?.name && (
           <div className="mb-6">
@@ -341,7 +491,7 @@ const Dashboard = () => {
                     Total Homeowners
                   </p>
                   <p className="text-2xl font-bold text-foreground">
-                    {stats.totalHomeowners}
+                    {stats.total}
                   </p>
                 </div>
               </div>
@@ -357,7 +507,7 @@ const Dashboard = () => {
                     Entitlements Sent
                   </p>
                   <p className="text-2xl font-bold text-foreground">
-                    {stats.entitlementsSent}
+                    {stats.sent}
                   </p>
                 </div>
               </div>
@@ -389,7 +539,7 @@ const Dashboard = () => {
                     Ready for Review
                   </p>
                   <p className="text-2xl font-bold text-foreground">
-                    {stats.readyForReview}
+                    {stats.ready}
                   </p>
                 </div>
               </div>
@@ -485,7 +635,7 @@ const Dashboard = () => {
 
           <Card
             className="hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => navigate("/onboarding")}
+            onClick={() => setDialogOpen(true)}
           >
             <CardContent className="p-6">
               <div className="flex flex-col h-full">
@@ -513,7 +663,7 @@ const Dashboard = () => {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center mb-6 gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
@@ -523,7 +673,7 @@ const Dashboard = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          {/* <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px]">
@@ -531,17 +681,26 @@ const Dashboard = () => {
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
                 <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="documents_pending">Documents Pending</SelectItem>
-                <SelectItem value="ready_for_review">Ready for Review</SelectItem>
-                <SelectItem value="sent">Sent</SelectItem>
-                <SelectItem value="delivered">Delivered</SelectItem>
+                {isLoadingStatuses ? (
+                  <SelectItem value="loading" disabled>
+                    Loading statuses...
+                  </SelectItem>
+                ) : (
+                  statuses.map((status) => (
+                    <SelectItem 
+                      key={status.id} 
+                      value={statusNameToFilterValue(status.name)}
+                    >
+                      {formatStatusName(status.name)}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
-          </div> */}
+          </div>
           <Button
-            onClick={() => navigate("/onboarding")}
-            className="whitespace-nowrap ml-auto"
+            onClick={() => setDialogOpen(true)}
+            className="whitespace-nowrap"
           >
             <Plus className="h-4 w-4 mr-2" />
             New Registration
@@ -557,104 +716,272 @@ const Dashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {filteredRegistrations.length === 0 ? (
-              <div className="text-center py-12">
-                <Home className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-foreground mb-2">
-                  No registrations yet
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  Start by creating your first homeowner registration
-                </p>
-                <Button onClick={() => navigate("/onboarding")}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create First Registration
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredRegistrations.map((registration) => {
-                  const isEntitlementSent = registration.status?.toUpperCase() === "ENTITLEMENT" || registration.status?.toUpperCase() === "SENT" || registration.status?.toUpperCase() === "DELIVERED";
-                  return (
-                  <div
-                    key={registration.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                    onClick={() => isEntitlementSent 
-                      ? navigate(`/registration/${registration.id}`)
-                      : navigate(`/onboarding?id=${registration.id}`)
-                    }
-                  >
-                    <div className="flex items-center space-x-4 flex-1">
-                      {getStatusIcon(registration.status)}
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <h4 className="font-semibold text-lg text-foreground">
-                            {registration.customer_name}
-                          </h4>
-                          <Badge variant="outline" className="text-xs">
-                            {registration.project_name || "No Project"}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-1">
-                          {registration.customer_email}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          📍 {registration.property_address},{" "}
-                          {registration.property_city},{" "}
-                          {registration.property_state}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      {getStatusBadge(registration.status)}
-                      <div className="text-right">
-                        {registration.settlementDate && (
-                          <p className="text-sm text-muted-foreground">
-                            Settlement:{" "}
-                            {new Date(
-                              registration.settlementDate
-                            ).toLocaleDateString()}
-                          </p>
-                        )}
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/registration/${registration.id}`);
-                          }}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </DropdownMenuItem>
-                          {!(registration.status?.toUpperCase() === "ENTITLEMENT" || registration.status?.toUpperCase() === "SENT" || registration.status?.toUpperCase() === "DELIVERED") && (
-                            <DropdownMenuItem 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteCustomer(registration.id, registration.customer_name);
-                              }}
-                              className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                              disabled={isDeleting}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "by-owner" | "by-project")} className="w-full">
+              <TabsList className="grid w-full max-w-md grid-cols-2 mb-6">
+                <TabsTrigger
+                  value="by-owner"
+                  className="flex items-center gap-2"
+                >
+                  <Users className="h-4 w-4" />
+                  By Owner
+                </TabsTrigger>
+                <TabsTrigger
+                  value="by-project"
+                  className="flex items-center gap-2"
+                >
+                  <FolderKanban className="h-4 w-4" />
+                  By Project
+                </TabsTrigger>
+              </TabsList>
+
+              {/* By Owner Tab */}
+              <TabsContent value="by-owner" className="mt-0">
+                {isLoadingOwner ? (
+                  <div className="text-center py-12">
+                    <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
+                    <p className="text-muted-foreground">Loading registrations...</p>
                   </div>
-                  );
-                })}
-              </div>
-            )}
+                ) : filteredRegistrations.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Home className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-foreground mb-2">
+                      No registrations yet
+                    </h3>
+                    <p className="text-muted-foreground mb-4">
+                      Start by creating your first homeowner registration
+                    </p>
+                    <Button onClick={() => setDialogOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create First Registration
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredRegistrations.length > 0 && (
+                      <div className="flex items-center gap-2 p-2 border-b">
+                        <Checkbox
+                          checked={
+                            selectedRegistrations.length ===
+                            filteredRegistrations.length
+                          }
+                          onCheckedChange={handleSelectAll}
+                        />
+                        <span className="text-sm text-muted-foreground">
+                          Select All
+                        </span>
+                      </div>
+                    )}
+                    {filteredRegistrations.map((registration) => {
+                      return (
+                      <div
+                        key={registration.id}
+                        className="flex items-center gap-4 p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                      >
+                        <Checkbox
+                          checked={selectedRegistrations.includes(
+                            registration.id
+                          )}
+                          onCheckedChange={(checked) =>
+                            handleSelectRegistration(
+                              registration.id,
+                              checked as boolean
+                            )
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div
+                          className="flex items-center justify-between flex-1 cursor-pointer"
+                          onClick={() => {
+                            const url = registration.billMaterialId 
+                              ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
+                              : `/onboarding?id=${registration.id}`;
+                            navigate(url);
+                          }}
+                        >
+                          <div className="flex items-center space-x-4 flex-1">
+                            {getStatusIcon(registration.statusName)}
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <h4 className="font-semibold text-lg text-foreground">
+                                  {registration.customer_name}
+                                </h4>
+                                <Badge variant="outline" className="text-xs">
+                                  {registration.project_name || "No Project"}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground mb-1">
+                                {registration.customer_email}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                📍 {registration.property_address},{" "}
+                                {registration.property_city},{" "}
+                                {registration.property_state}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-4">
+                            {getStatusBadge(registration.statusName)}
+                            <div className="text-right">
+                              <p className="text-sm text-muted-foreground">
+                                Created:{" "}
+                                {new Date(
+                                  registration.created_at
+                                ).toLocaleDateString()}
+                              </p>
+                              {registration.entitlement_sent_at && (
+                                <p className="text-sm text-muted-foreground">
+                                  Sent:{" "}
+                                  {new Date(
+                                    registration.entitlement_sent_at
+                                  ).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* By Project Tab */}
+              <TabsContent value="by-project" className="mt-0">
+                {isLoadingProject ? (
+                  <div className="text-center py-12">
+                    <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
+                    <p className="text-muted-foreground">Loading projects...</p>
+                  </div>
+                ) : Object.keys(filteredProjectGroups).length === 0 ? (
+                  <div className="text-center py-12">
+                    <FolderKanban className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-foreground mb-2">
+                      No projects yet
+                    </h3>
+                    <p className="text-muted-foreground mb-4">
+                      Registrations will be grouped by project name
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {Object.entries(filteredProjectGroups)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([projectName, projectRegs]) => {
+                        // Find the project data from API response
+                        const projectData = Array.isArray(projectRegistrationsData?.data)
+                          ? (projectRegistrationsData.data as ProjectGroup[]).find(
+                              (p) => p.projectName === projectName
+                            )
+                          : undefined;
+                        return (
+                          <Card key={projectName} className="border-2">
+                            <CardHeader>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <Building2 className="h-6 w-6 text-primary" />
+                                  <div>
+                                    <CardTitle className="text-xl">
+                                      {projectName}
+                                    </CardTitle>
+                                    <CardDescription>
+                                      {projectData?.totalCount || projectRegs.length} homeowner
+                                      {(projectData?.totalCount || projectRegs.length) !== 1 ? "s" : ""}
+                                    </CardDescription>
+                                  </div>
+                                </div>
+                                <Badge variant="secondary" className="text-sm">
+                                  {projectData?.sentCount || projectRegs.filter(
+                                    (r) =>
+                                      r.status === "sent" ||
+                                      r.status === "delivered" ||
+                                      r.status === "entitlement"
+                                  ).length}{" "}
+                                  sent
+                                </Badge>
+                              </div>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-3">
+                                {projectRegs.map((registration) => {
+                                  return (
+                                  <div
+                                    key={registration.id}
+                                    className="flex items-center justify-between p-3 border rounded-lg transition-colors hover:bg-accent/50 cursor-pointer"
+                                    onClick={() => {
+                                      const url = registration.billMaterialId 
+                                        ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
+                                        : `/onboarding?id=${registration.id}`;
+                                      navigate(url);
+                                    }}
+                                  >
+                                    <div className="flex items-center space-x-3 flex-1">
+                                      {getStatusIcon(registration.statusName)}
+                                      <div className="flex-1">
+                                        <h4 className="font-semibold text-foreground">
+                                          {registration.customer_name}
+                                        </h4>
+                                        {registration.property_address && (
+                                          <p className="text-sm text-muted-foreground">
+                                            {registration.property_address}
+                                          </p>
+                                        )}
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          {registration.customer_email}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center space-x-3">
+                                      {getStatusBadge(registration.statusName)}
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const url = registration.billMaterialId 
+                                            ? `/onboarding?id=${registration.id}&bomId=${registration.billMaterialId}`
+                                            : `/onboarding?id=${registration.id}`;
+                                          navigate(url);
+                                        }}
+                                      >
+                                        Edit
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  );
+                                })}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </main>
+
+      <RegistrationTypeDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSuccess={() => {
+          // Refetch data when new registration is created
+          window.location.reload();
+        }}
+      />
+
+      <BulkActionsBar
+        selectedCount={selectedRegistrations.length}
+        selectedIds={selectedRegistrations}
+        onClearSelection={() => setSelectedRegistrations([])}
+        onSuccess={() => {
+          // Refetch data when bulk action is completed without reloading the page
+          refetchOwnerRegistrations();
+          refetchProjectRegistrations();
+        }}
+      />
     </div>
   );
 };

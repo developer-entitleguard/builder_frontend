@@ -8,7 +8,7 @@ import type {
   ResetPasswordWithTokenRequest,
   SendVerifyMailRequest,
   SetPasswordForUserRequest
-} from '@/lib/api/types';
+} from '@/lib/api/types.ts';
 
 export const authApi = api.injectEndpoints({
   endpoints: (build) => ({

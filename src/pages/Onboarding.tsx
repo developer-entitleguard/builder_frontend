@@ -1,61 +1,123 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
 import { useCreateBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
-import { useGetCustomerListQuery } from "@/store/api/dashboard";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
 import CustomerDetailsForm from "@/components/CustomerDetailsForm";
 import ItemsSelectionForm from "@/components/ItemsSelectionForm";
-import DocumentUploadForm from "@/components/DocumentUploadForm";
 import ReviewApprovalForm from "@/components/ReviewApprovalForm";
 import SendConfirmationForm from "@/components/SendConfirmationForm";
-import type { CustomerDetailsResponse } from "@/lib/api/types";
-import { dashboardApi } from "@/store/api/dashboard";
-import { useDispatch } from "react-redux";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+// Type definitions
+interface CustomerFormData {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  propertyAddress?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  projectName?: string;
+  settlementDate?: string;
+  notes?: string;
+  customerId?: string;
+  registrationId?: string;
+}
+
+// RegistrationItem type matching ItemsSelectionForm
+interface RegistrationItem {
+  id: string;
+  name: string;
+  category: string;
+  brand: string | null;
+  model: string | null;
+  make: string | null;
+  description: string | null;
+  price: number | null;
+  bom_id: string | null;
+  color?: string;
+  custom_notes?: string;
+  is_custom?: boolean;
+  serial_number?: string;
+  builderItemId?: string;
+  seller?: string;
+  quantity?: number;
+  [key: string]: unknown;
+}
+
+interface ItemsFormData {
+  selected_items?: RegistrationItem[];
+  [key: string]: unknown;
+}
+
+interface OnboardingFormData {
+  customer?: CustomerFormData;
+  items?: ItemsFormData;
+  documents?: Record<string, unknown>;
+}
+
+interface RegistrationData {
+  builder_id: string;
+  status: string;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  property_address?: string;
+  property_city?: string;
+  property_state?: string;
+  property_zip?: string;
+  project_name?: string;
+  settlement_date?: string | null;
+  notes?: string;
+  selected_items?: ItemsFormData;
+  documents_uploaded?: Record<string, unknown>;
+}
 
 const Onboarding = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [searchParams] = useSearchParams();
-  const [currentStep, setCurrentStep] = useState('customer');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [createBuilderCustomer, { isLoading: isSaving }] = useCreateBuilderCustomerMutation();
+  
+  // Helper function to get step from URL
+  const getStepFromUrl = (params: URLSearchParams) => {
+    const stepParam = params.get('step');
+    const validSteps = ['overview', 'customer', 'items', 'review', 'send'];
+    return stepParam && validSteps.includes(stepParam) ? stepParam : 'customer';
+  };
+  
+  // Initialize currentStep from URL params, fallback to 'customer'
+  const [currentStep, setCurrentStep] = useState(() => getStepFromUrl(searchParams));
   const [registrationId, setRegistrationId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<{
-    customer: Record<string, unknown>;
-    items: Record<string, unknown>;
-    documents: Record<string, unknown>;
-  }>({
+  const [formData, setFormData] = useState<OnboardingFormData>({
     customer: {},
     items: {},
-    documents: { documents: {}, itemDetails: {} }
+    documents: {}
   });
-  const [customerDetailsData, setCustomerDetailsData] = useState<CustomerDetailsResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recentSelectedItemIds, setRecentSelectedItemIds] = useState<string[] | null>(null);
-  const dispatch = useDispatch();
-  const [createBuilderCustomer, { isLoading: isSavingCustomer }] = useCreateBuilderCustomerMutation();
-  const initialLoadComplete = useRef(false);
-  const userNavigated = useRef(false);
-
-  const editingId = searchParams.get('id');
-  const builderId = user && 'builderOrganization' in user 
-    ? user.builderOrganization.id 
-    : null;
-
-  const { data: customerDetailsResponse, isLoading: isFetchingDetails, refetch: refetchCustomerDetails } = useGetCustomerDetailsQuery(
-    { builderId: builderId || '', customerId: editingId || '' },
-    { skip: !builderId || !editingId }
-  );
-
-  const { data: customerListData } = useGetCustomerListQuery(
-    { builderId: builderId || '' },
-    { skip: !builderId || !editingId }
-  );
+  const [originalEmail, setOriginalEmail] = useState<string | null>(null);
+  const [originalStatus, setOriginalStatus] = useState<string | null>(null);
+  const [emailChangeDialogOpen, setEmailChangeDialogOpen] = useState(false);
+  const [pendingCustomerData, setPendingCustomerData] = useState<CustomerFormData | null>(null);
+  
+  // Ref to track if we're updating URL from internal state change (to prevent loop)
+  const isInternalStepChange = useRef(false);
 
   useEffect(() => {
     if (!user) {
@@ -63,203 +125,120 @@ const Onboarding = () => {
     }
   }, [user, navigate]);
 
+  // Check for existing registration ID in URL params
   useEffect(() => {
-    if (editingId && customerListData?.data) {
-      const customer = customerListData.data.find(c => c.id === editingId);
-      if (customer) {
-        const status = customer.status?.name?.toUpperCase();
-        if (status === "ENTITLEMENT" || status === "SENT" || status === "DELIVERED") {
-          toast({
-            title: "View Only",
-            description: "This registration has been sent and cannot be edited.",
-            variant: "default"
-          });
-          navigate(`/registration/${editingId}`);
-        }
-      }
-    }
-  }, [editingId, customerListData, navigate, toast]);
-
-  useEffect(() => {
+    const editingId = searchParams.get('id');
     if (editingId && user) {
       setRegistrationId(editingId);
+      // Legacy Supabase-backed registrations are no longer loaded.
+      // We now rely on builder APIs and in-memory formData instead.
+      setLoading(false);
     }
-  }, [editingId, user]);
-
-  const updateFormDataFromApiResponse = (response: CustomerDetailsResponse | undefined) => {
-    if (!response?.data) return;
-
-    const customer = response.data.customer;
-    const dtos = response.data.dtos;
-
-    // Update customer form data
-    const customerFormData = {
-      firstName: customer.firstName || '',
-      lastName: customer.lastName || '',
-      email: customer.email || '',
-      phone: customer.contact || '',
-      propertyAddress: customer.address || '',
-      city: customer.city || '',
-      state: customer.state || '',
-      zipCode: customer.zip || '',
-      projectName: customer.projectName || '',
-      settlementDate: customer.settlementDate || '',
-      notes: customer.notes || '',
-      customerId: customer.id,
-      builderId: customer.builderOrganization?.id
-    };
-
-    // Update items form data - get selected items from mapped items
-    const selectedItemIds: string[] = [];
-    const itemsFormData: Record<string, unknown> = {};
-    
-    if (dtos && dtos.length > 0) {
-      dtos.forEach(categoryData => {
-        if (categoryData.items && categoryData.items.length > 0) {
-          const categoryItems = categoryData.items.map(item => {
-            if (item.mapped) {
-              selectedItemIds.push(item.id);
-            }
-            return {
-              id: item.id,
-              name: item.name,
-              mapped: item.mapped
-            };
-          });
-          itemsFormData[categoryData.category] = categoryItems;
-        }
-      });
-    }
-
-    // Update documents form data - extract seller, serialNumber, and document info from API
-    const documents: Record<string, string[]> = {};
-    const itemDetails: Record<string, { seller: string; serialNumber: string }> = {};
-
-    if (dtos && dtos.length > 0) {
-      dtos.forEach(categoryData => {
-        categoryData.items.forEach(item => {
-          if (item.mapped && item.builderCustomerMapId) {
-            // Extract seller and serialNumber
-            if (item.seller || item.serialNumber) {
-              itemDetails[item.id] = {
-                seller: item.seller || '',
-                serialNumber: item.serialNumber || ''
-              };
-            }
-
-            // Extract document file names from fileResponseDto
-            if (item.fileResponseDto && item.fileResponseDto.length > 0) {
-              documents[item.id] = item.fileResponseDto.map(file => file.fileName || file.fileUrl || '');
-            }
-          }
-        });
-      });
-    }
-
-    setFormData(prev => ({
-      customer: customerFormData,
-      items: {
-        ...itemsFormData,
-        selected_items: selectedItemIds
-      },
-      documents: {
-        documents: documents,
-        itemDetails: itemDetails
-      }
-    }));
-  };
-
+  }, [searchParams, user]);
+  
+  // Sync step from URL when URL changes externally (e.g., browser back/forward)
   useEffect(() => {
-    // Only auto-advance steps on initial load, not after user navigation
-    if (customerDetailsResponse?.data && editingId && !initialLoadComplete.current) {
-      setLoading(true);
-      try {
-        updateFormDataFromApiResponse(customerDetailsResponse);
-        setCustomerDetailsData(customerDetailsResponse);
-        let initialStep = 'customer';
-        let savedFormData = null;
-        const savedData = getSavedStep(editingId);
-        if (savedData.step) {
-          initialStep = savedData.step;
-          savedFormData = savedData.savedFormData;
-        }
-        
-        const dtos = customerDetailsResponse.data.dtos;
-        // Only auto-advance if no saved step exists and user hasn't navigated
-        if (!savedData.step && !userNavigated.current) {
-          if (dtos && dtos.length > 0) {
-            const hasMappedItems = dtos.some(cat => 
-              cat.items.some(item => item.mapped)
-            );
-            if (hasMappedItems) {
-              initialStep = 'documents';
-            } else if (customerDetailsResponse.data.customer.firstName && customerDetailsResponse.data.customer.email) {
-              initialStep = 'items';
-            }
-          } else if (customerDetailsResponse.data.customer.firstName && customerDetailsResponse.data.customer.email) {
-            initialStep = 'items';
-          }
-        }
-        if (savedFormData) {
-          setFormData(savedFormData);
-        }
-        setCurrentStep(initialStep);
-        initialLoadComplete.current = true;
-
-      } catch (error: unknown) {
-        toast({
-          title: "Error loading registration",
-          description: error instanceof Error ? error.message : 'An error occurred',
-          variant: "destructive"
-        });
-      } finally {
-        setLoading(false);
-      }
-    } else if (customerDetailsResponse?.data && editingId && initialLoadComplete.current) {
-      // After initial load, just update form data without changing step
-      updateFormDataFromApiResponse(customerDetailsResponse);
-      setCustomerDetailsData(customerDetailsResponse);
+    if (isInternalStepChange.current) {
+      isInternalStepChange.current = false;
+      return;
     }
-  }, [customerDetailsResponse, editingId, user, toast]);
+    
+    const stepFromUrl = getStepFromUrl(searchParams);
+    if (stepFromUrl !== currentStep) {
+      setCurrentStep(stepFromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+  
+  // Update URL when currentStep changes
+  useEffect(() => {
+    const currentStepParam = searchParams.get('step');
+    if (currentStepParam !== currentStep) {
+      isInternalStepChange.current = true;
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set('step', currentStep);
+      setSearchParams(newSearchParams, { replace: true });
+    }
+  }, [currentStep, searchParams, setSearchParams]);
+
+  const loadExistingRegistration = async (id: string) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('homeowner_registrations')
+        .select('*')
+        .eq('id', id)
+        .eq('builder_id', user?.id)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          toast({
+            title: "Registration not found",
+            description: "This registration doesn't exist or you don't have access to it.",
+            variant: "destructive"
+          });
+          navigate('/dashboard');
+          return;
+        }
+        throw error;
+      }
+
+      // Parse the existing data and populate form
+      setOriginalEmail(data.customer_email);
+      setOriginalStatus(data.status);
+      
+      const existingFormData: OnboardingFormData = {
+        customer: {
+          firstName: data.customer_name?.split(' ')[0] || '',
+          lastName: data.customer_name?.split(' ').slice(1).join(' ') || '',
+          email: data.customer_email || '',
+          phone: data.customer_phone || '',
+          propertyAddress: data.property_address || '',
+          city: data.property_city || '',
+          state: data.property_state || '',
+          zipCode: data.property_zip || '',
+          projectName: data.project_name || '',
+          settlementDate: data.settlement_date || '',
+          notes: data.notes || ''
+        },
+        items: (data.selected_items ? (Array.isArray(data.selected_items) ? { selected_items: data.selected_items as RegistrationItem[] } : {}) : {}) as ItemsFormData,
+        documents: (data.documents_uploaded ? (typeof data.documents_uploaded === 'object' ? data.documents_uploaded as Record<string, unknown> : {}) : {})
+      };
+
+      setFormData(existingFormData);
+
+      // Determine which step to start on based on data completeness
+      if (data.status === 'ready_for_review') {
+        setCurrentStep('review');
+      } else if (data.selected_items && Object.keys(data.selected_items).length > 0) {
+        setCurrentStep('documents');
+      } else if (data.customer_name && data.customer_email) {
+        setCurrentStep('items');
+      }
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      toast({
+        title: "Error loading registration",
+        description: errorMessage,
+        variant: "destructive"
+      });
+      navigate('/dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleStepClick = (stepId: string) => {
     setCurrentStep(stepId);
-    saveCurrentStep(stepId);
+    // Update URL immediately when step is clicked
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set('step', stepId);
+    setSearchParams(newSearchParams, { replace: true });
   };
 
-  const saveCurrentStep = (step: string) => {
-    if (!editingId) return;
-    
-    try {
-      const stepData = {
-        currentStep: step,
-        lastUpdated: new Date().toISOString(),
-        customerId: editingId,
-        formData: formData // Save the entire form data
-      };
-      localStorage.setItem(`onboarding_step_${editingId}`, JSON.stringify(stepData));
-    } catch (error) {
-      console.error('Failed to save current step:', error);
-    }
-  };
-
-  const getSavedStep = (customerId: string): { step: string | null; savedFormData: Record<string, unknown> | null } => {
-    try {
-      const savedData = localStorage.getItem(`onboarding_step_${customerId}`);
-      if (savedData) {
-        const parsed = JSON.parse(savedData);
-        return {
-          step: parsed.currentStep || null,
-          savedFormData: parsed.formData || null
-        };
-      }
-    } catch (error) {
-      console.error('Failed to get saved step:', error);
-    }
-    return { step: null, savedFormData: null };
-  };
-
-  const saveRegistrationData = async (stepData: Record<string, unknown>, step: string) => {
+  const saveRegistrationData = async (stepData: CustomerFormData | ItemsFormData | Record<string, unknown>, step: string) => {
     if (!user) return;
 
     try {
@@ -268,16 +247,17 @@ const Onboarding = () => {
       console.log('Onboarding - updatedFormData:', updatedFormData);
       setFormData(updatedFormData);
 
-      const registrationData: Record<string, unknown> = {
+      let registrationData: RegistrationData = {
         builder_id: user.id,
         status: 'draft'
       };
 
       // Add customer data
       if (updatedFormData.customer) {
-        const customerData = updatedFormData.customer as Record<string, string>;
+        const customerData = updatedFormData.customer;
         console.log('Onboarding - Processing customer data:', customerData);
-        Object.assign(registrationData, {
+        registrationData = {
+          ...registrationData,
           customer_name: customerData.firstName && customerData.lastName 
             ? `${customerData.firstName} ${customerData.lastName}` 
             : '',
@@ -290,7 +270,7 @@ const Onboarding = () => {
           project_name: customerData.projectName || '',
           settlement_date: customerData.settlementDate || null,
           notes: customerData.notes || ''
-        });
+        };
         console.log('Onboarding - Mapped registration data:', registrationData);
       }
 
@@ -301,7 +281,7 @@ const Onboarding = () => {
 
       // Add documents data
       if (updatedFormData.documents) {
-        registrationData.documents_uploaded = updatedFormData.documents;
+        registrationData.documents_uploaded = updatedFormData.documents as Record<string, unknown>;
       }
 
       // Update status based on current step
@@ -311,11 +291,29 @@ const Onboarding = () => {
         registrationData.status = 'documents_pending';
       }
 
+      // Prepare data for Supabase with proper types
+      const supabaseData = {
+        builder_id: registrationData.builder_id,
+        status: registrationData.status,
+        customer_name: registrationData.customer_name || '',
+        customer_email: registrationData.customer_email || '',
+        customer_phone: registrationData.customer_phone || '',
+        property_address: registrationData.property_address || '',
+        property_city: registrationData.property_city || '',
+        property_state: registrationData.property_state || '',
+        property_zip: registrationData.property_zip || '',
+        project_name: registrationData.project_name || '',
+        settlement_date: registrationData.settlement_date || null,
+        notes: registrationData.notes || '',
+        selected_items: registrationData.selected_items ? JSON.parse(JSON.stringify(registrationData.selected_items)) : null,
+        documents_uploaded: registrationData.documents_uploaded ? JSON.parse(JSON.stringify(registrationData.documents_uploaded)) : null
+      };
+
       if (registrationId) {
         // Update existing registration
         const { error } = await supabase
           .from('homeowner_registrations')
-          .update(registrationData)
+          .update(supabaseData)
           .eq('id', registrationId);
 
         if (error) throw error;
@@ -323,7 +321,7 @@ const Onboarding = () => {
         // Create new registration
         const { data, error } = await supabase
           .from('homeowner_registrations')
-          .insert(registrationData as never)
+          .insert(supabaseData)
           .select()
           .single();
 
@@ -331,136 +329,182 @@ const Onboarding = () => {
         setRegistrationId(data.id);
       }
     } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({
         title: "Error saving data",
-        description: error instanceof Error ? error.message : 'An error occurred',
+        description: errorMessage,
         variant: "destructive"
       });
     }
   };
 
-  const handleCustomerNext = async (customerData: Record<string, unknown>) => {
-    if (customerData.registrationId && typeof customerData.registrationId === 'string') {
+  const handleCustomerNext = async (customerData: CustomerFormData) => {
+    // Check if email changed for sent registrations
+    if (originalStatus === 'sent' && originalEmail && customerData.email !== originalEmail) {
+      setPendingCustomerData(customerData);
+      setEmailChangeDialogOpen(true);
+      return;
+    }
+    
+    if (customerData.registrationId) {
       setRegistrationId(customerData.registrationId);
     }
     setFormData(prev => ({ ...prev, customer: customerData }));
-    // Mark user navigation and ensure we go to 'items' step sequentially
-    userNavigated.current = true;
-    // Skip saveRegistrationData for customer step - only customer API is called
     handleNextStep();
   };
 
-  const handleItemsNext = async (itemsData: Record<string, unknown>) => {
-    if (itemsData.registrationId && typeof itemsData.registrationId === 'string') {
-      setRegistrationId(itemsData.registrationId);
+  const handleCustomerFormDataChange = useCallback((data: Partial<CustomerFormData>) => {
+    setFormData(prev => ({ ...prev, customer: data as CustomerFormData }));
+  }, []);
+
+  const confirmEmailChange = async () => {
+    if (!pendingCustomerData) return;
+    
+    setEmailChangeDialogOpen(false);
+    if (pendingCustomerData.registrationId) {
+      setRegistrationId(pendingCustomerData.registrationId);
     }
-    const justSelected = (itemsData as { selected_items?: string[] }).selected_items || [];
-    setRecentSelectedItemIds(justSelected);
-    setFormData(prev => ({ ...prev, items: itemsData }));
-    // Mark user navigation
-    userNavigated.current = true;
+    setFormData(prev => ({ ...prev, customer: pendingCustomerData }));
+    setPendingCustomerData(null);
     handleNextStep();
+  };
+
+  const handleItemsNext = async (itemsData: { selected_items: RegistrationItem[] }) => {
+    // Extract registrationId if it exists in the data (though it shouldn't be in FormData)
+    const registrationIdFromData = (itemsData as { selected_items: RegistrationItem[]; registrationId?: string }).registrationId;
+    if (registrationIdFromData) {
+      setRegistrationId(registrationIdFromData);
+    }
+    setFormData(prev => ({ ...prev, items: itemsData as ItemsFormData }));
+    // Go directly to review page, skipping documents
+    setCurrentStep('review');
+    // Update URL when moving to review step
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set('step', 'review');
+    setSearchParams(newSearchParams, { replace: true });
   };
 
   const handleDocumentsNext = async (documentsData: Record<string, unknown>) => {
     await saveRegistrationData(documentsData, 'documents');
-    // Mark user navigation
-    userNavigated.current = true;
     handleNextStep();
   };
 
   const handleSaveAndExit = async () => {
-    if (!user || !('builderOrganization' in user)) {
-      toast({
-        title: "Authentication error",
-        description: "Please log in again",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Get customer ID from the response or use editingId
-    const customerId = customerDetailsResponse?.data?.customer?.id || editingId || undefined;
-
     try {
-      // Get customer data from formData or fallback to API response
-      const customerData = formData.customer as Record<string, string> || {};
-      const apiCustomer = customerDetailsResponse?.data?.customer;
-      
-      // Build customer payload - prefer formData, fallback to API response
-      const customerPayload = {
-        ...(customerId && { id: customerId }),
-        firstName: customerData.firstName || apiCustomer?.firstName || '',
-        lastName: customerData.lastName || apiCustomer?.lastName || '',
-        email: customerData.email || apiCustomer?.email || '',
-        contact: customerData.phone || apiCustomer?.contact || '',
-        address: customerData.propertyAddress || apiCustomer?.address || '',
-        city: customerData.city || apiCustomer?.city || '',
-        state: customerData.state || apiCustomer?.state || '',
-        zip: customerData.zipCode || apiCustomer?.zip || '',
-        projectName: customerData.projectName || apiCustomer?.projectName || undefined,
-        settlementDate: customerData.settlementDate || apiCustomer?.settlementDate || undefined,
-        notes: customerData.notes || apiCustomer?.notes || undefined,
-        builderOrganizationId: user.builderOrganization.id
-      };
+      // If we're on the customer step and have customer data, save it via API first
+      if (currentStep === 'customer' && formData.customer) {
+        const customerData = formData.customer;
+        
+        const shouldSave = registrationId || customerData.firstName || customerData.email;
+        if (shouldSave) {
+          // Get builderOrganizationId from user
+          const builderOrganizationId = user && 'builderOrganization' in user && user.builderOrganization
+            ? user.builderOrganization.id
+            : user && 'id' in user 
+            ? user.id 
+            : null;
 
-      // Call API if we have at least basic customer data (firstName, lastName, email)
-      if (customerPayload.firstName || customerPayload.lastName || customerPayload.email || customerId) {
-        await createBuilderCustomer(customerPayload).unwrap();
+          if (!builderOrganizationId) {
+            toast({
+              title: "Error",
+              description: "Organization ID is missing. Please log in again.",
+              variant: "destructive"
+            });
+            return;
+          }
+
+          // Map form data to API payload format
+          const apiPayload = {
+            ...(registrationId && { id: registrationId }),
+            firstName: customerData.firstName || '',
+            lastName: customerData.lastName || '',
+            email: customerData.email || '',
+            contact: customerData.phone || '',
+            address: customerData.propertyAddress || '',
+            city: customerData.city || '',
+            state: customerData.state || '',
+            zip: customerData.zipCode || '',
+            projectName: customerData.projectName || undefined,
+            settlementDate: customerData.settlementDate || undefined,
+            notes: customerData.notes || undefined,
+            builderOrganizationId: builderOrganizationId
+          };
+
+          // Call the API to save customer data
+          const response = await createBuilderCustomer(apiPayload).unwrap();
+          
+          // Update registrationId if we got one from the response
+          if (response.data?.id) {
+            setRegistrationId(response.data.id);
+            // Update formData with the registrationId
+            setFormData(prev => ({
+              ...prev,
+              customer: {
+                ...prev.customer,
+                customerId: response.data.id,
+                registrationId: response.data.id
+              }
+            }));
+          }
+
+          toast({
+            title: "Registration saved",
+            description: "Customer details have been saved. You can continue this registration later from your dashboard."
+          });
+        } else {
+          toast({
+            title: "No data to save",
+            description: "Please fill in at least some customer information before saving.",
+            variant: "default"
+          });
+        }
+      } else {
+        // For other steps, just show the message
+        toast({
+          title: "Registration saved",
+          description: "You can continue this registration later from your dashboard."
+        });
       }
-
-      dispatch(dashboardApi.util.invalidateTags(['Dashboard']));
-      toast({
-        title: "Registration saved",
-        description: "You can continue this registration later from your dashboard."
-      });
+      
+      // Navigate to dashboard
       navigate('/dashboard');
-    } catch (error: unknown) {
+    } catch (error) {
+      console.error('Error saving registration:', error);
+      const errorMessage = error && typeof error === 'object' && 'data' in error 
+        ? (error.data as { message?: string })?.message 
+        : undefined;
       toast({
-        title: "Error saving customer details",
-        description: error instanceof Error ? error.message : 'An error occurred',
+        title: "Error saving registration",
+        description: errorMessage || "Failed to save registration. Please try again.",
         variant: "destructive"
       });
+      // Don't navigate on error so user can retry
     }
   };
 
   const handleNextStep = () => {
-    const steps = ['customer', 'items', 'documents', 'review', 'send'];
+    const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex < steps.length - 1) {
       const nextStep = steps[currentIndex + 1];
-      userNavigated.current = true; // Mark that user is navigating
       setCurrentStep(nextStep);
-      saveCurrentStep(nextStep);
+      // Update URL when moving to next step
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set('step', nextStep);
+      setSearchParams(newSearchParams, { replace: true });
     }
   };
 
-  const handlePreviousStep = async () => {
-    const steps = ['customer', 'items', 'documents', 'review', 'send'];
+  const handlePreviousStep = () => {
+    const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex > 0) {
       const prevStep = steps[currentIndex - 1];
-      
-      // Mark that user is navigating
-      userNavigated.current = true;
-      
-      // Call getCustomerDetails API when going to previous step
-      if (builderId && (editingId || formData.customer?.customerId)) {
-        const customerId = editingId || (formData.customer?.customerId as string);
-        try {
-          console.log('Calling getCustomerDetails when navigating to previous step');
-          const result = await refetchCustomerDetails();
-          if (result.data) {
-            updateFormDataFromApiResponse(result.data);
-            setCustomerDetailsData(result.data);
-          }
-        } catch (error) {
-          console.error('Error fetching customer details:', error);
-        }
-      }
-      
       setCurrentStep(prevStep);
-      saveCurrentStep(prevStep);
+      // Update URL when moving to previous step
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set('step', prevStep);
+      setSearchParams(newSearchParams, { replace: true });
     }
   };
 
@@ -478,10 +522,6 @@ const Onboarding = () => {
 
       if (error) throw error;
 
-      if (editingId) {
-        localStorage.removeItem(`onboarding_step_${editingId}`);
-      }
-
       toast({
         title: "Entitlement sent!",
         description: "The warranty entitlement has been sent to the homeowner."
@@ -489,63 +529,57 @@ const Onboarding = () => {
 
       handleNextStep();
     } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({
         title: "Error sending entitlement",
-        description: error instanceof Error ? error.message : 'An error occurred',
+        description: errorMessage,
         variant: "destructive"
       });
     }
   };
 
   const renderCurrentStep = () => {
-    // Get customer ID from the response or use editingId
-    const customerId = customerDetailsResponse?.data?.customer?.id || editingId || undefined;
-    
     switch (currentStep) {
+      case 'overview':
+        return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
       case 'customer':
-        return <CustomerDetailsForm 
-          onNext={handleCustomerNext as (data: unknown) => void} 
-          initialData={formData.customer} 
-          onSaveExit={handleSaveAndExit}
-          customerId={customerId}
-          isSaving={isSavingCustomer}
-        />;
-      case 'items':
-        return <ItemsSelectionForm 
-          onNext={handleItemsNext as (data: unknown) => void} 
-          initialData={{
-            ...formData.items, 
-            ...formData.customer,
-            builderId: builderId,
-            customerId: editingId || (formData.customer as Record<string, unknown>)?.customerId as string
-          }} 
-          registrationId={registrationId}
-          onSaveExit={handleSaveAndExit}
-          isSaving={isSavingCustomer}
-        />;
-      case 'documents': {
-        const selectedItems = recentSelectedItemIds && recentSelectedItemIds.length > 0
-          ? recentSelectedItemIds
-          : ((formData.items as Record<string, unknown>)?.selected_items as string[] || []);
-        return <DocumentUploadForm 
-          onNext={handleDocumentsNext as (data: unknown) => void} 
-          initialData={{
-            ...formData.documents, 
-            ...formData.items, 
-            ...formData.customer,
-            builderId: builderId,
-            customerId: editingId || (formData.customer as Record<string, unknown>)?.customerId as string,
-            selected_items: selectedItems
-          } as unknown as Parameters<typeof DocumentUploadForm>[0]['initialData']} 
-          selectedItems={selectedItems}
-          onSaveExit={handleSaveAndExit}
-          isSaving={isSavingCustomer}
-        />;
+        return (
+          <CustomerDetailsForm 
+            onNext={handleCustomerNext} 
+            initialData={formData.customer} 
+            customerId={registrationId || undefined}
+            onFormDataChange={handleCustomerFormDataChange}
+          />
+        );
+      case 'items': {
+        const bomId = searchParams.get('bomId');
+        return (
+          <ItemsSelectionForm 
+            onNext={handleItemsNext} 
+            initialData={formData.items} 
+            registrationId={registrationId} 
+            billMaterialId={bomId || undefined} 
+          />
+        );
       }
       case 'review':
-        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData as unknown as Parameters<typeof ReviewApprovalForm>[0]['formData']} onCustomerDetailsLoaded={setCustomerDetailsData} />;
+        return (
+          <ReviewApprovalForm 
+            onNext={handleSendEntitlement} 
+            formData={formData} 
+            registrationId={registrationId} 
+          />
+        );
       case 'send':
-        return <SendConfirmationForm customerDetailsData={customerDetailsData} isLoading={loading} />;
+        return (
+          <SendConfirmationForm 
+            customerId={
+              (formData.customer as CustomerFormData)?.customerId ||
+              registrationId ||
+              undefined
+            } 
+          />
+        );
       default:
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
     }
@@ -555,7 +589,7 @@ const Onboarding = () => {
     return null;
   }
 
-  if (loading || isFetchingDetails) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
@@ -581,31 +615,31 @@ const Onboarding = () => {
                 <h1 className="text-3xl font-bold text-foreground">Buyer Onboarding Form</h1>
                 <p className="text-muted-foreground mt-1">Create comprehensive documentation packages for your homebuyers</p>
               </div>
-              {/* <div className="flex items-center space-x-4"> */}
-                {/* <Button variant="outline" onClick={handleSaveAndExit}>
-                  Save & Exit
-                </Button> */}
+              <div className="flex items-center space-x-4">
+                <Button variant="outline" onClick={handleSaveAndExit} disabled={isSaving}>
+                  {isSaving ? 'Saving...' : 'Save & Exit'}
+                </Button>
                 <div className="text-sm text-muted-foreground">
-                  Step {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) + 1} of 5
+                  Step {['customer', 'items', 'review', 'send'].indexOf(currentStep) + 1} of 4
                 </div>
-              {/* </div> */}
+              </div>
             </div>
             
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <div>
-                {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) > 0 && (
+                {['customer', 'items', 'review', 'send'].indexOf(currentStep) > 0 && (
                   <Button variant="outline" onClick={handlePreviousStep}>
                     Previous
                   </Button>
                 )}
               </div>
               <div className="flex space-x-2">
-                {['customer', 'items', 'documents', 'review', 'send'].map((step, index) => (
+                {['customer', 'items', 'review', 'send'].map((step, index) => (
                   <div
                     key={step}
                     className={`w-3 h-3 rounded-full ${
-                      ['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) >= index
+                      ['customer', 'items', 'review', 'send'].indexOf(currentStep) >= index
                         ? 'bg-primary'
                         : 'bg-muted'
                     }`}
@@ -618,6 +652,23 @@ const Onboarding = () => {
           </div>
         )}
       </main>
+
+      <AlertDialog open={emailChangeDialogOpen} onOpenChange={setEmailChangeDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Email Change</AlertDialogTitle>
+            <AlertDialogDescription>
+              This registration has already been sent to the homeowner. Changing the email address will require resending the entitlement to the new email. Do you want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingCustomerData(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmEmailChange}>
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

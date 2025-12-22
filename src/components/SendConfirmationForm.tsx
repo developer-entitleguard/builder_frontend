@@ -3,16 +3,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Mail, Download, Eye, ArrowLeft } from "lucide-react";
-import type { CustomerDetailsResponse } from "@/lib/api/types";
+import { useAuth } from "@/hooks/useAuth";
+import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
+import { skipToken } from "@reduxjs/toolkit/query";
 
 interface SendConfirmationFormProps {
   onNext?: () => void;
-  customerDetailsData: CustomerDetailsResponse | null;
-  isLoading?: boolean;
-  error?: unknown;
+  customerId?: string;
 }
 
-const SendConfirmationForm = ({ onNext, customerDetailsData, isLoading = false, error }: SendConfirmationFormProps) => {
+const SendConfirmationForm = ({ onNext, customerId }: SendConfirmationFormProps) => {
+  const { user } = useAuth();
   const [status, setStatus] = useState<'sending' | 'sent' | 'delivered'>('sending');
 
   useEffect(() => {
@@ -26,15 +27,35 @@ const SendConfirmationForm = ({ onNext, customerDetailsData, isLoading = false, 
     };
   }, []);
 
-  const customerData = customerDetailsData?.data?.customer ? {
-    name: `${customerDetailsData.data.customer.firstName} ${customerDetailsData.data.customer.lastName}`,
-    email: customerDetailsData.data.customer.email,
-    propertyAddress: `${customerDetailsData.data.customer.address}, ${customerDetailsData.data.customer.city}, ${customerDetailsData.data.customer.state} ${customerDetailsData.data.customer.zip}`
-  } : {
-    name: "Loading...",
-    email: "Loading...",
-    propertyAddress: "Loading..."
-  };
+  const { data: customerDetailsData, refetch } = useGetCustomerDetailsQuery(
+    user?.id && customerId
+      ? { builderId: user.id as string, customerId }
+      : skipToken
+  );
+
+  useEffect(() => {
+    if (user?.id && customerId) {
+      refetch();
+    }
+  }, [user?.id, customerId, refetch]);
+
+  const apiCustomer = customerDetailsData?.data?.customer;
+  const apiSummary = customerDetailsData?.data;
+
+  const customerData = apiCustomer
+    ? {
+        name: `${apiCustomer.firstName} ${apiCustomer.lastName}`.trim(),
+        email: apiCustomer.email,
+        propertyAddress:
+          apiCustomer.address && apiCustomer.city && apiCustomer.state
+            ? `${apiCustomer.address}, ${apiCustomer.city}, ${apiCustomer.state} ${apiCustomer.zip || ""}`
+            : apiCustomer.address || "",
+      }
+    : {
+        name: "Homeowner",
+        email: "",
+        propertyAddress: "",
+      };
 
   const getStatusMessage = () => {
     switch (status) {
@@ -60,43 +81,6 @@ const SendConfirmationForm = ({ onNext, customerDetailsData, isLoading = false, 
   };
 
   const statusInfo = getStatusMessage();
-
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Loading...</h2>
-          <p className="text-muted-foreground">Fetching customer details</p>
-        </div>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-center space-x-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              <p className="text-muted-foreground">Loading customer data...</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Error</h2>
-          <p className="text-muted-foreground">Failed to load customer details</p>
-        </div>
-        <Card className="border-red-200">
-          <CardContent className="pt-6">
-            <div className="text-center text-red-600">
-              <p>Unable to fetch customer data. Please try again.</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -158,28 +142,28 @@ const SendConfirmationForm = ({ onNext, customerDetailsData, isLoading = false, 
           <CardDescription>Documentation included in this delivery</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 md:grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div className="p-4 border rounded-lg">
               <p className="text-2xl font-bold text-primary">
-                {isLoading ? "..." : customerDetailsData?.data?.totalItems || 0}
+                {apiSummary?.totalItems ?? 0}
               </p>
               <p className="text-sm text-muted-foreground">Items</p>
             </div>
             <div className="p-4 border rounded-lg">
               <p className="text-2xl font-bold text-primary">
-                {isLoading ? "..." : customerDetailsData?.data?.totalDocuments || 0}
+                {apiSummary?.totalDocuments ?? 0}
               </p>
               <p className="text-sm text-muted-foreground">Documents</p>
             </div>
             <div className="p-4 border rounded-lg">
               <p className="text-2xl font-bold text-primary">
-                {isLoading ? "..." : customerDetailsData?.data?.totalCategories || 0}
+                {apiSummary?.totalCategories ?? 0}
               </p>
               <p className="text-sm text-muted-foreground">Categories</p>
             </div>
             {/* <div className="p-4 border rounded-lg">
               <p className="text-2xl font-bold text-primary">
-                {isLoading ? "..." : `${customerDetailsData?.data?.completionPercent || 0}%`}
+                {apiSummary ? `${apiSummary.completionPercent}%` : "0%"}
               </p>
               <p className="text-sm text-muted-foreground">Complete</p>
             </div> */}
@@ -212,15 +196,15 @@ const SendConfirmationForm = ({ onNext, customerDetailsData, isLoading = false, 
         </Card>
       )} */}
 
-      <div className="flex justify-between items-center pt-6 border-t">
-        <Button 
+      <div className="flex justify-end items-center pt-6 border-t">
+        {/* <Button 
           variant="outline" 
           onClick={() => window.location.reload()}
           className="flex items-center space-x-2"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Create New Registration</span>
-        </Button>
+          <span>Create New Package</span>
+        </Button> */}
         {status === 'delivered' && (
           <Badge className="bg-green-100 text-green-800 px-4 py-2">
             ✓ Documentation Package Delivered Successfully

@@ -4,7 +4,7 @@ import type {
   CreateBuilderUserRequest,
   UpdateBuilderUserRequest,
   BuilderUserResponse
-} from '@/lib/api/types';
+} from '@/lib/api/types.ts';
 
 export const builderUsersApi = api.injectEndpoints({
   endpoints: (build) => ({

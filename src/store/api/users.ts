@@ -6,7 +6,7 @@ import type {
   PaginatedResponse,
   PaginationParams,
   SearchParams
-} from '@/lib/api/types';
+} from '@/lib/api/types.ts';
 
 export const usersApi = api.injectEndpoints({
   endpoints: (build) => ({

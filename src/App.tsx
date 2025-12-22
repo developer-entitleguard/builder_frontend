@@ -63,42 +63,42 @@ const PageLoader = () => (
 
 const App = () => (
   <Provider store={store}>
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
+  <QueryClientProvider client={queryClient}>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
             <Suspense fallback={<PageLoader />}>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/auth" element={<Auth />} />
+          <Routes>
+                <Route path="/" element={<Auth />} />
+            <Route path="/auth" element={<Auth />} />
                 <Route path="/auth/resetPassword" element={<ResetPassword />} />
-                <Route path="/dashboard" element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                } />
-                <Route path="/onboarding" element={
-                  <ProtectedRoute>
-                    <Onboarding />
-                  </ProtectedRoute>
-                } />
-                <Route path="/items" element={
-                  <ProtectedRoute>
-                    <ItemsManagement />
-                  </ProtectedRoute>
-                } />
-                <Route path="/queries" element={
-                  <ProtectedRoute>
-                    <QueriesManagement />
-                  </ProtectedRoute>
-                } />
-                <Route path="/admin" element={
-                  <ProtectedRoute>
-                    <Admin />
-                  </ProtectedRoute>
-                } />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/onboarding" element={
+              <ProtectedRoute>
+                <Onboarding />
+              </ProtectedRoute>
+            } />
+            <Route path="/items" element={
+              <ProtectedRoute>
+                <ItemsManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/queries" element={
+              <ProtectedRoute>
+                <QueriesManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin" element={
+              <ProtectedRoute>
+                <Admin />
+              </ProtectedRoute>
+            } />
                 <Route path="/pendingQueries" element={
                   <ProtectedRoute>
                     <PendingQueries />
@@ -114,19 +114,19 @@ const App = () => (
                     <QueriesComplete />
                   </ProtectedRoute>
                 } />
-                <Route path="/registration/:id" element={
-                  <ProtectedRoute>
-                    <RegistrationDetail />
-                  </ProtectedRoute>
-                } />
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
+            <Route path="/registration/:id" element={
+              <ProtectedRoute>
+                <RegistrationDetail />
+              </ProtectedRoute>
+            } />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
             </Suspense>
-          </BrowserRouter>
-        </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
+  </QueryClientProvider>
   </Provider>
 );
 

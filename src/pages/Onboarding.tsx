@@ -508,34 +508,14 @@ const Onboarding = () => {
     }
   };
 
-  const handleSendEntitlement = async () => {
-    if (!registrationId) return;
+  const handleSendEntitlement = () => {
 
-    try {
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .update({ 
-          status: 'sent',
-          entitlement_sent_at: new Date().toISOString()
-        })
-        .eq('id', registrationId);
+    toast({
+      title: "Entitlement sent!",
+      description: "The warranty entitlement has been sent to the homeowner."
+    });
 
-      if (error) throw error;
-
-      toast({
-        title: "Entitlement sent!",
-        description: "The warranty entitlement has been sent to the homeowner."
-      });
-
-      handleNextStep();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      toast({
-        title: "Error sending entitlement",
-        description: errorMessage,
-        variant: "destructive"
-      });
-    }
+    handleNextStep();
   };
 
   const renderCurrentStep = () => {

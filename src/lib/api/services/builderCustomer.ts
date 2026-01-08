@@ -8,7 +8,7 @@ import { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 import { getApiBaseUrl } from '@/lib/config';
 
 export interface BuilderItemFileDto {
-  type: 'Warranty' | 'Manual';
+  type: 'warranty' | 'Manual';
   file: File;
 }
 

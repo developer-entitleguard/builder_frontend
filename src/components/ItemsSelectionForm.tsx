@@ -249,7 +249,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
 
             const warranty_documents =
               item.builderCustomerItemFiles
-                ?.filter((f) => f.type === 'Warranty' && f.files)
+                ?.filter((f) => f.type === 'warranty' && f.files)
                 .map((f) => ({
                   id: f.id,
                   name: f.files.name,
@@ -1007,7 +1007,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                                               
                                               // Prepare files array
                                               const builderItemFilesDtos = [
-                                                ...warrantyFiles.map(file => ({ type: 'Warranty' as const, file })),
+                                                ...warrantyFiles.map(file => ({ type: 'warranty' as const, file })),
                                                 ...manualFiles.map(file => ({ type: 'Manual' as const, file }))
                                               ];
 

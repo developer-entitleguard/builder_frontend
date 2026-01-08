@@ -214,7 +214,7 @@ export const itemsApi = api.injectEndpoints({
         files: unknown;
         builderCustomerItemFiles?: Array<{
           id: string; // id used for delete (/api/itemfile/{id})
-          type: 'Warranty' | 'Manual' | string;
+          type: 'warranty' | 'Manual' | string;
           files: {
             id: string;
             name: string;

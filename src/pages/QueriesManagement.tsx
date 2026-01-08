@@ -173,7 +173,7 @@ const QueriesManagement = () => {
   const [selectedQuery, setSelectedQuery] = useState<Query | null>(null);
   const [response, setResponse] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedStatusId, setSelectedStatusId] = useState<string>("");
+  const [selectedStatusId, setSelectedStatusId] = useState<string>("-1");
   const [triggerGetQueryById] = useLazyGetQueryByIdQuery();
 
   // Map status name to route
@@ -229,11 +229,11 @@ const QueriesManagement = () => {
   const { data: statusData, isLoading: isLoadingStatuses } = useGetStatusQuery({ module: "QUERY" });
   const statuses = statusData?.data || [];
 
-  // Fetch queries from API only when a specific status is selected
+  // Fetch queries from API - pass -1 for "All" status
   const { data: queriesData, isLoading: loading, refetch } = useGetBuilderQueriesQuery(
     { 
       builderId: builderId || "",
-      statusId: selectedStatusId || undefined,
+      statusId: selectedStatusId === "-1" ? "-1" : selectedStatusId || undefined,
     },
     { 
       skip: !builderId || !selectedStatusId,
@@ -241,7 +241,7 @@ const QueriesManagement = () => {
     }
   );
 
-  // Transform queries data - only show queries when a status is selected
+  // Transform queries data
   const queries: Query[] = selectedStatusId 
     ? (queriesData?.data?.map(transformQuery) || [])
     : [];
@@ -430,7 +430,7 @@ const QueriesManagement = () => {
           {/* Status Filter */}
           <div className="flex items-center gap-2 mb-4">
             <span className="text-sm text-muted-foreground">Status:</span>
-            <Select value={selectedStatusId === "all" ? "" : selectedStatusId} onValueChange={setSelectedStatusId}>
+            <Select value={selectedStatusId} onValueChange={setSelectedStatusId}>
               <SelectTrigger className="w-[260px]">
                 <SelectValue placeholder="Select a status" />
               </SelectTrigger>
@@ -438,25 +438,21 @@ const QueriesManagement = () => {
                 {isLoadingStatuses ? (
                   <SelectItem value="loading" disabled>Loading statuses...</SelectItem>
                 ) : (
-                  statuses.map((status) => (
-                    <SelectItem key={status.id} value={status.id}>
-                      {status.name}
-                    </SelectItem>
-                  ))
+                  <>
+                    <SelectItem value="-1">All</SelectItem>
+                    {statuses.map((status) => (
+                      <SelectItem key={status.id} value={status.id}>
+                        {status.name}
+                      </SelectItem>
+                    ))}
+                  </>
                 )}
               </SelectContent>
             </Select>
           </div>
 
           <TabsContent value="open">
-            {!selectedStatusId ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">Please select a status to view queries.</p>
-                </CardContent>
-              </Card>
-            ) : displayQueries.length === 0 ? (
+            {displayQueries.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center">
                   <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />

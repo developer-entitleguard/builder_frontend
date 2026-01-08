@@ -49,7 +49,7 @@ interface UploadedDoc {
   name: string;
   url: string;
   path: string;
-  type: 'Warranty' | 'Manual';
+  type: 'warranty' | 'Manual';
   builderItemFileId?: string;
 }
 
@@ -240,7 +240,7 @@ const ItemsManagement = () => {
       // Append files: warranty then manual
       let fileIndex = 0;
       warrantyFiles.forEach((file) => {
-        formDataPayload.append(`builderItemFilesDtos[${fileIndex}].type`, 'Warranty');
+        formDataPayload.append(`builderItemFilesDtos[${fileIndex}].type`, 'warranty');
         formDataPayload.append(`builderItemFilesDtos[${fileIndex}].file`, file);
         fileIndex += 1;
       });
@@ -328,12 +328,12 @@ const ItemsManagement = () => {
 
     const warrantyDocsFromItem: UploadedDoc[] =
       item.builderItemFiles
-        ?.filter((file) => file.type === 'Warranty' && file.files)
+        ?.filter((file) => file.type === 'warranty' && file.files)
         .map((file) => ({
           name: file.files.name,
           url: "",
           path: file.files.filePath,
-          type: 'Warranty',
+          type: 'warranty',
           builderItemFileId: file.id,
         })) || [];
 
@@ -523,7 +523,7 @@ const ItemsManagement = () => {
           name: file.name,
           url: result.url || result.data?.url || '',
           path: result.path || result.data?.path || '',
-          type: 'Warranty',
+          type: 'warranty',
           builderItemFileId: result.builderItemFileId || result.data?.id,
         };
       });

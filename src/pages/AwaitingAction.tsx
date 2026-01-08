@@ -9,6 +9,7 @@ import {
   useUpdateQueryMutation,
 } from "@/lib/api/services/query";
 import { getApiBaseUrl, getApiBaseUrlWithPrefix } from "@/lib/config";
+import { viewPhotoUrl } from "@/lib/api/services/files";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -406,29 +407,10 @@ const AwaitingAction = () => {
                 {queryData?.queryFileMaps && queryData.queryFileMaps.length > 0 ? (
                   <div className="grid grid-cols-3 gap-4">
                     {queryData.queryFileMaps.map((fileMap) => {
-                      const filePath = fileMap.files?.filePath;
+                      const fileId = fileMap.files?.id;
                       const fileName = fileMap.files?.name || 'Query file';
                       
-                      // Construct image URL - try /api/files endpoint first
-                      let imageUrl: string | null = null;
-                      if (filePath) {
-                        if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-                          imageUrl = filePath;
-                        } else if (filePath.startsWith('/')) {
-                          const apiPrefix = getApiBaseUrlWithPrefix();
-                          const apiBaseUrl = getApiBaseUrl();
-                          // Try /api/files endpoint first as it's the most common pattern
-                          imageUrl = apiBaseUrl 
-                            ? `${apiBaseUrl}/api/files${filePath}`
-                            : `${apiPrefix}/files${filePath}`;
-                        } else {
-                          const apiPrefix = getApiBaseUrlWithPrefix();
-                          imageUrl = `${apiPrefix}/files/${filePath}`;
-                        }
-                      }
-                      
-                      // Track retry attempts to prevent infinite loops
-                      const maxRetries = 3;
+                      const imageUrl = fileId ? viewPhotoUrl(fileId) : null;
                       
                       return (
                         <div key={fileMap.id} className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
@@ -439,41 +421,9 @@ const AwaitingAction = () => {
                               className="w-full h-full object-cover rounded-lg"
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement;
-                                const retryCount = parseInt(target.dataset.retryCount || '0', 10);
-                                
-                                // Prevent infinite loops
-                                if (retryCount >= maxRetries) {
-                                  target.src = "/placeholder.svg";
-                                  target.onerror = null; // Remove error handler to stop retries
-                                  return;
-                                }
-                                
-                                // Try alternative endpoints
-                                if (filePath && filePath.startsWith('/')) {
-                                  const apiPrefix = getApiBaseUrlWithPrefix();
-                                  const apiBaseUrl = getApiBaseUrl();
-                                  const alternatives = [
-                                    apiBaseUrl ? `${apiBaseUrl}${filePath}` : `${apiPrefix}${filePath}`,
-                                    apiBaseUrl ? `${apiBaseUrl}/api/uploads${filePath}` : `${apiPrefix}/uploads${filePath}`,
-                                    apiBaseUrl ? `${apiBaseUrl}/api/file/download?path=${encodeURIComponent(filePath)}` : `${apiPrefix}/file/download?path=${encodeURIComponent(filePath)}`,
-                                  ];
-                                  
-                                  const currentSrc = target.src;
-                                  const nextAlt = alternatives.find(alt => alt !== currentSrc);
-                                  
-                                  if (nextAlt && retryCount < maxRetries) {
-                                    target.dataset.retryCount = String(retryCount + 1);
-                                    target.src = nextAlt;
-                                  } else {
-                                    target.src = "/placeholder.svg";
-                                    target.onerror = null; // Remove error handler to stop retries
-                                  }
-                                } else {
-                                  target.src = "/placeholder.svg";
-                                  target.onerror = null; // Remove error handler to stop retries
-                                }
+                                target.src = "/placeholder.svg";
+                                target.onerror = null; 
                               }}
-                              data-retry-count="0"
                             />
                           ) : (
                             <div className="text-gray-400">No image</div>

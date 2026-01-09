@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -1292,6 +1292,9 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
         <DialogContent className="sm:max-w-[500px] bg-background">
           <DialogHeader>
             <DialogTitle>Add Custom Item</DialogTitle>
+            <DialogDescription>
+              Add a custom item that is not in the BOM. Fill in the details below.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div>
@@ -1398,11 +1401,11 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
         <DialogContent className="sm:max-w-[420px] bg-background">
           <DialogHeader>
             <DialogTitle>Existing BOM Mapping</DialogTitle>
+            <DialogDescription>
+              {existingItemsData?.message || "BOM is already mapped for this customer. Do you want to replace it?"}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              {existingItemsData?.message || "BOM is already mapped for this customer. Do you want to replace it?"}
-            </p>
             <p className="text-sm text-muted-foreground">
               Selecting "Yes" will reload items from the chosen Bill of Materials.
             </p>

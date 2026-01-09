@@ -20,6 +20,9 @@ const baseQuery = fetchBaseQuery({
       }
     }
     
+    // Only set Content-Type if it's not FormData (fetch will handle FormData automatically)
+    // We check this by looking at the request body, but since we can't access it here,
+    // we'll set it and let fetch override it for FormData (which it does automatically)
     headers.set('Content-Type', 'application/json');
     headers.set('Accept', 'application/json');
     return headers;

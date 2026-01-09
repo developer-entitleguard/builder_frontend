@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import type { BuilderQuery } from "@/lib/api/services/query";
 import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
 import { useUpdateQueryMutation, useAddQueryCommentMutation, useLazyGetQueryByIdQuery } from "@/lib/api/services/query";
+import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -165,6 +166,19 @@ const PendingQueries = () => {
 
   const vendors = vendorsData?.data || [];
 
+  // Fetch statuses for QUERY module
+  const { data: statusesData } = useGetStatusesByModuleQuery(
+    { module: "QUERY" },
+    { skip: false }
+  );
+
+  const statuses = statusesData?.data || [];
+  
+  // Find "ASSIGNED TO VENDOR" status ID
+  const assignedToVendorStatusId = statuses.find(
+    (status) => status.name === "ASSIGNED TO VENDOR"
+  )?.id;
+
   // Update query mutation
   const [updateQuery, { isLoading: isUpdating }] = useUpdateQueryMutation();
   
@@ -234,12 +248,29 @@ const PendingQueries = () => {
       return;
     }
 
+    if (!assignedToVendorStatusId) {
+      toast({
+        title: "Error",
+        description: "Status information not available. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      // Call the update query API with only id, statusId, and vendorId
+      // Format dueDate as date only (YYYY-MM-DD) without time
+      const dueDateString = dueDate ? dueDate.toISOString().split('T')[0] : undefined;
+      
+      // Convert priorityLevel to uppercase as expected by API
+      const priorityLevelUpper = priorityLevel.toUpperCase();
+      
+      // Call the update query API with id, statusId, vendorId, priorityLevel, and dueDate
       const result = await updateQuery({
         id: queryData.id,
-        statusId: queryData.status?.id || undefined,
+        statusId: assignedToVendorStatusId,
         vendorId: selectedVendor?.trim() || undefined,
+        priorityLevel: priorityLevelUpper,
+        dueDate: dueDateString,
       }).unwrap();
 
       if (result.success) {

@@ -121,6 +121,7 @@ export interface UpdateQueryRequest {
   vendorId?: string;
   priorityLevel?: string;
   dueDate?: string;
+  userId?: string;
   queryFileMapDto?: QueryFileMapDto[];
 }
 
@@ -179,7 +180,7 @@ export const queryApi = api.injectEndpoints({
         try {
           const formData = new FormData();
           
-          // Add required fields: id, statusId, vendorId, priorityLevel, dueDate
+          // Add required fields: id, statusId, vendorId, priorityLevel, dueDate, userId
           formData.append('id', data.id);
           
           if (data.statusId) {
@@ -193,6 +194,21 @@ export const queryApi = api.injectEndpoints({
           }
           if (data.dueDate) {
             formData.append('dueDate', data.dueDate);
+          }
+          // Always append userId if provided (even if empty string to ensure it's sent)
+          if (data.userId !== undefined && data.userId !== null) {
+            const userIdValue = String(data.userId);
+            formData.append('userId', userIdValue);
+            console.log('Appending userId to FormData:', userIdValue);
+          } else {
+            console.warn('userId is undefined or null, not appending to FormData. Data received:', { 
+              id: data.id, 
+              statusId: data.statusId, 
+              vendorId: data.vendorId,
+              priorityLevel: data.priorityLevel,
+              dueDate: data.dueDate,
+              userId: data.userId 
+            });
           }
           
           // Add file data in the format queryFileMapDto[0].type and queryFileMapDto[0].files

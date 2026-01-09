@@ -258,19 +258,67 @@ const PendingQueries = () => {
     }
 
     try {
+      // Get userId from localStorage - check multiple possible locations
+      let userId: string | undefined;
+      
+      // First try from user object from useAuth
+      if (user && typeof user === 'object' && 'userId' in user) {
+        userId = String((user as { userId: unknown }).userId);
+      }
+      
+      // If not found, try localStorage
+      if (!userId) {
+        try {
+          const userData = localStorage.getItem('userData');
+          if (userData) {
+            const parsedData = JSON.parse(userData);
+            // Check multiple possible locations for userId
+            userId = parsedData.userId 
+              || parsedData.userInfo?.userId 
+              || (parsedData.userInfo && 'userId' in parsedData.userInfo ? parsedData.userInfo.userId : null)
+              || parsedData.userInfo?.id
+              || parsedData.id;
+            
+            // Convert to string if it's a number
+            if (userId !== undefined && userId !== null) {
+              userId = String(userId);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to get userId from localStorage:', error);
+        }
+      }
+      
+      // Debug logging
+      if (userId) {
+        console.log('Found userId:', userId);
+      } else {
+        console.warn('userId not found. Checking localStorage structure...');
+        try {
+          const userData = localStorage.getItem('userData');
+          if (userData) {
+            const parsed = JSON.parse(userData);
+            console.log('localStorage structure:', JSON.stringify(parsed, null, 2));
+          }
+        } catch (e) {
+          console.error('Error parsing localStorage for debug:', e);
+        }
+      }
+
       // Format dueDate as date only (YYYY-MM-DD) without time
       const dueDateString = dueDate ? dueDate.toISOString().split('T')[0] : undefined;
       
       // Convert priorityLevel to uppercase as expected by API
       const priorityLevelUpper = priorityLevel.toUpperCase();
       
-      // Call the update query API with id, statusId, vendorId, priorityLevel, and dueDate
+      // Call the update query API with id, statusId, vendorId, priorityLevel, dueDate, and userId
       const result = await updateQuery({
         id: queryData.id,
         statusId: assignedToVendorStatusId,
         vendorId: selectedVendor?.trim() || undefined,
         priorityLevel: priorityLevelUpper,
         dueDate: dueDateString,
+        userId: userId,
       }).unwrap();
 
       if (result.success) {

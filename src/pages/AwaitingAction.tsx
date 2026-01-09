@@ -8,6 +8,7 @@ import {
   useLazyGetQueryByIdQuery,
   useUpdateQueryMutation,
 } from "@/lib/api/services/query";
+import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { getApiBaseUrl, getApiBaseUrlWithPrefix } from "@/lib/config";
 import { viewPhotoUrl } from "@/lib/api/services/files";
 import Header from "@/components/Header";
@@ -70,6 +71,18 @@ const AwaitingAction = () => {
   const [addComment, { isLoading: isAddingComment }] = useAddQueryCommentMutation();
   const [getQueryById] = useLazyGetQueryByIdQuery();
   const [updateQuery, { isLoading: isUpdatingQuery }] = useUpdateQueryMutation();
+  
+
+  const { data: statusesData } = useGetStatusesByModuleQuery(
+    { module: "QUERY" },
+    { skip: false }
+  );
+
+  const statuses = statusesData?.data || [];
+  
+  const doneStatusId = statuses.find(
+    (status) => status.name === "DONE"
+  )?.id;
 
   const fetchQueryById = useCallback(
     async (id: string) => {
@@ -130,18 +143,28 @@ const AwaitingAction = () => {
       return;
     }
 
+    if (!doneStatusId) {
+      toast({
+        title: "Error",
+        description: "Status information not available. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       // Prepare file data if files are uploaded
+      // Pass type as "vendor" and files as uploaded files
       const queryFileMapDto = uploadedFiles.length > 0
         ? uploadedFiles.map((file) => ({
-            type: "BUILDER",
+            type: "vendor",
             files: file,
           }))
         : undefined;
 
       const result = await updateQuery({
         id: queryData.id,
-        statusId: queryData.status?.id,
+        statusId: doneStatusId,
         queryFileMapDto,
       }).unwrap();
 
@@ -446,7 +469,7 @@ const AwaitingAction = () => {
                 <CardTitle>Add Your Assessment</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div>
+                {/* <div>
                   <Label className="text-sm font-medium text-gray-700 mb-2 block">
                     Details and actions taken
                   </Label>
@@ -457,7 +480,7 @@ const AwaitingAction = () => {
                     rows={6}
                     className="w-full"
                   />
-                </div>
+                </div> */}
 
                 <div>
                   <Label className="text-sm font-medium text-gray-700 mb-2 block">

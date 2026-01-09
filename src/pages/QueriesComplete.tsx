@@ -651,25 +651,6 @@ const QueriesComplete = () => {
                     onChange={(e) => setVendorPhone(e.target.value)}
                     disabled={isStatusDone}
                   />
-                  {(selectedVendor && vendors.find(v => v.id === selectedVendor)) || queryData?.vendor ? (
-                    <div className="text-sm text-gray-500 mt-1 space-y-1">
-                      {(() => {
-                        const vendor = selectedVendor 
-                          ? vendors.find(v => v.id === selectedVendor)
-                          : queryData?.vendor;
-                        return (
-                          <>
-                            {vendor?.email && (
-                              <p>Email: {vendor.email}</p>
-                            )}
-                            {vendor?.contact && (
-                              <p>Contact: {vendor.contact}</p>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
-                  ) : null}
                 </div>
 
                 <div>

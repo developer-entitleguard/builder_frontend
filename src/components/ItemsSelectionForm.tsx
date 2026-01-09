@@ -74,22 +74,9 @@ interface FormData {
 type CustomerItemMapEntry = {
   id: string;
   billOfMaterials?: { id: string; bomName?: string; projectName?: string };
-  builderItem?: {
-    id: string;
-    name: string;
-    category: string;
-    make: string | null;
-    brand: string | null;
-    model: string | null;
-    text: string | null;
-    note: string | null;
-    price: string | null;
-    documentationUrl: string | null;
-    isActive: boolean;
-    status: string;
-    purchaser?: string | null;
-    billOfMaterials?: { id: string; bomName?: string; projectName?: string };
-  };
+  builderItem: null;
+  name: string | null;
+  category: string | null;
   seller: string | null;
   serialNumber: string | null;
   make: string | null;
@@ -220,11 +207,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
     if (selectedBomId || !registrationId) return;
     const mappedBomId =
       existingItemsData?.data?.find(
-        (item: CustomerItemMapEntry) => item.billOfMaterials?.id || item.builderItem?.billOfMaterials?.id
-      )?.billOfMaterials?.id ??
-      existingItemsData?.data?.find(
-        (item: CustomerItemMapEntry) => item.builderItem?.billOfMaterials?.id
-      )?.builderItem?.billOfMaterials?.id;
+        (item: CustomerItemMapEntry) => item.billOfMaterials?.id
+      )?.billOfMaterials?.id;
 
     if (mappedBomId) {
       setSelectedBomId(mappedBomId);
@@ -245,8 +229,6 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
         const transformedItems: RegistrationItem[] = items
           .filter((item) => item && item.id)
           .map((item: CustomerItemMapEntry) => {
-            const builderItem = item.builderItem;
-
             const warranty_documents =
               item.builderCustomerItemFiles
                 ?.filter((f) => f.type === 'warranty' && f.files)
@@ -267,36 +249,20 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                   path: f.files.filePath,
                 })) || [];
 
-            if (builderItem) {
-              return {
-                id: item.id,
-                name: builderItem.name,
-                category: builderItem.category,
-                brand: item.brand || builderItem.brand || null,
-                model: item.model || builderItem.model || null,
-                make: item.make || builderItem.make || null,
-                description: builderItem.text || null,
-                price: builderItem.price ? parseFloat(builderItem.price) : null,
-                bom_id: selectedBomId || item.billOfMaterials?.id || builderItem.billOfMaterials?.id || null,
-                color: item.color || null,
-                custom_notes: item.notes || null,
-                serial_number: item.serialNumber || null,
-                builderItemId: builderItem.id,
-                seller: item.seller || null,
-                warranty_documents,
-                manual_documents,
-                is_custom: false
-              } as RegistrationItem;
-            }
-            const nameParts = [item.brand, item.model, item.make].filter(Boolean);
-            const displayName = nameParts.length > 0 
-              ? nameParts.join(' ') 
-              : (item.serialNumber ? `Item ${item.serialNumber}` : 'Custom Item');
+            // Use item.name and item.category directly since builderItem is now null
+            const displayName = item.name || (() => {
+              const nameParts = [item.brand, item.model, item.make].filter(Boolean);
+              return nameParts.length > 0 
+                ? nameParts.join(' ') 
+                : (item.serialNumber ? `Item ${item.serialNumber}` : 'Custom Item');
+            })();
+
+            const category = item.category || 'Other';
 
             return {
               id: item.id,
               name: displayName,
-              category: 'Other',
+              category: category,
               brand: item.brand || null,
               model: item.model || null,
               make: item.make || null,
@@ -783,6 +749,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
         model: newCustomItem.model || undefined,
         brand: newCustomItem.brand || undefined,
         make: newCustomItem.make || undefined,
+        name: newCustomItem.name || undefined,
+        category: newCustomItem.category || undefined,
         builderItemFilesDtos: undefined, // No files for new custom item
       }).unwrap();
 
@@ -1030,6 +998,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                                                 model: item.model || undefined,
                                                 brand: item.brand || undefined,
                                                 make: item.make || undefined,
+                                                name: item.name || undefined,
+                                                category: item.category || undefined,
                                                 builderItemFilesDtos: builderItemFilesDtos.length > 0 ? builderItemFilesDtos : undefined,
                                               }).unwrap();
 

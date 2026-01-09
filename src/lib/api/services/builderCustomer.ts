@@ -24,6 +24,8 @@ export interface UpdateBuilderCustomerMapRequest {
   billMaterialId: string;
   brand?: string;
   make?: string;
+  name?: string;
+  category?: string;
   builderItemFilesDtos?: BuilderItemFileDto[];
 }
 
@@ -71,6 +73,8 @@ export const builderCustomerApi = api.injectEndpoints({
           if (data.model) formData.append('model', data.model);
           if (data.brand) formData.append('brand', data.brand);
           if (data.make) formData.append('make', data.make);
+          if (data.name) formData.append('name', data.name);
+          if (data.category) formData.append('category', data.category);
           
           // Add files in the format builderItemFilesDtos[0].type and builderItemFilesDtos[0].file
           if (data.builderItemFilesDtos && data.builderItemFilesDtos.length > 0) {

@@ -299,22 +299,9 @@ export const itemsApi = api.injectEndpoints({
       data: Array<{
         id: string;
         billOfMaterials?: { id: string; bomName?: string; projectName?: string };
-        builderItem?: {
-          id: string;
-          name: string;
-          category: string;
-          make: string | null;
-          brand: string | null;
-          model: string | null;
-          text: string | null;
-          note: string | null;
-          price: string | null;
-          documentationUrl: string | null;
-          isActive: boolean;
-          status: string;
-          purchaser?: string | null;
-          billOfMaterials?: { id: string; bomName?: string; projectName?: string };
-        };
+        builderItem: null;
+        name: string | null;
+        category: string | null;
         seller: string | null;
         serialNumber: string | null;
         make: string | null;

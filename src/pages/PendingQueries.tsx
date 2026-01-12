@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import type { BuilderQuery } from "@/lib/api/services/query";
 import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
 import { useUpdateQueryMutation, useAddQueryCommentMutation, useLazyGetQueryByIdQuery } from "@/lib/api/services/query";
+import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -165,6 +166,19 @@ const PendingQueries = () => {
 
   const vendors = vendorsData?.data || [];
 
+  // Fetch statuses for QUERY module
+  const { data: statusesData } = useGetStatusesByModuleQuery(
+    { module: "QUERY" },
+    { skip: false }
+  );
+
+  const statuses = statusesData?.data || [];
+  
+  // Find "ASSIGNED TO VENDOR" status ID
+  const assignedToVendorStatusId = statuses.find(
+    (status) => status.name === "ASSIGNED TO VENDOR"
+  )?.id;
+
   // Update query mutation
   const [updateQuery, { isLoading: isUpdating }] = useUpdateQueryMutation();
   
@@ -234,12 +248,77 @@ const PendingQueries = () => {
       return;
     }
 
+    if (!assignedToVendorStatusId) {
+      toast({
+        title: "Error",
+        description: "Status information not available. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      // Call the update query API with only id, statusId, and vendorId
+      // Get userId from localStorage - check multiple possible locations
+      let userId: string | undefined;
+      
+      // First try from user object from useAuth
+      if (user && typeof user === 'object' && 'userId' in user) {
+        userId = String((user as { userId: unknown }).userId);
+      }
+      
+      // If not found, try localStorage
+      if (!userId) {
+        try {
+          const userData = localStorage.getItem('userData');
+          if (userData) {
+            const parsedData = JSON.parse(userData);
+            // Check multiple possible locations for userId
+            userId = parsedData.userId 
+              || parsedData.userInfo?.userId 
+              || (parsedData.userInfo && 'userId' in parsedData.userInfo ? parsedData.userInfo.userId : null)
+              || parsedData.userInfo?.id
+              || parsedData.id;
+            
+            // Convert to string if it's a number
+            if (userId !== undefined && userId !== null) {
+              userId = String(userId);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to get userId from localStorage:', error);
+        }
+      }
+      
+      // Debug logging
+      if (userId) {
+        console.log('Found userId:', userId);
+      } else {
+        console.warn('userId not found. Checking localStorage structure...');
+        try {
+          const userData = localStorage.getItem('userData');
+          if (userData) {
+            const parsed = JSON.parse(userData);
+            console.log('localStorage structure:', JSON.stringify(parsed, null, 2));
+          }
+        } catch (e) {
+          console.error('Error parsing localStorage for debug:', e);
+        }
+      }
+
+      // Format dueDate as date only (YYYY-MM-DD) without time
+      const dueDateString = dueDate ? dueDate.toISOString().split('T')[0] : undefined;
+      
+      // Convert priorityLevel to uppercase as expected by API
+      const priorityLevelUpper = priorityLevel.toUpperCase();
+      
+      // Call the update query API with id, statusId, vendorId, priorityLevel, dueDate, and userId
       const result = await updateQuery({
         id: queryData.id,
-        statusId: queryData.status?.id || undefined,
+        statusId: assignedToVendorStatusId,
         vendorId: selectedVendor?.trim() || undefined,
+        priorityLevel: priorityLevelUpper,
+        dueDate: dueDateString,
+        userId: userId,
       }).unwrap();
 
       if (result.success) {
@@ -547,25 +626,6 @@ const PendingQueries = () => {
                     value={vendorPhone || queryData?.vendor?.contact || ''}
                     onChange={(e) => setVendorPhone(e.target.value)}
                   />
-                  {(selectedVendor && vendors.find(v => v.id === selectedVendor)) || queryData?.vendor ? (
-                    <div className="text-sm text-gray-500 mt-1 space-y-1">
-                      {(() => {
-                        const vendor = selectedVendor 
-                          ? vendors.find(v => v.id === selectedVendor)
-                          : queryData?.vendor;
-                        return (
-                          <>
-                            {vendor?.email && (
-                              <p>Email: {vendor.email}</p>
-                            )}
-                            {vendor?.contact && (
-                              <p>Contact: {vendor.contact}</p>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
-                  ) : null}
                 </div>
 
                 <div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useUploadTemplateMutation } from "@/lib/api/services/bomUpload";
+import { useUploadTemplateMutation, UploadTemplateResponse } from "@/lib/api/services/bomUpload";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ import { Upload, Download } from "lucide-react";
 import { useDownTemp } from "@/lib/api/services/templateDownload";
 
 interface BOMUploadProps {
-  onSuccess: () => void;
+  onSuccess: (result?: UploadTemplateResponse, bomName?: string, projectName?: string) => void;
 }
 
 interface CSVItem {
@@ -159,9 +159,11 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
         description: result.message || "BOM has been uploaded successfully",
       });
 
+      const uploadedBomName = formData.name;
+      const uploadedProjectName = formData.projectName || undefined;
       setDialogOpen(false);
       setFormData({ name: "", projectName: "", file: null });
-      onSuccess();
+      onSuccess(result, uploadedBomName, uploadedProjectName);
     } catch (error) {
       console.error("Error uploading BOM:", error);
       const errorMessage =

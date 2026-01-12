@@ -6,7 +6,7 @@ export interface Status {
   module: string;
 }
 
-export interface StatusByModuleResponse {
+export interface StatusResponse {
   success: boolean;
   message: string;
   data: Status[];
@@ -14,7 +14,7 @@ export interface StatusByModuleResponse {
 
 export const statusApi = api.injectEndpoints({
   endpoints: (build) => ({
-    getStatusByModule: build.query<StatusByModuleResponse, { module: string }>({
+    getStatusesByModule: build.query<StatusResponse, { module: string }>({
       query: ({ module }) => ({
         url: `/api/status/bymodule?module=${module}`,
         method: 'GET',
@@ -25,5 +25,6 @@ export const statusApi = api.injectEndpoints({
 });
 
 export const {
-  useGetStatusByModuleQuery,
+  useGetStatusesByModuleQuery,
+  useLazyGetStatusesByModuleQuery,
 } = statusApi;

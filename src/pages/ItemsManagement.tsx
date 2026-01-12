@@ -18,6 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import Header from "@/components/Header";
 import { BOMUpload } from "@/components/BOMUpload";
 import { getApiBaseUrl } from "@/lib/config";
+import { UploadTemplateResponse } from "@/lib/api/services/bomUpload";
 
 interface BuilderItem {
   id: string;
@@ -64,7 +65,7 @@ const ItemsManagement = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { data: categoriesResponse, isLoading: isLoadingCategories, isFetching: isFetchingCategories } = useGetCategorysQuery();
-  const { data: bomsResponse, isLoading: isLoadingBOMs, isFetching: isFetchingBOMs } = useGetBillOfMaterialsQuery();
+  const { data: bomsResponse, isLoading: isLoadingBOMs, isFetching: isFetchingBOMs, refetch: refetchBOMs } = useGetBillOfMaterialsQuery();
   const [selectedBomId, setSelectedBomId] = useState<string>("");
   const { data: billMaterialsResponse, isLoading: isLoadingBillMaterials, isFetching: isFetchingBillMaterials, refetch: refetchBillMaterials } = useGetBillMaterialsQuery(selectedBomId, {
     skip: !selectedBomId,
@@ -185,6 +186,67 @@ const ItemsManagement = () => {
     setIsSubmitting(false);
     if (warrantyFileInputRef.current) warrantyFileInputRef.current.value = '';
     if (manualFileInputRef.current) manualFileInputRef.current.value = '';
+  };
+
+  const handleBOMUploadSuccess = async (result?: UploadTemplateResponse, bomName?: string, projectName?: string) => {
+    const refetchResult = await refetchBOMs();
+    let newBomId: string | undefined;
+    
+    if (result?.data) {
+      if (typeof result.data === 'object') {
+        if ('id' in result.data && typeof (result.data as { id: unknown }).id === 'string') {
+          newBomId = (result.data as { id: string }).id;
+        }
+        else if (Array.isArray(result.data) && result.data.length > 0) {
+          const firstItem = result.data[0];
+          if (typeof firstItem === 'object' && firstItem !== null && 'id' in firstItem) {
+            newBomId = String(firstItem.id);
+          }
+        }
+      }
+    }
+    
+    if (newBomId) {
+      setSelectedBomId(newBomId);
+    } else if (refetchResult.data?.data && refetchResult.data.data.length > 0 && bomName) {
+      type BomData = { id: string; bomName: string; projectName: string };
+      const updatedBoms = refetchResult.data.data.map((bom: BomData) => ({
+        id: bom.id,
+        name: bom.bomName,
+        project_name: bom.projectName || null,
+      }));
+      
+      const trimmedBomName = bomName?.trim() || '';
+      const trimmedProjectName = projectName?.trim() || '';
+      
+      let matchingBom = updatedBoms.find(bom => {
+        const nameMatches = (bom.name || '').trim() === trimmedBomName;
+        const projectMatches = trimmedProjectName 
+          ? ((bom.project_name || '').trim() === trimmedProjectName)
+          : true;
+        return nameMatches && projectMatches;
+      });
+      
+      if (!matchingBom && trimmedBomName) {
+        matchingBom = updatedBoms.find(bom => (bom.name || '').trim() === trimmedBomName);
+      }
+      
+      if (matchingBom) {
+        setSelectedBomId(matchingBom.id);
+      } else if (updatedBoms.length > 0) {
+        setSelectedBomId(updatedBoms[0].id);
+      }
+    } else if (refetchResult.data?.data && refetchResult.data.data.length > 0) {
+      type BomData = { id: string; bomName: string; projectName: string };
+      const updatedBoms = refetchResult.data.data.map((bom: BomData) => ({
+        id: bom.id,
+        name: bom.bomName,
+        project_name: bom.projectName || null,
+      }));
+      if (updatedBoms.length > 0) {
+        setSelectedBomId(updatedBoms[0].id);
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -717,17 +779,12 @@ const ItemsManagement = () => {
             <p className="text-muted-foreground mt-1">Manage your master list of items for homeowner registrations</p>
           </div>
           <div className="flex gap-2">
-            <BOMUpload onSuccess={() => {
-              // Items will automatically refetch when selectedBomId changes or cache is invalidated
-            }} />
-            <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
-              <DialogTrigger asChild>
-                <Button onClick={resetForm}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Item
-                </Button>
-              </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <BOMUpload onSuccess={handleBOMUploadSuccess} />
+          </div>
+        </div>
+
+        <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingItem ? 'Edit Item' : 'Add New Item'}</DialogTitle>
                 <DialogDescription>
@@ -1033,9 +1090,6 @@ const ItemsManagement = () => {
                 </div>
               </form>
             </DialogContent>
-          </Dialog>
-          </div>
-        </div>
 
         {boms.length === 0 ? (
           <Card>
@@ -1047,32 +1101,40 @@ const ItemsManagement = () => {
           </Card>
         ) : (
           <>
-            <div className="mb-6">
-              <Label htmlFor="bomSelect">Select Bill of Materials</Label>
-              {(isLoadingBOMs || isFetchingBOMs) ? (
-                <div className="w-full max-w-md">
-                  <Skeleton className="h-10 w-full" />
-                </div>
-              ) : (
-                <Select 
-                  value={selectedBomId} 
-                  onValueChange={(value) => {
-                    setSelectedBomId(value);
-                  }}
-                  disabled={isLoadingBOMs || isFetchingBOMs}
-                >
-                  <SelectTrigger className="w-full max-w-md">
-                    <SelectValue placeholder="Select a Bill of Materials" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {boms.map((bom) => (
-                      <SelectItem key={bom.id} value={bom.id}>
-                        {bom.name} {bom.project_name && `- ${bom.project_name}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+            <div className="mb-6 flex items-end gap-4">
+              <div className="flex-1 max-w-md">
+                <Label htmlFor="bomSelect">Select Bill of Materials</Label>
+                {(isLoadingBOMs || isFetchingBOMs) ? (
+                  <div className="w-full mt-2">
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ) : (
+                  <Select 
+                    value={selectedBomId} 
+                    onValueChange={(value) => {
+                      setSelectedBomId(value);
+                    }}
+                    disabled={isLoadingBOMs || isFetchingBOMs}
+                  >
+                    <SelectTrigger className="w-full mt-2">
+                      <SelectValue placeholder="Select a Bill of Materials" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {boms.map((bom) => (
+                        <SelectItem key={bom.id} value={bom.id}>
+                          {bom.name} {bom.project_name && `- ${bom.project_name}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <DialogTrigger asChild>
+                <Button onClick={resetForm}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Item
+                </Button>
+              </DialogTrigger>
             </div>
 
             {(isLoadingBillMaterials || isFetchingBillMaterials) ? (
@@ -1188,6 +1250,7 @@ const ItemsManagement = () => {
             )}
           </>
         )}
+        </Dialog>
       </main>
     </div>
   );

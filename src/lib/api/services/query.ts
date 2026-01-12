@@ -1,4 +1,6 @@
 import { api } from '@/store/api/apiSlice';
+import { getApiBaseUrl } from '@/lib/config';
+import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 
 export interface QueryFile {
   id: string;
@@ -117,6 +119,9 @@ export interface UpdateQueryRequest {
   id: string;
   statusId?: string;
   vendorId?: string;
+  priorityLevel?: string;
+  dueDate?: string;
+  userId?: string;
   queryFileMapDto?: QueryFileMapDto[];
 }
 
@@ -171,32 +176,98 @@ export const queryApi = api.injectEndpoints({
       UpdateQueryResponse,
       UpdateQueryRequest
     >({
-      query: (data) => {
-        const formData = new FormData();
-        
-        // Add required fields: id, statusId, vendorId
-        formData.append('id', data.id);
-        
-        if (data.statusId) {
-          formData.append('statusId', data.statusId);
-        }
-        if (data.vendorId) {
-          formData.append('vendorId', data.vendorId);
-        }
-        
-        // Add file data in the format queryFileMapDto[0].type and queryFileMapDto[0].files
-        if (data.queryFileMapDto && data.queryFileMapDto.length > 0) {
-          data.queryFileMapDto.forEach((fileDto, index) => {
-            formData.append(`queryFileMapDto[${index}].type`, fileDto.type);
-            formData.append(`queryFileMapDto[${index}].files`, fileDto.files);
+      queryFn: async (data, _queryApi, _extraOptions, baseQuery) => {
+        try {
+          const formData = new FormData();
+          
+          // Add required fields: id, statusId, vendorId, priorityLevel, dueDate, userId
+          formData.append('id', data.id);
+          
+          if (data.statusId) {
+            formData.append('statusId', data.statusId);
+          }
+          if (data.vendorId) {
+            formData.append('vendorId', data.vendorId);
+          }
+          if (data.priorityLevel) {
+            formData.append('priorityLevel', data.priorityLevel);
+          }
+          if (data.dueDate) {
+            formData.append('dueDate', data.dueDate);
+          }
+          // Always append userId if provided (even if empty string to ensure it's sent)
+          if (data.userId !== undefined && data.userId !== null) {
+            const userIdValue = String(data.userId);
+            formData.append('userId', userIdValue);
+            console.log('Appending userId to FormData:', userIdValue);
+          } else {
+            console.warn('userId is undefined or null, not appending to FormData. Data received:', { 
+              id: data.id, 
+              statusId: data.statusId, 
+              vendorId: data.vendorId,
+              priorityLevel: data.priorityLevel,
+              dueDate: data.dueDate,
+              userId: data.userId 
+            });
+          }
+          
+          // Add file data in the format queryFileMapDto[0].type and queryFileMapDto[0].files
+          if (data.queryFileMapDto && data.queryFileMapDto.length > 0) {
+            data.queryFileMapDto.forEach((fileDto, index) => {
+              formData.append(`queryFileMapDto[${index}].type`, fileDto.type);
+              formData.append(`queryFileMapDto[${index}].files`, fileDto.files);
+            });
+          }
+
+          // Get JWT token from localStorage
+          const userData = localStorage.getItem('userData');
+          let authToken = '';
+          if (userData) {
+            try {
+              const parsedData = JSON.parse(userData);
+              if (parsedData.jwt) {
+                authToken = parsedData.jwt;
+              }
+            } catch (error) {
+              console.warn('Failed to parse userData:', error);
+            }
+          }
+
+          const apiBaseUrl = getApiBaseUrl();
+          const url = import.meta.env.DEV
+            ? '/api/query'
+            : `${apiBaseUrl}/api/query`;
+
+          // Make the request with FormData
+          const result = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Authorization': authToken ? `Bearer ${authToken}` : '',
+              // Don't set Content-Type - let browser set it with boundary for FormData
+            },
+            body: formData,
           });
+
+          if (!result.ok) {
+            const errorData = await result.json().catch(() => ({}));
+            return {
+              error: {
+                status: result.status,
+                data: errorData.message || `Failed to update query: ${result.statusText}`,
+              } as FetchBaseQueryError,
+            };
+          }
+
+          const response = await result.json();
+          return { data: response };
+        } catch (error) {
+          return {
+            error: {
+              status: 'FETCH_ERROR',
+              data: error instanceof Error ? error.message : 'An unknown error occurred',
+            } as FetchBaseQueryError,
+          };
         }
-        
-        return {
-          url: '/api/query',
-          method: 'POST',
-          body: formData,
-        };
       },
       invalidatesTags: ['Query'],
     }),

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageSquare, Clock, CheckCircle } from "lucide-react";
+import { MessageSquare, Clock, CheckCircle, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import { useGetStatusQuery, useGetBuilderQueriesQuery } from "@/store/api/dashboard";
 import { useLazyGetQueryByIdQuery } from "@/lib/api/services/query";
@@ -230,7 +230,7 @@ const QueriesManagement = () => {
   const statuses = statusData?.data || [];
 
   // Fetch queries from API - pass -1 for "All" status
-  const { data: queriesData, isLoading: loading, refetch } = useGetBuilderQueriesQuery(
+  const { data: queriesData, isLoading, isFetching, refetch } = useGetBuilderQueriesQuery(
     { 
       builderId: builderId || "",
       statusId: selectedStatusId === "-1" ? "-1" : selectedStatusId || undefined,
@@ -240,6 +240,8 @@ const QueriesManagement = () => {
       refetchOnMountOrArgChange: true,
     }
   );
+
+  const loading = isLoading || isFetching;
 
   // Transform queries data
   const queries: Query[] = selectedStatusId 
@@ -404,19 +406,6 @@ const QueriesManagement = () => {
     </Card>
   );
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-center h-64">
-            <div className="text-lg">Loading...</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -452,7 +441,16 @@ const QueriesManagement = () => {
           </div>
 
           <TabsContent value="open">
-            {displayQueries.length === 0 ? (
+            {loading ? (
+              <Card>
+                <CardContent className="py-12">
+                  <div className="flex flex-col items-center justify-center space-y-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <p className="text-muted-foreground">Loading queries...</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : displayQueries.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center">
                   <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />

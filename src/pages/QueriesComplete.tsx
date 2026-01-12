@@ -204,9 +204,96 @@ const QueriesComplete = () => {
     }
   };
 
-  const handleAssignCase = () => {
-    // Handle case assignment logic here
-    console.log("Assigning case to vendor:", selectedVendor, "Priority:", priorityLevel);
+  const handleAssignCase = async () => {
+    if (!queryData) {
+      toast({
+        title: "Error",
+        description: "No query data available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Get userId from localStorage - check multiple possible locations
+      let userId: string | undefined;
+      
+      // First try from user object from useAuth
+      if (user && typeof user === 'object' && 'userId' in user) {
+        userId = String((user as { userId: unknown }).userId);
+      }
+      
+      // If not found, try localStorage
+      if (!userId) {
+        try {
+          const userData = localStorage.getItem('userData');
+          if (userData) {
+            const parsedData = JSON.parse(userData);
+            // Check multiple possible locations for userId
+            userId = parsedData.userId 
+              || parsedData.userInfo?.userId 
+              || (parsedData.userInfo && 'userId' in parsedData.userInfo ? parsedData.userInfo.userId : null)
+              || parsedData.userInfo?.id
+              || parsedData.id;
+            
+            // Convert to string if it's a number
+            if (userId !== undefined && userId !== null) {
+              userId = String(userId);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to get userId from localStorage:', error);
+        }
+      }
+
+      // Format dueDate as date only (YYYY-MM-DD) without time
+      const dueDateString = dueDate ? dueDate.toISOString().split('T')[0] : undefined;
+      
+      // Convert priorityLevel to uppercase as expected by API
+      const priorityLevelUpper = priorityLevel.toUpperCase();
+      
+      // Call the update query API with id, statusId, vendorId, vendorNumber, priorityLevel, dueDate, and userId
+      // Use vendorPhone value as vendorNumber in the payload
+      const result = await updateQuery({
+        id: queryData.id,
+        statusId: queryData.status?.id,
+        vendorId: selectedVendor?.trim() || undefined,
+        vendorNumber: vendorPhone?.trim() || undefined,
+        priorityLevel: priorityLevelUpper,
+        dueDate: dueDateString,
+        userId: userId,
+      }).unwrap();
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Query Updated Successfully",
+        });
+        
+        // Refetch query data to get updated information
+        try {
+          const refreshed = await getQueryById({ id: queryData.id }).unwrap();
+          if (refreshed.success && refreshed.data) {
+            setQueryData(refreshed.data);
+          }
+        } catch (refetchError) {
+          console.error("Error refetching query:", refetchError);
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to update query",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating query:", error);
+      toast({
+        title: "Error",
+        description: "An error occurred while updating the query",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleAddComment = async () => {
@@ -720,8 +807,12 @@ const QueriesComplete = () => {
                   </Popover>
                 </div>
 
-                <Button className="w-full" onClick={handleAssignCase} disabled={isStatusDone}>
-                  Assign Case
+                <Button 
+                  className="w-full" 
+                  onClick={handleAssignCase} 
+                  disabled={isStatusDone || isUpdatingQuery}
+                >
+                  {isUpdatingQuery ? "Assigning..." : "Assign Case"}
                 </Button>
               </CardContent>
             </Card>

@@ -119,6 +119,7 @@ export interface UpdateQueryRequest {
   id: string;
   statusId?: string;
   vendorId?: string;
+  vendorNumber?: string;
   priorityLevel?: string;
   dueDate?: string;
   userId?: string;
@@ -188,6 +189,9 @@ export const queryApi = api.injectEndpoints({
           }
           if (data.vendorId) {
             formData.append('vendorId', data.vendorId);
+          }
+          if (data.vendorNumber) {
+            formData.append('vendorNumber', data.vendorNumber);
           }
           if (data.priorityLevel) {
             formData.append('priorityLevel', data.priorityLevel);

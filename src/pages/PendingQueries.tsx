@@ -311,11 +311,13 @@ const PendingQueries = () => {
       // Convert priorityLevel to uppercase as expected by API
       const priorityLevelUpper = priorityLevel.toUpperCase();
       
-      // Call the update query API with id, statusId, vendorId, priorityLevel, dueDate, and userId
+      // Call the update query API with id, statusId, vendorId, vendorNumber, priorityLevel, dueDate, and userId
+      // Use vendorPhone value as vendorNumber in the payload
       const result = await updateQuery({
         id: queryData.id,
         statusId: assignedToVendorStatusId,
         vendorId: selectedVendor?.trim() || undefined,
+        vendorNumber: vendorPhone?.trim() || undefined,
         priorityLevel: priorityLevelUpper,
         dueDate: dueDateString,
         userId: userId,

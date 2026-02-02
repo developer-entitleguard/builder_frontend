@@ -105,20 +105,23 @@ const Auth = () => {
         password: result.data.password,
       }).unwrap();
 
-      // API returns { success, message, data: { jwt, userInfo, ... } }
-      if (response?.data?.jwt && response?.data?.userInfo) {
+      // API returns { success, message, data: { jwt, userInfo, builderOrganization?, ... } }
+      if (response?.data?.jwt) {
+        const userInfo = response.data.userInfo ?? {};
+        const builderOrg = response.data.userInfo?.builderOrganization ?? response.data.builderOrganization;
         localStorage.setItem(
           'userData',
           JSON.stringify({
             jwt: response.data.jwt,
-            ...response.data.userInfo,
+            ...userInfo,
+            builderOrganization: builderOrg ?? userInfo.builderOrganization,
           })
         );
         toast({
           title: "Welcome back!",
           description: response.message ?? "You have been signed in successfully."
         });
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       } else {
         toast({
           title: "Sign in failed",

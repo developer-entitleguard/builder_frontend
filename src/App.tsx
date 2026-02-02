@@ -42,12 +42,16 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   const builderAuth = hasBuilderAuth();
 
-  if (loading && !builderAuth) {
+  // If builder JWT is present, allow through immediately (don't wait for Supabase loading)
+  if (builderAuth) {
+    return <OrganizationGate>{children}</OrganizationGate>;
+  }
+
+  if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>;
   }
 
-  // Allow access with Supabase user OR builder JWT in localStorage
-  if (!user && !builderAuth) {
+  if (!user) {
     return <Navigate to="/auth" replace />;
   }
 

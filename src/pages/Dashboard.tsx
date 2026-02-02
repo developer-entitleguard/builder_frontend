@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
@@ -51,6 +51,18 @@ interface Project {
   name: string;
 }
 
+// Builder login: allow dashboard when JWT is in localStorage (no Supabase user required)
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!(parsed?.jwt);
+  } catch {
+    return false;
+  }
+};
+
 const Dashboard = () => {
   const { user, signOut } = useAuth();
   const { organization, loading: orgLoading } = useOrganization();
@@ -64,31 +76,22 @@ const Dashboard = () => {
   const [selectedRegistrations, setSelectedRegistrations] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/auth');
-      return;
-    }
-    if (organization) {
-      fetchRegistrations();
-    }
-  }, [user, organization, navigate]);
+  const isAuthenticated = !!user || hasBuilderAuth();
 
-  const fetchRegistrations = async () => {
-    if (!user || !organization) return;
-    
+  const fetchRegistrations = useCallback(async () => {
+    if (!organization) return;
+
     try {
-      // Fetch registrations and projects in parallel
       const [registrationsResult, projectsResult] = await Promise.all([
         supabase
           .from('homeowner_registrations')
           .select('*')
           .eq('organization_id', organization.id)
           .order('created_at', { ascending: false }),
-        (supabase as any)
+        supabase
           .from('projects')
           .select('id, name')
-          .eq('organization_id', organization.id)
+          .eq('organization_id', organization.id),
       ]);
 
       if (registrationsResult.error) {
@@ -113,8 +116,17 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [organization, toast]);
 
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/auth');
+      return;
+    }
+    if (organization) {
+      fetchRegistrations();
+    }
+  }, [isAuthenticated, organization, navigate, fetchRegistrations]);
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {

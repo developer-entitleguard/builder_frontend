@@ -93,18 +93,41 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
       const raw = localStorage.getItem("userData");
       if (!raw) return false;
       const data = JSON.parse(raw);
-      const org = data?.builderOrganization ?? data?.userInfo?.builderOrganization;
-      if (!org?.id) return false;
-      const mapped: Organization = {
-        id: org.id,
-        name: org.name ?? "",
-        address: org.address ?? "",
-        contact_email: org.email ?? org.contact_email ?? "",
-        contact_phone: org.contact ?? org.contact_phone ?? "",
-        abn: org.abn ?? null,
-        description: org.description ?? null,
-      };
-      const role = (data?.role ?? data?.userInfo?.role ?? "user") as "admin" | "user" | "superadmin";
+      if (!data?.jwt) return false;
+      // Support camelCase and snake_case from API
+      const org =
+        data.builderOrganization ??
+        data.builder_organization ??
+        data.userInfo?.builderOrganization ??
+        data.user_info?.builder_organization;
+      const role = (data.role ?? data.userInfo?.role ?? data.user_info?.role ?? "user") as
+        | "admin"
+        | "user"
+        | "superadmin";
+      let mapped: Organization;
+      if (org?.id) {
+        mapped = {
+          id: org.id,
+          name: org.name ?? "",
+          address: org.address ?? "",
+          contact_email: org.email ?? org.contact_email ?? "",
+          contact_phone: org.contact ?? org.contact_phone ?? "",
+          abn: org.abn ?? null,
+          description: org.description ?? null,
+        };
+      } else {
+        // JWT present but no org: use placeholder so dashboard still shows
+        const userId = data.id ?? data.userInfo?.id ?? "builder-user";
+        mapped = {
+          id: userId,
+          name: data.email ? `${data.email} (Builder)` : "My Organization",
+          address: "",
+          contact_email: data.email ?? "",
+          contact_phone: data.contact ?? "",
+          abn: null,
+          description: null,
+        };
+      }
       setOrganizations([{ organization: mapped, role }]);
       setCurrentOrganizationState(mapped);
       setCurrentRole(role);

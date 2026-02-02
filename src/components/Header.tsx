@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,17 +8,39 @@ import { RegistrationTypeDialog } from "@/components/RegistrationTypeDialog";
 import OrganizationSelector from "@/components/OrganizationSelector";
 import { Building2, LogOut, LayoutDashboard, FolderKanban, Shield, Eye } from "lucide-react";
 
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!(parsed?.jwt);
+  } catch {
+    return false;
+  }
+};
+
 const Header = () => {
   const { user, signOut } = useAuth();
   const { isAdmin, isSuperAdmin, currentOrganization, hasMultipleOrgs, impersonatedOrganization, isImpersonating, setImpersonatedOrganization } = useOrganization();
   const location = useLocation();
+  const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // For superadmins, only show org-specific nav when impersonating
+  const isAuthenticated = !!user || hasBuilderAuth();
+
   const showOrgNavItems = !isSuperAdmin || isImpersonating;
 
   const handleStopImpersonation = () => {
     setImpersonatedOrganization(null);
+  };
+
+  const handleSignOut = () => {
+    if (hasBuilderAuth()) {
+      localStorage.removeItem("userData");
+      navigate("/auth", { replace: true });
+    } else {
+      signOut();
+    }
   };
 
   return (
@@ -54,7 +76,7 @@ const Header = () => {
             </Link>
           </div>
           
-          {user && (
+          {isAuthenticated && (
             <div className="flex items-center space-x-4">
               {hasMultipleOrgs && <OrganizationSelector />}
               
@@ -141,7 +163,7 @@ const Header = () => {
                 )}
               </nav>
               
-              <Button variant="outline" size="sm" onClick={signOut}>
+              <Button variant="outline" size="sm" onClick={handleSignOut}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Sign Out
               </Button>

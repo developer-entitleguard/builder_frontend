@@ -87,17 +87,50 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
   const isImpersonating = isSuperAdmin && impersonatedOrganization !== null;
   const effectiveIsAdmin = isImpersonating || currentRole === 'admin';
 
+  // Builder login: when no Supabase user but userData (JWT) in localStorage, use userInfo.builderOrganization
+  const initFromBuilderAuth = useCallback(() => {
+    try {
+      const raw = localStorage.getItem("userData");
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      const org = data?.builderOrganization ?? data?.userInfo?.builderOrganization;
+      if (!org?.id) return false;
+      const mapped: Organization = {
+        id: org.id,
+        name: org.name ?? "",
+        address: org.address ?? "",
+        contact_email: org.email ?? org.contact_email ?? "",
+        contact_phone: org.contact ?? org.contact_phone ?? "",
+        abn: org.abn ?? null,
+        description: org.description ?? null,
+      };
+      const role = (data?.role ?? data?.userInfo?.role ?? "user") as "admin" | "user" | "superadmin";
+      setOrganizations([{ organization: mapped, role }]);
+      setCurrentOrganizationState(mapped);
+      setCurrentRole(role);
+      setImpersonatedOrgState(null);
+      localStorage.setItem(SELECTED_ORG_KEY, mapped.id);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     if (user) {
       fetchUserOrganizations();
     } else {
-      setOrganizations([]);
-      setCurrentOrganizationState(null);
-      setCurrentRole(null);
-      setImpersonatedOrgState(null);
+      setLoading(true);
+      const fromBuilder = initFromBuilderAuth();
+      if (!fromBuilder) {
+        setOrganizations([]);
+        setCurrentOrganizationState(null);
+        setCurrentRole(null);
+        setImpersonatedOrgState(null);
+      }
       setLoading(false);
     }
-  }, [user]);
+  }, [user, initFromBuilderAuth]);
 
   // Auto-select organization when organizations load
   useEffect(() => {

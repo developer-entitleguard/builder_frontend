@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useSignInMutation, useSendVerifyMailMutation } from '@/store/authApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,7 +58,9 @@ const Auth = () => {
     confirmPassword: ''
   });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  const { signIn, resetPassword, updatePassword } = useAuth();
+  const { updatePassword } = useAuth();
+  const [signInMutation, { isLoading: isSigningIn }] = useSignInMutation();
+  const [sendVerifyMailMutation, { isLoading: isSendingResetLink }] = useSendVerifyMailMutation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
@@ -96,32 +99,45 @@ const Auth = () => {
       return;
     }
 
-    setIsLoading(true);
-
     try {
-      const { error } = await signIn(result.data.email, result.data.password);
-      
-      if (error) {
-        toast({
-          title: "Sign in failed",
-          description: error.message,
-          variant: "destructive"
-        });
-      } else {
+      const response = await signInMutation({
+        email: result.data.email,
+        password: result.data.password,
+      }).unwrap();
+
+      // API returns { success, message, data: { jwt, userInfo, ... } }
+      if (response?.data?.jwt && response?.data?.userInfo) {
+        localStorage.setItem(
+          'userData',
+          JSON.stringify({
+            jwt: response.data.jwt,
+            ...response.data.userInfo,
+          })
+        );
         toast({
           title: "Welcome back!",
-          description: "You have been signed in successfully."
+          description: response.message ?? "You have been signed in successfully."
         });
         navigate('/dashboard');
+      } else {
+        toast({
+          title: "Sign in failed",
+          description: response?.message ?? "Invalid response from server.",
+          variant: "destructive"
+        });
       }
-    } catch (error) {
+    } catch (error: unknown) {
+      const message =
+        error && typeof error === 'object' && 'data' in error
+          ? (error as { data?: { message?: string } }).data?.message
+          : error instanceof Error
+            ? error.message
+            : "Sign in failed. Please check your email and password.";
       toast({
         title: "Sign in failed",
-        description: "An unexpected error occurred.",
+        description: String(message),
         variant: "destructive"
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -129,7 +145,6 @@ const Auth = () => {
     e.preventDefault();
     setValidationErrors({});
 
-    // Validate input
     const result = forgotPasswordSchema.safeParse({ email: forgotPasswordEmail });
     if (!result.success) {
       setValidationErrors({ forgotEmail: result.error.errors[0]?.message || 'Invalid email' });
@@ -141,33 +156,26 @@ const Auth = () => {
       return;
     }
 
-    setIsLoading(true);
-
     try {
-      const { error } = await resetPassword(result.data.email);
-      
-      if (error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Reset link sent",
-          description: "Check your email for password reset instructions."
-        });
-        setShowForgotPassword(false);
-        setForgotPasswordEmail('');
-      }
-    } catch (error) {
+      await sendVerifyMailMutation({ email: result.data.email }).unwrap();
+      toast({
+        title: "Reset link sent",
+        description: "Check your email for password reset instructions."
+      });
+      setShowForgotPassword(false);
+      setForgotPasswordEmail('');
+    } catch (error: unknown) {
+      const message =
+        error && typeof error === 'object' && 'data' in error
+          ? (error as { data?: { message?: string } }).data?.message
+          : error instanceof Error
+            ? error.message
+            : "Failed to send reset link.";
       toast({
         title: "Error",
-        description: "An unexpected error occurred.",
+        description: String(message),
         variant: "destructive"
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -293,8 +301,8 @@ const Auth = () => {
                         />
                       </div>
                     </div>
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                      {isLoading ? "Sending..." : "Send Reset Link"}
+                    <Button type="submit" className="w-full" disabled={isSendingResetLink}>
+                      {isSendingResetLink ? "Sending..." : "Send Reset Link"}
                     </Button>
                     <Button 
                       type="button" 
@@ -390,8 +398,8 @@ const Auth = () => {
                       <p className="text-sm text-destructive">{validationErrors.password}</p>
                     )}
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Signing in..." : "Sign In"}
+                  <Button type="submit" className="w-full" disabled={isSigningIn}>
+                    {isSigningIn ? "Signing in..." : "Sign In"}
                   </Button>
                   <div className="text-center">
                     <Button 

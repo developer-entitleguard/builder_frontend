@@ -26,22 +26,31 @@ import ApprovalResponse from "./pages/ApprovalResponse";
 
 const queryClient = new QueryClient();
 
+// Consider user authenticated if Supabase session OR builder login (userData.jwt in localStorage)
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!(parsed?.jwt);
+  } catch {
+    return false;
+  }
+};
+
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  
-  console.log('ProtectedRoute - Auth state:', { user: !!user, loading });
-  
-  if (loading) {
-    console.log('ProtectedRoute - Showing loading');
+  const builderAuth = hasBuilderAuth();
+
+  if (loading && !builderAuth) {
     return <div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>;
   }
-  
-  if (!user) {
-    console.log('ProtectedRoute - No user, redirecting to auth');
+
+  // Allow access with Supabase user OR builder JWT in localStorage
+  if (!user && !builderAuth) {
     return <Navigate to="/auth" replace />;
   }
-  
-  console.log('ProtectedRoute - User authenticated, rendering with org gate');
+
   return <OrganizationGate>{children}</OrganizationGate>;
 };
 

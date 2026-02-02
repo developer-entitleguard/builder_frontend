@@ -1,0 +1,236 @@
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import Header from "@/components/Header";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useProjects, Project, PropertyType, ProjectStatus } from "@/hooks/useProjects";
+import { useActivities } from "@/hooks/useActivities";
+import { useApprovals } from "@/hooks/useApprovals";
+import { useAuth } from "@/hooks/useAuth";
+import { ActivityList } from "@/components/projects/ActivityList";
+import { ApprovalsList } from "@/components/projects/ApprovalsList";
+import { ProjectRegistrations } from "@/components/projects/ProjectRegistrations";
+import { ProjectPricing } from "@/components/projects/ProjectPricing";
+import { EditProjectDialog } from "@/components/projects/EditProjectDialog";
+import { 
+  ArrowLeft,
+  Home,
+  Building2,
+  Building,
+  LayoutGrid,
+  Hammer,
+  PlusCircle,
+  Settings,
+  MapPin,
+  Edit,
+  DollarSign
+} from "lucide-react";
+
+const propertyTypeConfig: Record<PropertyType, { icon: React.ElementType; color: string; label: string }> = {
+  house: { icon: Home, color: "bg-blue-100 text-blue-700", label: "House" },
+  townhouse: { icon: Building2, color: "bg-green-100 text-green-700", label: "Townhouse" },
+  apartment: { icon: Building, color: "bg-purple-100 text-purple-700", label: "Apartment" },
+  duplex: { icon: LayoutGrid, color: "bg-orange-100 text-orange-700", label: "Duplex" },
+  renovation: { icon: Hammer, color: "bg-yellow-100 text-yellow-700", label: "Renovation" },
+  extension: { icon: PlusCircle, color: "bg-teal-100 text-teal-700", label: "Extension" },
+  custom: { icon: Settings, color: "bg-gray-100 text-gray-700", label: "Custom" }
+};
+
+const statusConfig: Record<ProjectStatus, { color: string; label: string }> = {
+  planning: { color: "bg-slate-100 text-slate-700", label: "Planning" },
+  in_progress: { color: "bg-blue-100 text-blue-700", label: "In Progress" },
+  on_hold: { color: "bg-yellow-100 text-yellow-700", label: "On Hold" },
+  completed: { color: "bg-green-100 text-green-700", label: "Completed" },
+  cancelled: { color: "bg-red-100 text-red-700", label: "Cancelled" }
+};
+
+const ProjectDetail = () => {
+  const { id } = useParams<{ id: string }>();
+  const { user, loading: authLoading } = useAuth();
+  const { fetchProject, updateProject } = useProjects();
+  const { activities, loading: activitiesLoading, fetchActivities, createActivity, updateActivity, deleteActivity, fetchUpdates, postUpdate } = useActivities(id);
+  const { approvals, loading: approvalsLoading, fetchApprovals, requestApproval, respondToApproval } = useApprovals(id);
+  const navigate = useNavigate();
+
+  const [project, setProject] = useState<Project | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [user, authLoading, navigate]);
+
+  const loadProject = async () => {
+    if (id && user) {
+      setLoading(true);
+      const data = await fetchProject(id);
+      if (data) {
+        setProject(data);
+        fetchActivities();
+        fetchApprovals();
+      } else {
+        navigate('/projects');
+      }
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProject();
+  }, [id, user]);
+
+  const handleSaveProject = async (projectId: string, data: any): Promise<boolean> => {
+    const success = await updateProject(projectId, data);
+    if (success) {
+      // Refresh the project data
+      const updatedProject = await fetchProject(projectId);
+      if (updatedProject) {
+        setProject(updatedProject);
+      }
+    }
+    return success;
+  };
+
+  const handleToggleHomeownerVisibility = async (visible: boolean) => {
+    if (!project) return;
+    const success = await updateProject(project.id, { activities_visible_to_homeowner: visible });
+    if (success) {
+      setProject({ ...project, activities_visible_to_homeowner: visible });
+    }
+  };
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!project) {
+    return null;
+  }
+
+  const typeConfig = propertyTypeConfig[project.property_type];
+  const TypeIcon = typeConfig.icon;
+  const status = statusConfig[project.status];
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      
+      {/* Sticky Project Header */}
+      <div className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center mb-3">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/projects')} className="mr-3">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Projects
+            </Button>
+          </div>
+          
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-4">
+              <div className={`p-3 rounded-lg ${typeConfig.color}`}>
+                <TypeIcon className="h-6 w-6" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
+                <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+                  <span className="flex items-center">
+                    <MapPin className="h-4 w-4 mr-1" />
+                    {project.address}, {project.city} {project.state}
+                  </span>
+                  <Badge variant="outline">{typeConfig.label}</Badge>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <Badge className={status.color}>{status.label}</Badge>
+              <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content with Tabs */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <Tabs defaultValue="activities" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="activities">
+              Activities ({activities.length})
+            </TabsTrigger>
+            <TabsTrigger value="registrations">
+              Registrations
+            </TabsTrigger>
+            <TabsTrigger value="approvals">
+              Approvals ({approvals.length})
+            </TabsTrigger>
+            <TabsTrigger value="pricing" className="flex items-center gap-1">
+              <DollarSign className="h-4 w-4" />
+              Pricing
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="activities">
+            <ActivityList
+              activities={activities}
+              loading={activitiesLoading}
+              projectId={id!}
+              approvals={approvals}
+              activitiesVisibleToHomeowner={project.activities_visible_to_homeowner}
+              onCreateActivity={createActivity}
+              onUpdateActivity={updateActivity}
+              onDeleteActivity={deleteActivity}
+              onFetchUpdates={fetchUpdates}
+              onPostUpdate={postUpdate}
+              onRequestApproval={requestApproval}
+              onToggleHomeownerVisibility={handleToggleHomeownerVisibility}
+              onRefresh={fetchActivities}
+            />
+          </TabsContent>
+          
+          <TabsContent value="registrations">
+            <ProjectRegistrations projectId={id!} />
+          </TabsContent>
+          
+          <TabsContent value="approvals">
+            <ApprovalsList
+              approvals={approvals}
+              activities={activities}
+              loading={approvalsLoading}
+              projectId={id!}
+            />
+          </TabsContent>
+          
+          <TabsContent value="pricing">
+            <ProjectPricing
+              project={project}
+              activities={activities}
+            />
+          </TabsContent>
+        </Tabs>
+      </main>
+
+      {/* Edit Project Dialog */}
+      <EditProjectDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        project={project}
+        onSave={handleSaveProject}
+      />
+    </div>
+  );
+};
+
+export default ProjectDetail;

@@ -283,70 +283,106 @@ const Dashboard = () => {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/items')}>
+          <Card
+            className="hover:shadow-md transition-shadow cursor-pointer h-full"
+            onClick={() => navigate("/items")}
+          >
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
+              <div className="flex flex-col h-full">
+                <div className="flex flex-col items-center text-center space-y-2">
                   <Package className="h-8 w-8 text-blue-500" />
-                  <div className="ml-4">
-                    <h3 className="font-semibold text-foreground">Manage Items</h3>
-                    <p className="text-sm text-muted-foreground">Add and organize master item list</p>
+                  <h3 className="font-semibold text-foreground">Manage Items</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Add and organize master item list
+                  </p>
+                  <div className="flex justify-end mb-4">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="bg-primary text-primary-foreground"
+                    >
+                      View
+                    </Button>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm">
-                  View
-                </Button>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/queries')}>
+          <Card
+            className="hover:shadow-md transition-shadow cursor-pointer h-full"
+            onClick={() => navigate("/queries")}
+          >
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
+              <div className="flex flex-col h-full">
+                <div className="flex flex-col items-center text-center space-y-2">
                   <MessageSquare className="h-8 w-8 text-green-500" />
-                  <div className="ml-4">
-                    <h3 className="font-semibold text-foreground">Homeowner Queries</h3>
-                    <p className="text-sm text-muted-foreground">Respond to homeowner questions</p>
+                  <h3 className="font-semibold text-foreground">Homeowner Queries</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Respond to homeowner questions
+                  </p>
+                  <div className="flex justify-end mb-4">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="bg-primary text-primary-foreground"
+                    >
+                      View
+                    </Button>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm">
-                  View
-                </Button>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/admin')}>
+          <Card
+            className="hover:shadow-md transition-shadow cursor-pointer h-full"
+            onClick={() => navigate("/admin")}
+          >
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
+              <div className="flex flex-col h-full">
+                <div className="flex flex-col items-center text-center space-y-2">
                   <Settings className="h-8 w-8 text-orange-500" />
-                  <div className="ml-4">
-                    <h3 className="font-semibold text-foreground">Organization Admin</h3>
-                    <p className="text-sm text-muted-foreground">Manage org details and users</p>
+                  <h3 className="font-semibold text-foreground">Organization Admin</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Manage org details and users
+                  </p>
+                  <div className="flex justify-end mb-4">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="bg-primary text-primary-foreground"
+                    >
+                      Manage
+                    </Button>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm">
-                  Manage
-                </Button>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setDialogOpen(true)}>
+          <Card
+            className="hover:shadow-md transition-shadow cursor-pointer h-full"
+            onClick={() => setDialogOpen(true)}
+          >
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
+              <div className="flex flex-col h-full">
+                <div className="flex flex-col items-center text-center space-y-2">
                   <Plus className="h-8 w-8 text-purple-500" />
-                  <div className="ml-4">
-                    <h3 className="font-semibold text-foreground">New Registration</h3>
-                    <p className="text-sm text-muted-foreground">Start homeowner onboarding</p>
+                  <h3 className="font-semibold text-foreground">New Registration</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Start homeowner onboarding
+                  </p>
+                  <div className="flex justify-end mb-4">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="bg-primary text-primary-foreground"
+                    >
+                      Start
+                    </Button>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm">
-                  Start
-                </Button>
               </div>
             </CardContent>
           </Card>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
 import { supabase } from '@/integrations/supabase/client';
@@ -283,35 +283,43 @@ const Dashboard = () => {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card
-            className="hover:shadow-md transition-shadow cursor-pointer h-full"
-            onClick={() => navigate("/items")}
-          >
-            <CardContent className="p-6">
-              <div className="flex flex-col h-full">
-                <div className="flex flex-col items-center text-center space-y-2">
-                  <Package className="h-8 w-8 text-blue-500" />
-                  <h3 className="font-semibold text-foreground">Manage Items</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Add and organize master item list
-                  </p>
-                  <div className="flex justify-end mb-4">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="bg-primary text-primary-foreground"
-                    >
-                      View
-                    </Button>
+          <Link to="/items" className="block h-full">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+              <CardContent className="p-6">
+                <div className="flex flex-col h-full">
+                  <div className="flex flex-col items-center text-center space-y-2">
+                    <Package className="h-8 w-8 text-blue-500" />
+                    <h3 className="font-semibold text-foreground">Manage Items</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Add and organize master item list
+                    </p>
+                    <div className="flex justify-end mb-4">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="bg-primary text-primary-foreground"
+                      >
+                        View
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </Link>
 
           <Card
             className="hover:shadow-md transition-shadow cursor-pointer h-full"
             onClick={() => navigate("/queries")}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                navigate("/queries");
+              }
+            }}
           >
             <CardContent className="p-6">
               <div className="flex flex-col h-full">
@@ -323,9 +331,15 @@ const Dashboard = () => {
                   </p>
                   <div className="flex justify-end mb-4">
                     <Button
+                      type="button"
                       variant="ghost"
                       size="sm"
                       className="bg-primary text-primary-foreground"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        navigate("/queries");
+                      }}
                     >
                       View
                     </Button>
@@ -338,6 +352,14 @@ const Dashboard = () => {
           <Card
             className="hover:shadow-md transition-shadow cursor-pointer h-full"
             onClick={() => navigate("/admin")}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                navigate("/admin");
+              }
+            }}
           >
             <CardContent className="p-6">
               <div className="flex flex-col h-full">
@@ -349,9 +371,15 @@ const Dashboard = () => {
                   </p>
                   <div className="flex justify-end mb-4">
                     <Button
+                      type="button"
                       variant="ghost"
                       size="sm"
                       className="bg-primary text-primary-foreground"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        navigate("/admin");
+                      }}
                     >
                       Manage
                     </Button>

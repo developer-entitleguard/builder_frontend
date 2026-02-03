@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,8 +52,32 @@ const categories = [
   "Other"
 ];
 
+// Builder login: allow access when JWT in localStorage (e.g. role: "admin") without Supabase user
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!(parsed?.jwt);
+  } catch {
+    return false;
+  }
+};
+
+// Current user id: Supabase user.id or builder id from localStorage
+const getCurrentUserId = (supabaseUserId: string | undefined): string | null => {
+  if (supabaseUserId) return supabaseUserId;
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return null;
+    const data = JSON.parse(userData);
+    return data?.id ?? data?.userInfo?.id ?? data?.user_info?.id ?? null;
+  } catch {
+    return null;
+  }
+};
+
 const ItemsManagement = () => {
-  console.log('ItemsManagement - Component initialized');
   const { user } = useAuth();
   const { organization, loading: orgLoading } = useOrganization();
   const { toast } = useToast();
@@ -79,20 +103,10 @@ const ItemsManagement = () => {
     manual_url: ""
   });
 
-  useEffect(() => {
-    console.log('ItemsManagement - user/organization changed:', { user: !!user, organization: !!organization, orgLoading });
-    if (user) {
-      fetchBOMs();
-      fetchItems();
-    } else if (!user) {
-      console.log('ItemsManagement - No user, setting loading to false');
-      setLoading(false);
-    }
-  }, [user, organization, orgLoading, selectedBomId]);
+  const isAuthenticated = !!user || hasBuilderAuth();
 
-  const fetchBOMs = async () => {
-    if (!user || !organization) return;
-    
+  const fetchBOMs = useCallback(async () => {
+    if (!organization) return;
     try {
       const { data, error } = await supabase
         .from('bill_of_materials')
@@ -102,63 +116,57 @@ const ItemsManagement = () => {
 
       if (error) throw error;
       setBoms(data || []);
-      
-      // Auto-select first BOM if available
-      if (data && data.length > 0 && !selectedBomId) {
-        setSelectedBomId(data[0].id);
+      if (data && data.length > 0) {
+        setSelectedBomId((prev) => (prev ? prev : data[0].id));
       }
-    } catch (error: any) {
-      console.error('Error fetching BOMs:', error);
+    } catch (error: unknown) {
       toast({
         title: "Error fetching Bill of Materials",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive"
       });
     }
-  };
+  }, [organization, toast]);
 
-  const fetchItems = async () => {
-    if (!user || !organization) {
-      console.log('ItemsManagement - No user or organization, cannot fetch items');
+  const fetchItems = useCallback(async () => {
+    if (!organization) {
       setLoading(false);
       return;
     }
-    
-    console.log('ItemsManagement - fetchItems started for organization:', organization.id);
     try {
       let query = supabase
         .from('builder_items')
         .select('*')
         .eq('organization_id', organization.id);
-      
-      // Filter by selected BOM if one is selected
       if (selectedBomId) {
         query = query.eq('bom_id', selectedBomId);
       }
-      
       const { data, error } = await query
         .order('category', { ascending: true })
         .order('name', { ascending: true });
-
-      console.log('ItemsManagement - fetchItems result:', { data, error, dataLength: data?.length });
-      if (error) {
-        console.error('ItemsManagement - fetchItems error:', error);
-        throw error;
-      }
+      if (error) throw error;
       setItems(data || []);
-      console.log('ItemsManagement - items set:', data?.length || 0, 'items');
-    } catch (error: any) {
-      console.error('ItemsManagement - fetchItems error:', error);
+    } catch (error: unknown) {
       toast({
         title: "Error fetching items",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive"
       });
     } finally {
-      console.log('ItemsManagement - setting loading to false');
       setLoading(false);
     }
-  };
+  }, [organization, selectedBomId, toast]);
+
+  useEffect(() => {
+    if (isAuthenticated && organization) {
+      fetchBOMs();
+      fetchItems();
+    } else if (!isAuthenticated) {
+      setLoading(false);
+    } else if (isAuthenticated && !orgLoading && !organization) {
+      setLoading(false);
+    }
+  }, [isAuthenticated, organization, orgLoading, fetchBOMs, fetchItems]);
 
   const resetForm = () => {
     setFormData({
@@ -181,8 +189,13 @@ const ItemsManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.category) return;
-    if (!user) {
+    if (!isAuthenticated || !organization) {
       toast({ title: "Not signed in", description: "Please log in and try again.", variant: "destructive" });
+      return;
+    }
+    const currentUserId = getCurrentUserId(user?.id);
+    if (!editingItem && !currentUserId) {
+      toast({ title: "Cannot add item", description: "User identity not available.", variant: "destructive" });
       return;
     }
 
@@ -213,7 +226,7 @@ const ItemsManagement = () => {
       } else {
         const { error } = await supabase
           .from('builder_items')
-          .insert({ ...itemData, builder_id: user.id, organization_id: organization?.id });
+          .insert({ ...itemData, builder_id: currentUserId!, organization_id: organization.id });
 
         if (error) throw error;
         toast({ title: "Item added successfully" });
@@ -222,10 +235,10 @@ const ItemsManagement = () => {
       setDialogOpen(false);
       resetForm();
       fetchItems();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error saving item",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive"
       });
     }
@@ -262,23 +275,24 @@ const ItemsManagement = () => {
       if (error) throw error;
       toast({ title: "Item deleted successfully" });
       fetchItems();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error deleting item",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive"
       });
     }
   };
 
   const handleManualUpload = async (file: File) => {
-    if (!user || !selectedBomId) return;
+    const currentUserId = getCurrentUserId(user?.id);
+    if (!currentUserId || !selectedBomId) return;
 
     setUploadingManual(true);
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}_manual.${fileExt}`;
-      const filePath = `${user.id}/bom-manuals/${selectedBomId}/${fileName}`;
+      const filePath = `${currentUserId}/bom-manuals/${selectedBomId}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('item-documents')
@@ -296,10 +310,10 @@ const ItemsManagement = () => {
         title: "Manual uploaded",
         description: "The manual document has been uploaded successfully",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Upload failed",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive"
       });
     } finally {
@@ -325,10 +339,10 @@ const ItemsManagement = () => {
         title: "Manual removed",
         description: "The manual document has been removed",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Remove failed", 
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive"
       });
     }
@@ -342,15 +356,7 @@ const ItemsManagement = () => {
     return acc;
   }, {} as Record<string, BuilderItem[]>);
 
-  console.log('ItemsManagement - Render state:', { loading, user: !!user, itemsCount: items.length, userLoading: !user });
-  console.log('ItemsManagement - About to render, conditions:', { 
-    isLoading: loading, 
-    hasUser: !!user, 
-    shouldShowMain: !loading && !!user 
-  });
-
   if (loading) {
-    console.log('ItemsManagement - Showing loading state');
     return (
       <div className="min-h-screen bg-background">
         <Header />
@@ -363,7 +369,7 @@ const ItemsManagement = () => {
     );
   }
 
-  if (!user) {
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
@@ -376,7 +382,6 @@ const ItemsManagement = () => {
     );
   }
 
-  console.log('ItemsManagement - Rendering main component');
   return (
     <div className="min-h-screen bg-background">
       <Header />

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
-import { supabase } from "@/integrations/supabase/client";
+import { useUploadTemplateMutation } from "@/store/api";
+import { useDownTemp } from "@/lib/api/services/templateDownload";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,11 +14,11 @@ interface BOMUploadProps {
 }
 
 export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
-  const { user } = useAuth();
   const { organization } = useOrganization();
   const { toast } = useToast();
+  const [uploadTemplate, { isLoading: isUploading }] = useUploadTemplateMutation();
+  const { download: downloadBomTemplate, isLoading: downloadingTemplate } = useDownTemp();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     projectName: "",
@@ -26,21 +26,14 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
     file: null as File | null
   });
 
-  const downloadTemplate = () => {
-    const headers = ["name", "category", "make", "brand", "model", "description", "price", "documentation_url", "notes", "purchaser", "warranty_years"];
-    const sampleRow = ["Kitchen Faucet", "Plumbing", "Moen", "Moen", "Arbor 7594", "Pull-down kitchen faucet with MotionSense", "450", "https://www.moen.com/products/arbor", "Installed in main kitchen", "Home Depot", "5"];
-    
-    const csvContent = [headers.join(","), sampleRow.join(",")].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "bom_template.csv";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+  const builderOrganizationId = organization?.id ?? (() => {
+    try {
+      const d = localStorage.getItem("userData");
+      if (!d) return null;
+      const p = JSON.parse(d);
+      return p?.userInfo?.builderOrganization?.id ?? p?.builderOrganization?.id ?? null;
+    } catch { return null; }
+  })();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -111,72 +104,46 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!user || !organization || !formData.file) {
+    if (!formData.file || !formData.name) {
       toast({
         title: "Missing information",
-        description: "Please fill in all required fields",
+        description: "Please fill in BOM name and select a CSV file.",
         variant: "destructive"
       });
       return;
     }
 
-    setUploading(true);
-
+    if (!builderOrganizationId) {
+      toast({
+        title: "Error",
+        description: "Organization ID is missing. Please log in again.",
+        variant: "destructive"
+      });
+      return;
+    }
     try {
-      // Read the CSV file
-      const text = await formData.file.text();
-      const defaultWarrantyYears = formData.warrantyYears ? parseInt(formData.warrantyYears, 10) : null;
-      const items = parseCSV(text, defaultWarrantyYears);
-
-      if (items.length === 0) {
-        throw new Error("No valid items found in CSV. Please ensure the CSV has 'name' and 'category' columns.");
-      }
-
-      // Create the BOM record
-      const { data: bomData, error: bomError } = await supabase
-        .from('bill_of_materials')
-        .insert({
-          builder_id: user.id,
-          organization_id: organization.id,
-          name: formData.name,
-          project_name: formData.projectName || null
-        })
-        .select()
-        .single();
-
-      if (bomError) throw bomError;
-
-      // Insert all items with the BOM ID
-      const itemsWithBOM = items.map(item => ({
-        ...item,
-        builder_id: user.id,
-        organization_id: organization.id,
-        bom_id: bomData.id
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('builder_items')
-        .insert(itemsWithBOM);
-
-      if (itemsError) throw itemsError;
-
+      await uploadTemplate({
+        file: formData.file,
+        bomName: formData.name,
+        projectName: formData.projectName || undefined,
+        builderOrganizationId,
+      }).unwrap();
       toast({
         title: "Bill of Materials uploaded successfully",
-        description: `${items.length} items have been added`
+        description: "BOM has been uploaded successfully."
       });
-
       setDialogOpen(false);
       setFormData({ name: "", projectName: "", warrantyYears: "", file: null });
       onSuccess();
-    } catch (error: any) {
-      console.error('Error uploading BOM:', error);
+    } catch (error: unknown) {
+      const message = error && typeof error === "object" && "data" in error
+        ? String((error as { data?: { message?: string } }).data?.message ?? "Failed to upload Bill of Materials")
+        : error instanceof Error ? error.message : "Failed to upload Bill of Materials";
       toast({
         title: "Error uploading Bill of Materials",
-        description: error.message,
+        description: message,
         variant: "destructive"
       });
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -244,16 +211,16 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
             </p>
           </div>
           <div className="flex justify-between items-center pt-2">
-            <Button type="button" variant="ghost" size="sm" onClick={downloadTemplate}>
+            <Button type="button" variant="ghost" size="sm" onClick={downloadBomTemplate} disabled={downloadingTemplate}>
               <Download className="w-4 h-4 mr-2" />
-              Download Template
+              {downloadingTemplate ? "Downloading..." : "Download Template"}
             </Button>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={uploading}>
-                {uploading ? "Uploading..." : "Upload"}
+              <Button type="submit" disabled={isUploading}>
+                {isUploading ? "Uploading..." : "Upload"}
               </Button>
             </div>
           </div>

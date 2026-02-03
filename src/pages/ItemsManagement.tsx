@@ -1,6 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
+import {
+  useGetCategorysQuery,
+  useGetBillOfMaterialsQuery,
+  useGetBillMaterialsQuery,
+  useCreateItemMutation,
+  useUpdateItemMutation,
+  useDeleteItemMutation,
+} from "@/store/api";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -39,17 +47,9 @@ interface BillOfMaterials {
   project_name: string | null;
 }
 
-const categories = [
-  "Kitchen",
-  "Bathroom", 
-  "Appliances",
-  "Electrical",
-  "Plumbing",
-  "Flooring",
-  "Trim",
-  "HVAC",
-  "Windows & Doors",
-  "Other"
+const FALLBACK_CATEGORIES = [
+  "Kitchen", "Bathroom", "Appliances", "Electrical", "Plumbing",
+  "Flooring", "Trim", "HVAC", "Windows & Doors", "Other"
 ];
 
 // Builder login: allow access when JWT in localStorage (e.g. role: "admin") without Supabase user
@@ -81,10 +81,7 @@ const ItemsManagement = () => {
   const { user } = useAuth();
   const { organization, loading: orgLoading } = useOrganization();
   const { toast } = useToast();
-  const [items, setItems] = useState<BuilderItem[]>([]);
-  const [boms, setBoms] = useState<BillOfMaterials[]>([]);
   const [selectedBomId, setSelectedBomId] = useState<string>("");
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BuilderItem | null>(null);
   const [uploadingManual, setUploadingManual] = useState(false);
@@ -105,68 +102,72 @@ const ItemsManagement = () => {
 
   const isAuthenticated = !!user || hasBuilderAuth();
 
-  const fetchBOMs = useCallback(async () => {
-    if (!organization) return;
-    try {
-      const { data, error } = await supabase
-        .from('bill_of_materials')
-        .select('*')
-        .eq('organization_id', organization.id)
-        .order('created_at', { ascending: false });
+  const { data: categoriesResponse } = useGetCategorysQuery();
+  const { data: bomsResponse, isLoading: isLoadingBOMs, refetch: refetchBOMs } = useGetBillOfMaterialsQuery();
+  const { data: billMaterialsResponse, isLoading: isLoadingBillMaterials, refetch: refetchBillMaterials } = useGetBillMaterialsQuery(
+    selectedBomId,
+    { skip: !selectedBomId }
+  );
+  const [createItem, { isLoading: isCreating }] = useCreateItemMutation();
+  const [updateItem, { isLoading: isUpdating }] = useUpdateItemMutation();
+  const [deleteItem] = useDeleteItemMutation();
 
-      if (error) throw error;
-      setBoms(data || []);
-      if (data && data.length > 0) {
-        setSelectedBomId((prev) => (prev ? prev : data[0].id));
-      }
-    } catch (error: unknown) {
-      toast({
-        title: "Error fetching Bill of Materials",
-        description: error instanceof Error ? error.message : String(error),
-        variant: "destructive"
-      });
-    }
-  }, [organization, toast]);
+  const categories = useMemo(() => {
+    const list = categoriesResponse?.data;
+    if (list?.length) return list.map((c) => c.name);
+    return FALLBACK_CATEGORIES;
+  }, [categoriesResponse?.data]);
 
-  const fetchItems = useCallback(async () => {
-    if (!organization) {
-      setLoading(false);
-      return;
-    }
-    try {
-      let query = supabase
-        .from('builder_items')
-        .select('*')
-        .eq('organization_id', organization.id);
-      if (selectedBomId) {
-        query = query.eq('bom_id', selectedBomId);
-      }
-      const { data, error } = await query
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
-      if (error) throw error;
-      setItems(data || []);
-    } catch (error: unknown) {
-      toast({
-        title: "Error fetching items",
-        description: error instanceof Error ? error.message : String(error),
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [organization, selectedBomId, toast]);
+  const boms = useMemo(() => {
+    return (bomsResponse?.data ?? []).map((bom) => ({
+      id: bom.id,
+      name: bom.bomName,
+      project_name: bom.projectName ?? null,
+    }));
+  }, [bomsResponse?.data]);
 
   useEffect(() => {
-    if (isAuthenticated && organization) {
-      fetchBOMs();
-      fetchItems();
-    } else if (!isAuthenticated) {
-      setLoading(false);
-    } else if (isAuthenticated && !orgLoading && !organization) {
-      setLoading(false);
-    }
-  }, [isAuthenticated, organization, orgLoading, fetchBOMs, fetchItems]);
+    if (boms.length > 0 && !selectedBomId) setSelectedBomId(boms[0].id);
+  }, [boms, selectedBomId]);
+
+  const items = useMemo<BuilderItem[]>(() => {
+    const data = billMaterialsResponse?.data;
+    if (!data || !Array.isArray(data)) return [];
+    return (data as Array<{
+      id: string;
+      name: string;
+      category: string;
+      make: string | null;
+      brand: string | null;
+      model: string | null;
+      text: string | null;
+      note: string | null;
+      price: string | null;
+      documentationUrl: string | null;
+      purchaser: string | null;
+    }>).map((item) => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      make: item.make ?? null,
+      brand: item.brand ?? null,
+      model: item.model ?? null,
+      description: item.text ?? null,
+      price: item.price ? parseFloat(item.price) : null,
+      documentation_url: item.documentationUrl ?? null,
+      notes: item.note ?? null,
+      purchaser: item.purchaser ?? null,
+      bom_id: selectedBomId || null,
+      warranty_years: null as number | null,
+      manual_url: null as string | null,
+    })).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+  }, [billMaterialsResponse?.data, selectedBomId]);
+
+  const loading = isLoadingBOMs || (!!selectedBomId && isLoadingBillMaterials);
+  const refetchItems = useCallback(() => {
+    refetchBOMs();
+    refetchBillMaterials();
+  }, [refetchBOMs, refetchBillMaterials]);
 
   const resetForm = () => {
     setFormData({
@@ -186,55 +187,50 @@ const ItemsManagement = () => {
     setEditingItem(null);
   };
 
+  const builderOrganizationId = organization?.id ?? (() => {
+    try {
+      const d = localStorage.getItem("userData");
+      if (!d) return null;
+      const p = JSON.parse(d);
+      return p?.userInfo?.builderOrganization?.id ?? p?.builderOrganization?.id ?? null;
+    } catch { return null; }
+  })();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.category) return;
-    if (!isAuthenticated || !organization) {
+    if (!isAuthenticated || !builderOrganizationId) {
       toast({ title: "Not signed in", description: "Please log in and try again.", variant: "destructive" });
-      return;
-    }
-    const currentUserId = getCurrentUserId(user?.id);
-    if (!editingItem && !currentUserId) {
-      toast({ title: "Cannot add item", description: "User identity not available.", variant: "destructive" });
       return;
     }
 
     try {
-      const itemData = {
+      const payload = {
         name: formData.name,
         category: formData.category,
-        make: formData.make || null,
-        brand: formData.brand || null,
-        model: formData.model || null,
-        description: formData.description || null,
+        make: formData.make || undefined,
+        brand: formData.brand || undefined,
+        model: formData.model || undefined,
+        text: formData.description || undefined,
+        note: formData.notes || null,
         price: formData.price ? parseFloat(formData.price) : null,
-        documentation_url: formData.documentation_url || null,
-        notes: formData.notes || null,
-        purchaser: formData.purchaser || null,
-        warranty_years: formData.warranty_years ? parseInt(formData.warranty_years, 10) : null,
-        manual_url: formData.manual_url || null
+        documentationUrl: formData.documentation_url || undefined,
+        purchaser: formData.purchaser || undefined,
+        builderOrganizationId,
+        ...(selectedBomId ? { billMaterialId: selectedBomId } : {}),
       };
 
       if (editingItem) {
-        const { error } = await supabase
-          .from('builder_items')
-          .update(itemData)
-          .eq('id', editingItem.id);
-
-        if (error) throw error;
+        await updateItem({ id: editingItem.id, data: payload }).unwrap();
         toast({ title: "Item updated successfully" });
       } else {
-        const { error } = await supabase
-          .from('builder_items')
-          .insert({ ...itemData, builder_id: currentUserId!, organization_id: organization.id });
-
-        if (error) throw error;
+        await createItem(payload).unwrap();
         toast({ title: "Item added successfully" });
       }
 
       setDialogOpen(false);
       resetForm();
-      fetchItems();
+      refetchBillMaterials();
     } catch (error: unknown) {
       toast({
         title: "Error saving item",
@@ -265,16 +261,10 @@ const ItemsManagement = () => {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this item?")) return;
-
     try {
-      const { error } = await supabase
-        .from('builder_items')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await deleteItem(id).unwrap();
       toast({ title: "Item deleted successfully" });
-      fetchItems();
+      refetchBillMaterials();
     } catch (error: unknown) {
       toast({
         title: "Error deleting item",
@@ -392,10 +382,7 @@ const ItemsManagement = () => {
             <p className="text-muted-foreground mt-1">Manage your master list of items for homeowner registrations</p>
           </div>
           <div className="flex gap-2">
-            <BOMUpload onSuccess={() => {
-              fetchBOMs();
-              fetchItems();
-            }} />
+            <BOMUpload onSuccess={refetchItems} />
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={resetForm} disabled={!selectedBomId}>

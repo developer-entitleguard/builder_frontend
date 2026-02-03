@@ -163,6 +163,7 @@ export interface CreateBuilderItemRequest {
   documentationUrl?: string;
   purchaser?: string;
   builderOrganizationId?: string;
+  billMaterialId?: string;
   status?: string;
   text?: string;
   note?: string | null;
@@ -176,6 +177,13 @@ export interface UpdateBuilderItemRequest {
   price?: number;
   unit?: string;
   is_active?: boolean;
+  make?: string;
+  brand?: string;
+  model?: string;
+  text?: string;
+  note?: string | null;
+  documentationUrl?: string;
+  purchaser?: string;
 }
 
 // Registrations

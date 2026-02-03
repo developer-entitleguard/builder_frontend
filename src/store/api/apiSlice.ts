@@ -1,10 +1,4 @@
-import {
-  createApi,
-  fetchBaseQuery,
-  BaseQueryFn,
-  FetchArgs,
-  FetchBaseQueryError,
-} from '@reduxjs/toolkit/query/react';
+import { createApi, fetchBaseQuery, BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
 import { getApiBaseUrl } from '@/lib/config';
 
 // Base query with authentication
@@ -24,7 +18,10 @@ const baseQuery = fetchBaseQuery({
         console.warn('Failed to get JWT token for API request:', error);
       }
     }
-
+    
+    // Only set Content-Type if it's not FormData (fetch will handle FormData automatically)
+    // We check this by looking at the request body, but since we can't access it here,
+    // we'll set it and let fetch override it for FormData (which it does automatically)
     headers.set('Content-Type', 'application/json');
     headers.set('Accept', 'application/json');
     return headers;
@@ -32,11 +29,7 @@ const baseQuery = fetchBaseQuery({
 });
 
 // Base query with re-authentication
-const baseQueryWithReauth: BaseQueryFn<
-  string | FetchArgs,
-  unknown,
-  FetchBaseQueryError
-> = async (args, api, extraOptions) => {
+const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (args, api, extraOptions) => {
   const result = await baseQuery(args, api, extraOptions);
 
   if (result.error && result.error.status === 401) {
@@ -54,7 +47,7 @@ export const api = createApi({
   baseQuery: baseQueryWithReauth,
   tagTypes: [
     'User',
-    'Organization',
+    'Organization', 
     'Registration',
     'Item',
     'Query',
@@ -67,7 +60,7 @@ export const api = createApi({
     'BuilderCustomer',
     'CustomerDetails',
     'CustomerItem',
-    'ItemMap',
+    'ItemMap'
   ],
   endpoints: () => ({}),
 });

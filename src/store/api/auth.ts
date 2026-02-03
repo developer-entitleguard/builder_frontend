@@ -1,14 +1,14 @@
 import { api } from './apiSlice';
-import type {
-  SignUpRequest,
-  SignInRequest,
-  AuthResponse,
-  ResetPasswordRequest,
+import type { 
+  SignUpRequest, 
+  SignInRequest, 
+  AuthResponse, 
+  ResetPasswordRequest, 
   UpdatePasswordRequest,
   ResetPasswordWithTokenRequest,
   SendVerifyMailRequest,
-  SetPasswordForUserRequest,
-} from '@/lib/api/types';
+  SetPasswordForUserRequest
+} from '@/lib/api/types.ts';
 
 export const authApi = api.injectEndpoints({
   endpoints: (build) => ({
@@ -51,10 +51,7 @@ export const authApi = api.injectEndpoints({
     }),
 
     // Reset password with token
-    resetPasswordWithToken: build.mutation<
-      { message: string },
-      ResetPasswordWithTokenRequest
-    >({
+    resetPasswordWithToken: build.mutation<{ message: string }, ResetPasswordWithTokenRequest>({
       query: (data) => ({
         url: '/unsecure/resetpassword',
         method: 'POST',
@@ -63,10 +60,7 @@ export const authApi = api.injectEndpoints({
     }),
 
     // Update password
-    updatePassword: build.mutation<
-      { message: string },
-      UpdatePasswordRequest
-    >({
+    updatePassword: build.mutation<{ message: string }, UpdatePasswordRequest>({
       query: (data) => ({
         url: '/update-password',
         method: 'PATCH',
@@ -84,10 +78,7 @@ export const authApi = api.injectEndpoints({
     }),
 
     // Resend verification
-    resendVerification: build.mutation<
-      { message: string },
-      { email: string }
-    >({
+    resendVerification: build.mutation<{ message: string }, { email: string }>({
       query: (data) => ({
         url: '/resend-verification',
         method: 'POST',
@@ -96,10 +87,7 @@ export const authApi = api.injectEndpoints({
     }),
 
     // Send verify mail
-    sendVerifyMail: build.mutation<
-      { message: string },
-      SendVerifyMailRequest
-    >({
+    sendVerifyMail: build.mutation<{ message: string }, SendVerifyMailRequest>({
       query: (data) => ({
         url: '/unsecure/verify/mail',
         method: 'GET',
@@ -108,10 +96,7 @@ export const authApi = api.injectEndpoints({
     }),
 
     // Set password for user
-    setPasswordForUser: build.mutation<
-      { message: string },
-      SetPasswordForUserRequest
-    >({
+    setPasswordForUser: build.mutation<{ message: string }, SetPasswordForUserRequest>({
       query: (data) => ({
         url: '/unsecure/user/setpwd',
         method: 'POST',
@@ -120,10 +105,7 @@ export const authApi = api.injectEndpoints({
     }),
 
     // Update profile
-    updateProfile: build.mutation<
-      AuthResponse['data']['userInfo'],
-      Partial<AuthResponse['data']['userInfo']>
-    >({
+    updateProfile: build.mutation<AuthResponse['data']['userInfo'], Partial<AuthResponse['data']['userInfo']>>({
       query: (data) => ({
         url: '/profile',
         method: 'PATCH',

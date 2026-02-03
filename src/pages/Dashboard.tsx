@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
-import { supabase } from '@/integrations/supabase/client';
+import { useGetDashboardCountQuery, useDashboardRegistrationsQuery, useGetStatusesByTypeQuery } from '@/store/api';
 import Header from '@/components/Header';
 import { RegistrationTypeDialog } from '@/components/RegistrationTypeDialog';
 import { BulkActionsBar } from '@/components/BulkActionsBar';
@@ -78,55 +78,142 @@ const Dashboard = () => {
 
   const isAuthenticated = !!user || hasBuilderAuth();
 
-  const fetchRegistrations = useCallback(async () => {
-    if (!organization) return;
-
-    try {
-      const [registrationsResult, projectsResult] = await Promise.all([
-        supabase
-          .from('homeowner_registrations')
-          .select('*')
-          .eq('organization_id', organization.id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('projects')
-          .select('id, name')
-          .eq('organization_id', organization.id),
-      ]);
-
-      if (registrationsResult.error) {
-        toast({
-          title: "Error loading registrations",
-          description: registrationsResult.error.message,
-          variant: "destructive"
-        });
-      } else {
-        setRegistrations(registrationsResult.data || []);
+  // builderId for dashboard API (same as OLD project)
+  const builderId = useMemo(() => {
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        if (parsed.userInfo?.builderOrganization?.id) return parsed.userInfo.builderOrganization.id;
+        if (parsed.builderOrganization?.id) return parsed.builderOrganization.id;
+      } catch {
+        // ignore
       }
-
-      if (!projectsResult.error) {
-        setProjects(projectsResult.data || []);
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to load registrations",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
     }
-  }, [organization, toast]);
+    return organization?.id ?? null;
+  }, [organization?.id]);
+
+  const { data: countData } = useGetDashboardCountQuery(
+    { builderId: builderId || '' },
+    { skip: !builderId }
+  );
+  const { data: statusesData } = useGetStatusesByTypeQuery({ type: 'BUILDER' });
+  const { data: ownerData, isLoading: isLoadingOwner, error: ownerError, refetch: refetchOwner } = useDashboardRegistrationsQuery(
+    { builderId: builderId || '', type: 'owner' },
+    { skip: !builderId }
+  );
+  const { data: projectData, refetch: refetchProject } = useDashboardRegistrationsQuery(
+    { builderId: builderId || '', type: 'project' },
+    { skip: !builderId }
+  );
+
+  const fetchRegistrations = useCallback(() => {
+    refetchOwner();
+    refetchProject();
+  }, [refetchOwner, refetchProject]);
+
+  // Map API owner response to local registrations state (same shape as OLD Dashboard)
+  useEffect(() => {
+    if (!builderId) return;
+    if (isLoadingOwner) {
+      setLoading(true);
+      return;
+    }
+    setLoading(false);
+    const raw = ownerData?.data;
+    if (Array.isArray(raw)) {
+      const mapped: HomeownerRegistration[] = (raw as Array<{
+        id: string;
+        firstName?: string;
+        lastName?: string;
+        email?: string;
+        address?: string;
+        city?: string;
+        state?: string;
+        projectName?: string;
+        statusName?: string;
+        createdAt?: string;
+        project_id?: string | null;
+      }>).map((item) => {
+        let status = 'draft';
+        if (item.statusName) {
+          const s = item.statusName.toLowerCase();
+          if (s === 'entitlement') status = 'documents_pending';
+          else if (s === 'sent' || s === 'delivered') status = 'sent';
+          else if (s === 'ready_for_review' || s === 'ready for review') status = 'ready_for_review';
+          else status = s.replace(/\s+/g, '_');
+        }
+        return {
+          id: item.id,
+          customer_name: `${item.firstName ?? ''} ${item.lastName ?? ''}`.trim() || '—',
+          customer_email: item.email ?? '',
+          property_address: item.address ?? '',
+          property_city: item.city ?? '',
+          property_state: item.state ?? '',
+          project_id: item.project_id ?? null,
+          project_name: item.projectName ?? 'No Project',
+          status,
+          created_at: item.createdAt ?? new Date().toISOString(),
+          entitlement_sent_at: item.statusName === 'SENT' ? (item.createdAt ?? null) : null,
+        };
+      });
+      setRegistrations(mapped);
+      const projectSet = new Map<string, { id: string; name: string }>();
+      mapped.forEach((r) => {
+        if (r.project_id && r.project_name && !projectSet.has(r.project_id)) {
+          projectSet.set(r.project_id, { id: r.project_id, name: r.project_name });
+        }
+      });
+      setProjects(Array.from(projectSet.values()));
+    } else if (Array.isArray(projectData?.data) && (projectData.data as Array<{ projectName?: string; homeowners?: Array<{ id: string }> }>).length > 0) {
+      const byProject = projectData.data as Array<{ projectName?: string; homeowners?: Array<{ id: string; firstName?: string; lastName?: string; email?: string; address?: string; city?: string; state?: string; statusName?: string; createdAt?: string }> }>;
+      const mapped: HomeownerRegistration[] = [];
+      byProject.forEach((proj) => {
+        const projectName = proj.projectName ?? 'No Project';
+        (proj.homeowners ?? []).forEach((h) => {
+          let status = 'draft';
+          if (h.statusName) {
+            const s = h.statusName.toLowerCase();
+            if (s === 'entitlement') status = 'documents_pending';
+            else if (s === 'sent' || s === 'delivered') status = 'sent';
+            else status = s.replace(/\s+/g, '_');
+          }
+          mapped.push({
+            id: h.id,
+            customer_name: `${h.firstName ?? ''} ${h.lastName ?? ''}`.trim() || '—',
+            customer_email: h.email ?? '',
+            property_address: h.address ?? '',
+            property_city: h.city ?? '',
+            property_state: h.state ?? '',
+            project_id: null,
+            project_name: projectName,
+            status,
+            created_at: h.createdAt ?? new Date().toISOString(),
+            entitlement_sent_at: h.statusName === 'SENT' ? (h.createdAt ?? null) : null,
+          });
+        });
+      });
+      setRegistrations(mapped);
+    }
+  }, [builderId, isLoadingOwner, ownerData, projectData]);
+
+  useEffect(() => {
+    if (ownerError) {
+      toast({
+        title: 'Error loading registrations',
+        description: 'Failed to load registrations. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  }, [ownerError, toast]);
 
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/auth');
       return;
     }
-    if (organization) {
-      fetchRegistrations();
-    }
-  }, [isAuthenticated, organization, navigate, fetchRegistrations]);
+    if (!organization && !builderId) return;
+  }, [isAuthenticated, organization, builderId, navigate]);
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -195,6 +282,26 @@ const Dashboard = () => {
     return project?.name || 'Unknown Project';
   };
 
+  // Map API status name to internal filter value (must match reg.status from registration mapping)
+  const apiStatusToFilterValue = (name: string): string => {
+    const n = name.toUpperCase().replace(/\s+/g, ' ');
+    if (n === 'DRAFT') return 'draft';
+    if (n === 'ENTITLEMENT') return 'documents_pending';
+    if (n === 'SENT') return 'sent';
+    if (n === 'READY FOR REVIEW') return 'ready_for_review';
+    if (n === 'CREATED') return 'created';
+    if (n === 'DELIVERED') return 'delivered';
+    return name.toLowerCase().replace(/\s+/g, '_');
+  };
+
+  const statusOptions = useMemo(() => {
+    const list = statusesData?.data ?? [];
+    return list.map((s) => ({
+      value: apiStatusToFilterValue(s.name),
+      label: s.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+    }));
+  }, [statusesData?.data]);
+
   // Group registrations by project_id
   const projectGroups = filteredRegistrations.reduce((acc, reg) => {
     const projectKey = reg.project_id || 'no-project';
@@ -206,12 +313,24 @@ const Dashboard = () => {
     return acc;
   }, {} as Record<string, { name: string; registrations: HomeownerRegistration[] }>);
 
-  const stats = {
-    total: registrations.length,
-    sent: registrations.filter(r => r.status === 'sent' || r.status === 'delivered').length,
-    pending: registrations.filter(r => r.status === 'draft' || r.status === 'documents_pending').length,
-    ready: registrations.filter(r => r.status === 'ready_for_review').length
-  };
+  // Use dashboard count API when available, else derive from registrations
+  const stats = useMemo(() => {
+    const d = countData?.data;
+    if (d != null) {
+      return {
+        total: d.totalHomeowners ?? 0,
+        sent: d.entitlementsSent ?? 0,
+        pending: d.pending ?? 0,
+        ready: d.readyForReview ?? 0,
+      };
+    }
+    return {
+      total: registrations.length,
+      sent: registrations.filter(r => r.status === 'sent' || r.status === 'delivered').length,
+      pending: registrations.filter(r => r.status === 'draft' || r.status === 'documents_pending').length,
+      ready: registrations.filter(r => r.status === 'ready_for_review').length,
+    };
+  }, [countData?.data, registrations]);
 
   if (loading) {
     return (
@@ -435,12 +554,11 @@ const Dashboard = () => {
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
                 <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="documents_pending">Documents Pending</SelectItem>
-                <SelectItem value="ready_for_review">Ready for Review</SelectItem>
-                <SelectItem value="sent">Sent</SelectItem>
-                <SelectItem value="delivered">Delivered</SelectItem>
-                <SelectItem value="handed_over">Handed Over</SelectItem>
+                {statusOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

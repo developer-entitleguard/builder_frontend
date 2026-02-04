@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { validatePhone, validateABN } from "@/utils/validation";
 import { Building, Save, Edit } from "lucide-react";
+import { useGetBuilderOrganizationQuery, useUpdateBuilderOrganizationMutation } from "@/store/api";
 
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required"),
@@ -32,55 +32,93 @@ interface OrganizationDetailsProps {
 
 export function OrganizationDetails({ organization }: OrganizationDetailsProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  const builderId = useMemo(() => {
+    // Prefer builder organization id from auth payload
+    try {
+      const raw = localStorage.getItem("userData");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const id =
+          parsed?.userInfo?.builderOrganization?.id ??
+          parsed?.builderOrganization?.id ??
+          null;
+        if (id) return id as string;
+      }
+    } catch {
+      // ignore
+    }
+    // Fallback: current org from context
+    return (organization?.id as string | undefined) ?? null;
+  }, [organization?.id]);
+
+  const {
+    data: orgResponse,
+    isFetching: isFetchingOrg,
+    refetch: refetchOrg,
+  } = useGetBuilderOrganizationQuery(builderId ?? "", { skip: !builderId });
+
+  const [updateBuilderOrganization, { isLoading: isSaving }] =
+    useUpdateBuilderOrganizationMutation();
+
+  const effectiveOrg = orgResponse?.data ?? organization;
 
   const form = useForm<OrganizationFormData>({
     resolver: zodResolver(organizationSchema),
     defaultValues: {
-      name: organization?.name || "",
-      address: organization?.address || "",
-      contact_email: organization?.contact_email || "",
-      contact_phone: organization?.contact_phone || "",
-      abn: organization?.abn || "",
-      description: organization?.description || "",
+      name: effectiveOrg?.name || "",
+      address: effectiveOrg?.address || "",
+      contact_email: effectiveOrg?.contact_email || effectiveOrg?.email || "",
+      contact_phone: effectiveOrg?.contact_phone || effectiveOrg?.contact || "",
+      abn: effectiveOrg?.abn || "",
+      description: effectiveOrg?.description || "",
     },
   });
 
-  const onSubmit = async (data: OrganizationFormData) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from('builder_organizations')
-        .update({
-          name: data.name,
-          address: data.address,
-          contact_email: data.contact_email,
-          contact_phone: data.contact_phone,
-          abn: data.abn || null,
-          description: data.description || null,
-        })
-        .eq('id', organization?.id);
+  // When API org data loads, update form values
+  useEffect(() => {
+    if (!effectiveOrg) return;
+    form.reset({
+      name: effectiveOrg?.name || "",
+      address: effectiveOrg?.address || "",
+      contact_email: effectiveOrg?.contact_email || effectiveOrg?.email || "",
+      contact_phone: effectiveOrg?.contact_phone || effectiveOrg?.contact || "",
+      abn: effectiveOrg?.abn || "",
+      description: effectiveOrg?.description || "",
+    });
+  }, [effectiveOrg, form]);
 
-      if (error) throw error;
+  const onSubmit = async (data: OrganizationFormData) => {
+    try {
+      if (!builderId) {
+        throw new Error("Missing builder organization id.");
+      }
+
+      await updateBuilderOrganization({
+        id: builderId,
+        name: data.name,
+        address: data.address,
+        contact: data.contact_phone,
+        email: data.contact_email,
+        abn: data.abn || null,
+        description: data.description || null,
+      }).unwrap();
 
       toast({
         title: "Success",
         description: "Organization details updated successfully",
       });
       setIsEditing(false);
-      
-      // Refresh the page to show updated data
-      window.location.reload();
+      refetchOrg();
     } catch (error) {
       console.error("Error updating organization:", error);
       toast({
         title: "Error",
-        description: "Failed to update organization details",
+        description:
+          error instanceof Error ? error.message : "Failed to update organization details",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -90,7 +128,12 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Building className="h-5 w-5 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">{organization?.name}</h3>
+            <h3 className="text-lg font-semibold">
+              {effectiveOrg?.name}
+              {isFetchingOrg ? (
+                <span className="ml-2 text-xs text-muted-foreground">(Refreshing...)</span>
+              ) : null}
+            </h3>
           </div>
           <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
             <Edit className="h-4 w-4 mr-2" />
@@ -101,24 +144,24 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div>
             <label className="font-medium text-muted-foreground">Address</label>
-            <p className="mt-1">{organization?.address}</p>
+            <p className="mt-1">{effectiveOrg?.address}</p>
           </div>
           <div>
             <label className="font-medium text-muted-foreground">Contact Email</label>
-            <p className="mt-1">{organization?.contact_email}</p>
+            <p className="mt-1">{effectiveOrg?.contact_email || effectiveOrg?.email}</p>
           </div>
           <div>
             <label className="font-medium text-muted-foreground">Contact Phone</label>
-            <p className="mt-1">{organization?.contact_phone}</p>
+            <p className="mt-1">{effectiveOrg?.contact_phone || effectiveOrg?.contact}</p>
           </div>
           <div>
             <label className="font-medium text-muted-foreground">ABN</label>
-            <p className="mt-1">{organization?.abn || "Not provided"}</p>
+            <p className="mt-1">{effectiveOrg?.abn || "Not provided"}</p>
           </div>
-          {organization?.description && (
+          {effectiveOrg?.description && (
             <div className="col-span-full">
               <label className="font-medium text-muted-foreground">Description</label>
-              <p className="mt-1">{organization.description}</p>
+              <p className="mt-1">{effectiveOrg.description}</p>
             </div>
           )}
         </div>
@@ -216,15 +259,15 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
         />
 
         <div className="flex gap-2">
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={isSaving}>
             <Save className="h-4 w-4 mr-2" />
-            {loading ? "Saving..." : "Save Changes"}
+            {isSaving ? "Saving..." : "Save Changes"}
           </Button>
           <Button
             type="button"
             variant="outline"
             onClick={() => setIsEditing(false)}
-            disabled={loading}
+            disabled={isSaving}
           >
             Cancel
           </Button>

@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +13,11 @@ import { Plus, Edit, Trash2, Users, Mail, Phone, Building2 } from "lucide-react"
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import {
+  useGetBuilderVendorsQuery,
+  useCreateOrUpdateBuilderVendorMutation,
+  useDeleteBuilderVendorMutation,
+} from "@/store/api";
 
 const vendorTypes = ['Tradesman', 'Plumber', 'Electrician', 'Landscaper', 'Sellers', 'Others'] as const;
 
@@ -43,10 +47,21 @@ interface VendorManagementProps {
 
 const VendorManagement = ({ organizationId }: VendorManagementProps) => {
   const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
   const { toast } = useToast();
+
+  const builderId = organizationId;
+  const {
+    data: vendorsResponse,
+    isLoading: loading,
+    refetch: refetchVendors,
+  } = useGetBuilderVendorsQuery(
+    { builderId: builderId || "" },
+    { skip: !builderId }
+  );
+  const [createOrUpdateVendor] = useCreateOrUpdateBuilderVendorMutation();
+  const [deleteVendor] = useDeleteBuilderVendorMutation();
 
   const {
     register,
@@ -62,62 +77,47 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
   const watchedType = watch('type');
 
   useEffect(() => {
-    fetchVendors();
-  }, [organizationId]);
-
-  const fetchVendors = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('vendors')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setVendors(data || []);
-    } catch (error: any) {
-      toast({
-        title: "Error fetching vendors",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+    const list = vendorsResponse?.data ?? [];
+    const mapped: Vendor[] = list.map((v) => ({
+      id: v.id,
+      name: v.name,
+      contact_email: v.email,
+      contact_phone: v.contact,
+      type: v.type,
+      description: v.description ?? null,
+      created_at: v.created_at ?? new Date().toISOString(),
+    }));
+    setVendors(mapped);
+  }, [vendorsResponse?.data]);
 
   const onSubmit = async (data: VendorFormData) => {
     try {
-      if (editingVendor) {
-        const { error } = await supabase
-          .from('vendors')
-          .update({
-            name: data.name,
-            contact_email: data.contact_email,
-            contact_phone: data.contact_phone,
-            type: data.type,
-            description: data.description || null
-          })
-          .eq('id', editingVendor.id);
+      if (!builderId) throw new Error("Missing organization id.");
 
-        if (error) throw error;
+      if (editingVendor) {
+        await createOrUpdateVendor({
+          id: editingVendor.id,
+          name: data.name,
+          email: data.contact_email,
+          contact: data.contact_phone,
+          type: data.type,
+          description: data.description || null,
+          builderOrganizationId: builderId,
+        }).unwrap();
         
         toast({
           title: "Vendor updated",
           description: "Vendor has been updated successfully"
         });
       } else {
-        const { error } = await supabase
-          .from('vendors')
-          .insert({
-            name: data.name,
-            contact_email: data.contact_email,
-            contact_phone: data.contact_phone,
-            type: data.type,
-            description: data.description || null,
-            organization_id: organizationId!
-          });
-
-        if (error) throw error;
+        await createOrUpdateVendor({
+          name: data.name,
+          email: data.contact_email,
+          contact: data.contact_phone,
+          type: data.type,
+          description: data.description || null,
+          builderOrganizationId: builderId,
+        }).unwrap();
         
         toast({
           title: "Vendor added",
@@ -125,14 +125,14 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
         });
       }
 
-      await fetchVendors();
+      refetchVendors();
       setDialogOpen(false);
       setEditingVendor(null);
       reset();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to save vendor",
         variant: "destructive"
       });
     }
@@ -150,23 +150,18 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
 
   const handleDelete = async (vendorId: string) => {
     try {
-      const { error } = await supabase
-        .from('vendors')
-        .delete()
-        .eq('id', vendorId);
-
-      if (error) throw error;
+      await deleteVendor(vendorId).unwrap();
 
       toast({
         title: "Vendor deleted",
         description: "Vendor has been removed successfully"
       });
 
-      await fetchVendors();
-    } catch (error: any) {
+      refetchVendors();
+    } catch (error: unknown) {
       toast({
         title: "Error deleting vendor",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to delete vendor",
         variant: "destructive"
       });
     }

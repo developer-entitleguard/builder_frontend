@@ -8,9 +8,8 @@ export const customerDetailsApi = api.injectEndpoints({
       { builderId: string; customerId: string }
     >({
       query: ({ builderId, customerId }) => ({
-        url: `/api/customerdetails`,
+        url: `/api/customerdetails?builderId=${encodeURIComponent(builderId)}&customerId=${encodeURIComponent(customerId)}`,
         method: 'GET',
-        params: { builderId, customerId },
       }),
       providesTags: ['CustomerDetails'],
     }),

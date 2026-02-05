@@ -21,6 +21,35 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useCreateCustomerEntitlementMutation } from "@/store/api";
+
+// Builder login: allow onboarding when JWT is in localStorage (no Supabase user required)
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!(parsed?.jwt);
+  } catch {
+    return false;
+  }
+};
+
+// User/org id for registrations: Supabase user id or builder auth id (org id used as builder id for API)
+const getBuilderId = (): string | null => {
+  const userData = localStorage.getItem("userData");
+  if (userData) {
+    try {
+      const parsed = JSON.parse(userData);
+      const orgId = parsed?.userInfo?.builderOrganization?.id ?? parsed?.builderOrganization?.id ?? parsed?.builder_organization?.id;
+      const userId = parsed?.userInfo?.id ?? parsed?.id;
+      return orgId ?? userId ?? null;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+};
 
 const Onboarding = () => {
   const { user } = useAuth();
@@ -41,29 +70,33 @@ const Onboarding = () => {
   const [emailChangeDialogOpen, setEmailChangeDialogOpen] = useState(false);
   const [pendingCustomerData, setPendingCustomerData] = useState<any>(null);
 
+  const isAuthenticated = !!user || hasBuilderAuth();
+  const effectiveUserId = user?.id ?? getBuilderId();
+
   useEffect(() => {
-    if (!user) {
+    if (!isAuthenticated) {
       navigate('/auth');
     }
-  }, [user, navigate]);
+  }, [isAuthenticated, navigate]);
 
   // Check for existing registration ID in URL params and load data
   useEffect(() => {
     const editingId = searchParams.get('id');
-    if (editingId && user) {
+    if (editingId && isAuthenticated && effectiveUserId) {
       setRegistrationId(editingId);
       loadExistingRegistration(editingId);
     }
-  }, [searchParams, user]);
+  }, [searchParams, isAuthenticated, effectiveUserId]);
 
   const loadExistingRegistration = async (id: string) => {
+    if (!effectiveUserId) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('homeowner_registrations')
         .select('*')
         .eq('id', id)
-        .eq('builder_id', user?.id)
+        .eq('builder_id', effectiveUserId)
         .single();
 
       if (error) {
@@ -129,7 +162,8 @@ const Onboarding = () => {
   };
 
   const saveRegistrationData = async (stepData: any, step: string) => {
-    if (!user || !organization) return;
+    const orgId = organization?.id ?? getBuilderId();
+    if (!isAuthenticated || !effectiveUserId || !orgId) return;
 
     try {
       console.log('Onboarding - saveRegistrationData called:', { step, stepData });
@@ -138,8 +172,8 @@ const Onboarding = () => {
       setFormData(updatedFormData);
 
       let registrationData: any = {
-        builder_id: user.id,
-        organization_id: organization.id,
+        builder_id: effectiveUserId,
+        organization_id: orgId,
         status: 'draft'
       };
 
@@ -274,19 +308,25 @@ const Onboarding = () => {
     }
   };
 
+  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
+
   const handleSendEntitlement = async () => {
     if (!registrationId) return;
 
     try {
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .update({ 
-          status: 'sent',
-          entitlement_sent_at: new Date().toISOString()
-        })
-        .eq('id', registrationId);
-
-      if (error) throw error;
+      // Builder flow: call API (matches old project: /api/create/customerentitlement/:builderCustomerId)
+      if (hasBuilderAuth()) {
+        await createCustomerEntitlement({ builderCustomerId: registrationId }).unwrap();
+      } else {
+        const { error } = await supabase
+          .from('homeowner_registrations')
+          .update({
+            status: 'sent',
+            entitlement_sent_at: new Date().toISOString()
+          })
+          .eq('id', registrationId);
+        if (error) throw error;
+      }
 
       toast({
         title: "Entitlement sent!",
@@ -297,7 +337,7 @@ const Onboarding = () => {
     } catch (error: any) {
       toast({
         title: "Error sending entitlement",
-        description: error.message,
+        description: error?.data ?? error?.message ?? 'Failed to send entitlement',
         variant: "destructive"
       });
     }
@@ -312,13 +352,13 @@ const Onboarding = () => {
       case 'review':
         return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} registrationId={registrationId} />;
       case 'send':
-        return <SendConfirmationForm />;
+        return <SendConfirmationForm registrationId={registrationId} />;
       default:
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
     }
   };
 
-  if (!user) {
+  if (!isAuthenticated) {
     return null;
   }
 

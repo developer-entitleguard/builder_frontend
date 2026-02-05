@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useOrganization } from '@/hooks/useOrganization';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
+import { useGetCustomerDetailsQuery, useCreateCustomerEntitlementMutation, useDeleteBuilderCustomerMutation } from '@/store/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -59,23 +61,103 @@ interface RegistrationData {
   total_built_up_area: number | null;
 }
 
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem('userData');
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!(parsed?.jwt);
+  } catch {
+    return false;
+  }
+};
+
+const getBuilderId = (): string | null => {
+  try {
+    const userData = localStorage.getItem('userData');
+    if (!userData) return null;
+    const parsed = JSON.parse(userData);
+    const orgId = parsed?.userInfo?.builderOrganization?.id ?? parsed?.builderOrganization?.id ?? parsed?.builder_organization?.id;
+    return orgId ?? parsed?.userInfo?.id ?? parsed?.id ?? null;
+  } catch {
+    return null;
+  }
+};
+
 const RegistrationDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { organization } = useOrganization();
   const { toast } = useToast();
   const [registration, setRegistration] = useState<RegistrationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
 
+  const builderId = organization?.id ?? getBuilderId();
+  const isBuilderFlow = !user && hasBuilderAuth();
+  const { data: customerDetailsResponse, isLoading: loadingFromApi } = useGetCustomerDetailsQuery(
+    { builderId: builderId ?? '', customerId: id ?? '' },
+    { skip: !id || !builderId || !isBuilderFlow }
+  );
+  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
+  const [deleteBuilderCustomer] = useDeleteBuilderCustomerMutation();
+
   useEffect(() => {
-    if (!user || !id) {
+    if (!id) {
       navigate('/dashboard');
       return;
     }
-    fetchRegistration();
-  }, [user, id, navigate]);
+    if (user) {
+      fetchRegistration();
+    } else if (!isBuilderFlow) {
+      setLoading(false);
+      if (!hasBuilderAuth()) navigate('/dashboard');
+    }
+  }, [user, id, navigate, isBuilderFlow]);
+
+  useEffect(() => {
+    if (!isBuilderFlow || !customerDetailsResponse?.data?.customer) return;
+    const c = customerDetailsResponse.data.customer;
+    setRegistration({
+      id: c.id,
+      customer_name: `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim(),
+      customer_email: c.email ?? '',
+      customer_phone: c.contact ?? null,
+      property_address: c.address ?? '',
+      property_city: c.city ?? '',
+      property_state: c.state ?? '',
+      property_zip: c.zip ?? '',
+      project_name: c.projectName ?? null,
+      settlement_date: c.settlementDate ?? null,
+      notes: c.notes ?? null,
+      status: 'draft',
+      selected_items: (customerDetailsResponse.data as any).mappedItems ?? [],
+      documents_uploaded: {},
+      created_at: '',
+      updated_at: '',
+      entitlement_sent_at: null,
+      price: null,
+      num_bedrooms: null,
+      num_rooms: null,
+      total_built_up_area: null,
+    });
+    setLoading(false);
+  }, [isBuilderFlow, customerDetailsResponse]);
+
+  useEffect(() => {
+    if (isBuilderFlow && !loadingFromApi && !customerDetailsResponse?.data?.customer && builderId && id) {
+      toast({
+        title: "Registration not found",
+        description: "This registration doesn't exist or you don't have access to it.",
+        variant: "destructive"
+      });
+      navigate('/dashboard');
+    } else if (isBuilderFlow && !loadingFromApi) {
+      setLoading(false);
+    }
+  }, [isBuilderFlow, loadingFromApi, customerDetailsResponse, builderId, id, toast, navigate]);
 
   const fetchRegistration = async () => {
     if (!user || !id) return;
@@ -139,26 +221,29 @@ const RegistrationDetail = () => {
     if (!registration) return;
 
     try {
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .update({ 
-          status: 'sent',
-          entitlement_sent_at: new Date().toISOString()
-        })
-        .eq('id', registration.id);
-
-      if (error) throw error;
+      if (isBuilderFlow) {
+        await createCustomerEntitlement({ builderCustomerId: registration.id }).unwrap();
+      } else {
+        const { error } = await supabase
+          .from('homeowner_registrations')
+          .update({
+            status: 'sent',
+            entitlement_sent_at: new Date().toISOString()
+          })
+          .eq('id', registration.id);
+        if (error) throw error;
+      }
 
       toast({
         title: "Entitlement sent!",
         description: "The warranty entitlement has been sent to the homeowner."
       });
 
-      fetchRegistration(); // Refresh data
+      if (user) fetchRegistration();
     } catch (error: any) {
       toast({
         title: "Error sending entitlement",
-        description: error.message,
+        description: error?.data ?? error?.message ?? 'Failed to send entitlement',
         variant: "destructive"
       });
     }
@@ -197,16 +282,19 @@ const RegistrationDetail = () => {
     if (!registration) return;
 
     try {
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .delete()
-        .eq('id', registration.id);
-
-      if (error) throw error;
+      if (isBuilderFlow) {
+        await deleteBuilderCustomer(registration.id).unwrap();
+      } else {
+        const { error } = await supabase
+          .from('homeowner_registrations')
+          .delete()
+          .eq('id', registration.id);
+        if (error) throw error;
+      }
 
       toast({
         title: "Registration deleted",
-        description: registration.status === 'sent' 
+        description: registration.status === 'sent'
           ? "The property has been removed from the homeowner's entitlements."
           : "The registration has been deleted successfully."
       });
@@ -215,13 +303,15 @@ const RegistrationDetail = () => {
     } catch (error: any) {
       toast({
         title: "Error deleting registration",
-        description: error.message,
+        description: error?.data ?? error?.message ?? 'Failed to delete',
         variant: "destructive"
       });
     }
   };
 
-  if (loading) {
+  const isLoading = user ? loading : (isBuilderFlow ? loadingFromApi : false);
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />

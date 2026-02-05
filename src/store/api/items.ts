@@ -420,6 +420,14 @@ export const itemsApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Item'],
     }),
+    // DELETE /api/itemfile/{id} - delete a single item file by id
+    deleteItemFile: build.mutation<{ success: boolean; message?: string }, string>({
+      query: (id) => ({
+        url: `/api/itemfile/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Item', 'CustomerDetails'],
+    }),
     checkExistingCustomerItemMap: build.query<{
       success: boolean;
       message: string;
@@ -482,5 +490,7 @@ export const {
   useLazyCheckBOMRestrictionsQuery,
   useAssignBOMMutation,
   useCheckExistingCustomerItemMapQuery,
+  useLazyCheckExistingCustomerItemMapQuery,
   useDeleteBuilderItemFilesMutation,
+  useDeleteItemFileMutation,
 } = itemsApi;

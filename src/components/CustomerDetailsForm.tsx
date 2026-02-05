@@ -6,10 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowRight, MapPin, Phone, Mail, User } from "lucide-react";
-import { useRegistrations } from "@/hooks/useRegistrations";
 import { useToast } from "@/hooks/use-toast";
 import { australianStates, validateAustralianPhone, formatAustralianPhone, validateAustralianPostcode, validateEmail } from "@/utils/validation";
 import { useProjects } from "@/hooks/useProjects";
+import { useCreateBuilderCustomerMutation } from "@/store/api";
+import { useOrganization } from "@/hooks/useOrganization";
 
 interface CustomerDetailsFormProps {
   onNext: (data: any) => void;
@@ -17,9 +18,10 @@ interface CustomerDetailsFormProps {
 }
 
 const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) => {
-  const { createRegistration } = useRegistrations();
   const { toast } = useToast();
+  const { organization } = useOrganization();
   const { projects, loading: projectsLoading } = useProjects();
+  const [createBuilderCustomer] = useCreateBuilderCustomerMutation();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: initialData?.firstName || '',
@@ -114,41 +116,62 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
       return;
     }
     
+    const builderOrganizationId = organization?.id ?? (() => {
+      try {
+        const userData = localStorage.getItem('userData');
+        if (userData) {
+          const parsed = JSON.parse(userData);
+          const org = parsed?.userInfo?.builderOrganization ?? parsed?.builderOrganization ?? parsed?.builder_organization;
+          return org?.id ?? null;
+        }
+      } catch {
+        // ignore
+      }
+      return null;
+    })();
+
+    if (!builderOrganizationId) {
+      toast({
+        title: "Organization required",
+        description: "No builder organization found. Please sign in again.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setLoading(true);
     try {
-      // Find selected project name if a project is selected
       const selectedProject = projects.find(p => p.id === formData.projectId);
-      
-      const registrationData = {
-        customer_name: `${formData.firstName} ${formData.lastName}`,
-        customer_email: formData.email,
-        customer_phone: formData.phone,
-        property_address: formData.propertyAddress,
-        property_city: formData.city,
-        property_state: formData.state,
-        property_zip: formData.zipCode,
-        project_id: formData.projectId || null,
-        project_name: selectedProject?.name || formData.projectName || null,
-        settlement_date: formData.settlementDate || null,
-        notes: formData.notes || null,
-        price: formData.price ? parseFloat(formData.price) : null,
-        num_bedrooms: formData.numBedrooms ? parseInt(formData.numBedrooms) : null,
-        num_rooms: formData.numRooms ? parseInt(formData.numRooms) : null,
-        total_built_up_area: formData.totalBuiltUpArea ? parseFloat(formData.totalBuiltUpArea) : null
-      };
-      
-      const registration = await createRegistration(registrationData);
-      
+      const result = await createBuilderCustomer({
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim(),
+        contact: formData.phone.trim(),
+        address: formData.propertyAddress.trim(),
+        city: formData.city.trim(),
+        state: formData.state,
+        zip: formData.zipCode.trim(),
+        projectName: selectedProject?.name || formData.projectName || undefined,
+        settlementDate: formData.settlementDate || undefined,
+        notes: formData.notes?.trim() || undefined,
+        builderOrganizationId,
+      }).unwrap();
+
+      const customerId = result?.data?.id;
+      if (!customerId) {
+        throw new Error('No customer id returned');
+      }
+
       toast({
         title: "Customer details saved",
         description: "Moving to item selection"
       });
-      
-      onNext({ ...formData, registrationId: registration.id });
+
+      onNext({ ...formData, registrationId: customerId });
     } catch (error: any) {
       toast({
         title: "Error saving customer details",
-        description: error.message,
+        description: error?.data ?? error?.message ?? 'Failed to create customer',
         variant: "destructive"
       });
     } finally {

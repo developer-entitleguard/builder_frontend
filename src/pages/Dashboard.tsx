@@ -645,15 +645,25 @@ const Dashboard = () => {
                           </div>
                           <div className="flex items-center space-x-4">
                             {getStatusBadge(registration.status)}
-                          <div className="text-right">
-                            <p className="text-sm text-muted-foreground">
-                              Created: {new Date(registration.created_at).toLocaleDateString()}
-                            </p>
-                            {registration.entitlement_sent_at && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/onboarding?id=${registration.id}`);
+                              }}
+                            >
+                              Continue editing
+                            </Button>
+                            <div className="text-right">
                               <p className="text-sm text-muted-foreground">
-                                Sent: {new Date(registration.entitlement_sent_at).toLocaleDateString()}
+                                Created: {new Date(registration.created_at).toLocaleDateString()}
                               </p>
-                            )}
+                              {registration.entitlement_sent_at && (
+                                <p className="text-sm text-muted-foreground">
+                                  Sent: {new Date(registration.entitlement_sent_at).toLocaleDateString()}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>

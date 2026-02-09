@@ -43,6 +43,30 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Sync form when parent passes updated initialData (e.g. after fetching customer details from API)
+  useEffect(() => {
+    if (!initialData || typeof initialData !== 'object') return;
+    setFormData(prev => ({
+      ...prev,
+      firstName: initialData.firstName ?? prev.firstName,
+      lastName: initialData.lastName ?? prev.lastName,
+      email: initialData.email ?? prev.email,
+      phone: initialData.phone ?? prev.phone,
+      propertyAddress: initialData.propertyAddress ?? prev.propertyAddress,
+      city: initialData.city ?? prev.city,
+      state: initialData.state ?? prev.state,
+      zipCode: initialData.zipCode ?? prev.zipCode,
+      projectId: initialData.projectId ?? prev.projectId,
+      projectName: initialData.projectName ?? prev.projectName,
+      settlementDate: initialData.settlementDate ?? prev.settlementDate,
+      notes: initialData.notes ?? prev.notes,
+      price: initialData.price ?? prev.price,
+      numBedrooms: initialData.numBedrooms ?? prev.numBedrooms,
+      numRooms: initialData.numRooms ?? prev.numRooms,
+      totalBuiltUpArea: initialData.totalBuiltUpArea ?? prev.totalBuiltUpArea
+    }));
+  }, [initialData]);
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing

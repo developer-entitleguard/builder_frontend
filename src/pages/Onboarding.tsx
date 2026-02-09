@@ -21,7 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useCreateCustomerEntitlementMutation } from "@/store/api";
+import { useCreateCustomerEntitlementMutation, useGetCustomerDetailsQuery } from "@/store/api";
 
 // Builder login: allow onboarding when JWT is in localStorage (no Supabase user required)
 const hasBuilderAuth = (): boolean => {
@@ -72,6 +72,14 @@ const Onboarding = () => {
 
   const isAuthenticated = !!user || hasBuilderAuth();
   const effectiveUserId = user?.id ?? getBuilderId();
+  const builderId = organization?.id ?? getBuilderId();
+  const editingId = searchParams.get('id');
+
+  // Builder flow: load customer from API when opening with ?id= (customer id)
+  const { data: customerDetailsResponse, isLoading: isLoadingCustomer, error: customerError } = useGetCustomerDetailsQuery(
+    { builderId: builderId ?? '', customerId: editingId ?? '' },
+    { skip: !editingId || !builderId || !hasBuilderAuth() }
+  );
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -79,14 +87,55 @@ const Onboarding = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  // Check for existing registration ID in URL params and load data
+  // Set registrationId from URL when editing existing customer
   useEffect(() => {
-    const editingId = searchParams.get('id');
-    if (editingId && isAuthenticated && effectiveUserId) {
-      setRegistrationId(editingId);
+    if (!editingId || !isAuthenticated) return;
+    setRegistrationId(editingId);
+    if (hasBuilderAuth()) {
+      // Builder flow: don't call Supabase; customer data comes from getCustomerDetailsQuery above
+      return;
+    }
+    if (effectiveUserId) {
       loadExistingRegistration(editingId);
     }
-  }, [searchParams, isAuthenticated, effectiveUserId]);
+  }, [editingId, isAuthenticated, effectiveUserId]);
+
+  // Builder flow: when getCustomerDetails returns, pre-fill customer form (support camelCase or snake_case from API)
+  useEffect(() => {
+    if (!hasBuilderAuth() || !editingId || !customerDetailsResponse?.data?.customer) return;
+    const c = customerDetailsResponse.data.customer as Record<string, unknown>;
+    const get = (camel: string, snake?: string) =>
+      (c[camel] as string) ?? (snake && (c[snake] as string)) ?? '';
+    setFormData((prev) => ({
+      ...prev,
+      customer: {
+        firstName: get('firstName', 'first_name'),
+        lastName: get('lastName', 'last_name'),
+        email: get('email'),
+        phone: get('contact', 'phone'),
+        propertyAddress: get('address', 'property_address'),
+        city: get('city'),
+        state: get('state'),
+        zipCode: get('zip', 'zip_code'),
+        projectName: get('projectName', 'project_name'),
+        settlementDate: get('settlementDate', 'settlement_date'),
+        notes: get('notes')
+      }
+    }));
+  }, [editingId, customerDetailsResponse]);
+
+  // Builder flow: handle customer not found or API error
+  useEffect(() => {
+    if (!hasBuilderAuth() || !editingId) return;
+    if (customerError && !isLoadingCustomer) {
+      toast({
+        title: "Registration not found",
+        description: "This registration doesn't exist or you don't have access to it.",
+        variant: "destructive"
+      });
+      navigate('/dashboard');
+    }
+  }, [editingId, customerError, isLoadingCustomer, navigate, toast]);
 
   const loadExistingRegistration = async (id: string) => {
     if (!effectiveUserId) return;
@@ -362,7 +411,8 @@ const Onboarding = () => {
     return null;
   }
 
-  if (loading) {
+  const isEditingLoading = loading || (hasBuilderAuth() && !!editingId && isLoadingCustomer);
+  if (isEditingLoading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />

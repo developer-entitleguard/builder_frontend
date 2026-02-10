@@ -23,6 +23,9 @@ import ProjectDetail from "./pages/ProjectDetail";
 import ApprovalDetail from "./pages/ApprovalDetail";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import ApprovalResponse from "./pages/ApprovalResponse";
+import PendingQueries from "./pages/PendingQueries";
+import AwaitingAction from "./pages/AwaitingAction";
+import QueriesComplete from "./pages/QueriesComplete";
 
 const queryClient = new QueryClient();
 
@@ -87,6 +90,21 @@ const App = () => (
               <Route path="/queries" element={
                 <ProtectedRoute>
                   <QueriesManagement />
+                </ProtectedRoute>
+              } />
+              <Route path="/pendingQueries" element={
+                <ProtectedRoute>
+                  <PendingQueries />
+                </ProtectedRoute>
+              } />
+              <Route path="/awaitingAction" element={
+                <ProtectedRoute>
+                  <AwaitingAction />
+                </ProtectedRoute>
+              } />
+              <Route path="/queriesComplete" element={
+                <ProtectedRoute>
+                  <QueriesComplete />
                 </ProtectedRoute>
               } />
               <Route path="/admin" element={

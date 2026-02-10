@@ -15,9 +15,10 @@ import { useOrganization } from "@/hooks/useOrganization";
 interface CustomerDetailsFormProps {
   onNext: (data: any) => void;
   initialData?: any;
+  registrationId?: string | null;
 }
 
-const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) => {
+const CustomerDetailsForm = ({ onNext, initialData, registrationId }: CustomerDetailsFormProps) => {
   const { toast } = useToast();
   const { organization } = useOrganization();
   const { projects, loading: projectsLoading } = useProjects();
@@ -167,6 +168,9 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
     try {
       const selectedProject = projects.find(p => p.id === formData.projectId);
       const result = await createBuilderCustomer({
+        // When editing an existing customer (opened onboarding with ?id=),
+        // include the id so the API updates instead of creating a new record.
+        id: registrationId || initialData?.id || initialData?.registrationId,
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         email: formData.email.trim(),
@@ -181,7 +185,7 @@ const CustomerDetailsForm = ({ onNext, initialData }: CustomerDetailsFormProps) 
         builderOrganizationId,
       }).unwrap();
 
-      const customerId = result?.data?.id;
+      const customerId = result?.data?.id || registrationId;
       if (!customerId) {
         throw new Error('No customer id returned');
       }

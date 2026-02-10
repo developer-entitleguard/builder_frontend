@@ -395,7 +395,13 @@ const Onboarding = () => {
   const renderCurrentStep = () => {
     switch (currentStep) {
       case 'customer':
-        return <CustomerDetailsForm onNext={handleCustomerNext} initialData={formData.customer} />;
+        return (
+          <CustomerDetailsForm
+            onNext={handleCustomerNext}
+            initialData={formData.customer}
+            registrationId={registrationId}
+          />
+        );
       case 'items':
         return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} />;
       case 'review':

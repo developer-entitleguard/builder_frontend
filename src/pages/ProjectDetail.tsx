@@ -8,6 +8,7 @@ import { useProjects, Project, PropertyType, ProjectStatus } from "@/hooks/usePr
 import { useActivities } from "@/hooks/useActivities";
 import { useApprovals } from "@/hooks/useApprovals";
 import { useAuth } from "@/hooks/useAuth";
+import { useProjectByIdQuery, type BuilderProjectApi } from "@/store/api/projects";
 import { ActivityList } from "@/components/projects/ActivityList";
 import { ApprovalsList } from "@/components/projects/ApprovalsList";
 import { ProjectRegistrations } from "@/components/projects/ProjectRegistrations";
@@ -45,10 +46,64 @@ const statusConfig: Record<ProjectStatus, { color: string; label: string }> = {
   cancelled: { color: "bg-red-100 text-red-700", label: "Cancelled" }
 };
 
+// Consider user authenticated if Supabase session OR builder login (userData.jwt in localStorage)
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!parsed?.jwt;
+  } catch {
+    return false;
+  }
+};
+
+const mapPropertyTypeLocal = (value: string): PropertyType => {
+  const key = value.toLowerCase();
+  switch (key) {
+    case "house":
+      return "house";
+    case "townhouse":
+      return "townhouse";
+    case "apartment":
+      return "apartment";
+    case "duplex":
+      return "duplex";
+    case "renovation":
+      return "renovation";
+    case "extension":
+      return "extension";
+    case "custom":
+      return "custom";
+    default:
+      return "custom";
+  }
+};
+
+const mapStatusLocal = (value: string): ProjectStatus => {
+  const key = value.toLowerCase();
+  switch (key) {
+    case "planning":
+      return "planning";
+    case "inprogress":
+    case "in_progress":
+      return "in_progress";
+    case "onhold":
+    case "on_hold":
+      return "on_hold";
+    case "completed":
+      return "completed";
+    case "cancelled":
+      return "cancelled";
+    default:
+      return "planning";
+  }
+};
+
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { user, loading: authLoading } = useAuth();
-  const { fetchProject, updateProject } = useProjects();
+  const { updateProject } = useProjects();
   const { activities, loading: activitiesLoading, fetchActivities, createActivity, updateActivity, deleteActivity, fetchUpdates, postUpdate } = useActivities(id);
   const { approvals, loading: approvalsLoading, fetchApprovals, requestApproval, respondToApproval } = useApprovals(id);
   const navigate = useNavigate();
@@ -57,52 +112,54 @@ const ProjectDetail = () => {
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
+  const {
+    data: projectResponse,
+    isLoading: projectLoading,
+  } = useProjectByIdQuery({ id: id! });
+
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !user && !hasBuilderAuth()) {
       navigate('/auth');
     }
   }, [user, authLoading, navigate]);
 
-  const loadProject = async () => {
-    if (id && user) {
-      setLoading(true);
-      const data = await fetchProject(id);
-      if (data) {
-        setProject(data);
-        fetchActivities();
-        fetchApprovals();
-      } else {
-        navigate('/projects');
-      }
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadProject();
-  }, [id, user]);
+    if (!projectResponse?.data || !id) return;
+    const p = projectResponse.data as BuilderProjectApi;
+    const mapped: Project = {
+      id: p.id,
+      builder_id: "",
+      name: p.name,
+      address: p.address,
+      city: p.city,
+      state: p.state,
+      postcode: p.postcode,
+      property_type: mapPropertyTypeLocal(p.propertyType),
+      start_date: p.startDate,
+      target_end_date: p.targetEndDate,
+      actual_end_date: p.actualEndDate,
+      status: mapStatusLocal(p.status),
+      description: p.description,
+      activities_visible_to_homeowner: p.activitiesVisibleToHomeowner,
+      created_at: p.createdAt,
+      updated_at: p.createdAt,
+    };
+    setProject(mapped);
+    fetchActivities();
+    fetchApprovals();
+    setLoading(false);
+  }, [projectResponse, id, fetchActivities, fetchApprovals]);
 
-  const handleSaveProject = async (projectId: string, data: any): Promise<boolean> => {
-    const success = await updateProject(projectId, data);
-    if (success) {
-      // Refresh the project data
-      const updatedProject = await fetchProject(projectId);
-      if (updatedProject) {
-        setProject(updatedProject);
-      }
-    }
-    return success;
+  const handleSaveProject = async (): Promise<boolean> => {
+    // Update not yet wired to builder project API
+    return false;
   };
 
-  const handleToggleHomeownerVisibility = async (visible: boolean) => {
-    if (!project) return;
-    const success = await updateProject(project.id, { activities_visible_to_homeowner: visible });
-    if (success) {
-      setProject({ ...project, activities_visible_to_homeowner: visible });
-    }
+  const handleToggleHomeownerVisibility = async (_visible: boolean) => {
+    // Update not yet wired to builder project API
   };
 
-  if (authLoading || loading) {
+  if (authLoading || loading || projectLoading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />

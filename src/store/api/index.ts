@@ -14,6 +14,7 @@ import './builderUsers';
 import './builderVendor';
 import './bomUpload';
 import './query';
+import './projects';
 import './status';
 
 // Export the main API slice
@@ -69,6 +70,9 @@ export {
   useUpdateQueryMutation,
   useAddQueryCommentMutation,
 } from './query';
+
+// Projects
+export * from './projects';
 
 // Status
 export * from './status';

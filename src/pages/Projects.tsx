@@ -22,6 +22,18 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
+// Consider user authenticated if Supabase session OR builder login (userData.jwt in localStorage)
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!parsed?.jwt;
+  } catch {
+    return false;
+  }
+};
+
 const propertyTypeConfig: Record<PropertyType, { icon: React.ElementType; color: string; label: string }> = {
   house: { icon: Home, color: "bg-blue-100 text-blue-700", label: "House" },
   townhouse: { icon: Building2, color: "bg-green-100 text-green-700", label: "Townhouse" },
@@ -108,13 +120,15 @@ const Projects = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    // Redirect only when neither Supabase user nor builder JWT is present
+    if (!authLoading && !user && !hasBuilderAuth()) {
       navigate('/auth');
     }
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (user) {
+    // Trigger projects fetch for both Supabase and builder-authenticated flows
+    if (user || hasBuilderAuth()) {
       fetchProjects();
     }
   }, [user, fetchProjects]);

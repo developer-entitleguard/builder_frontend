@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -51,6 +51,12 @@ const getBuilderId = (): string | null => {
   return null;
 };
 
+type CustomerFormData = {
+  registrationId?: string;
+  email?: string;
+  [key: string]: unknown;
+};
+
 const Onboarding = () => {
   const { user } = useAuth();
   const { organization } = useOrganization();
@@ -68,7 +74,7 @@ const Onboarding = () => {
   const [originalEmail, setOriginalEmail] = useState<string | null>(null);
   const [originalStatus, setOriginalStatus] = useState<string | null>(null);
   const [emailChangeDialogOpen, setEmailChangeDialogOpen] = useState(false);
-  const [pendingCustomerData, setPendingCustomerData] = useState<any>(null);
+  const [pendingCustomerData, setPendingCustomerData] = useState<CustomerFormData | null>(null);
 
   const isAuthenticated = !!user || hasBuilderAuth();
   const effectiveUserId = user?.id ?? getBuilderId();
@@ -87,23 +93,10 @@ const Onboarding = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  // Set registrationId from URL when editing existing customer
-  useEffect(() => {
-    if (!editingId || !isAuthenticated) return;
-    setRegistrationId(editingId);
-    if (hasBuilderAuth()) {
-      // Builder flow: don't call Supabase; customer data comes from getCustomerDetailsQuery above
-      return;
-    }
-    if (effectiveUserId) {
-      loadExistingRegistration(editingId);
-    }
-  }, [editingId, isAuthenticated, effectiveUserId]);
-
   // Builder flow: when getCustomerDetails returns, pre-fill customer form (support camelCase or snake_case from API)
   useEffect(() => {
     if (!hasBuilderAuth() || !editingId || !customerDetailsResponse?.data?.customer) return;
-    const c = customerDetailsResponse.data.customer as Record<string, unknown>;
+    const c = customerDetailsResponse.data.customer as unknown as Record<string, unknown>;
     const get = (camel: string, snake?: string) =>
       (c[camel] as string) ?? (snake && (c[snake] as string)) ?? '';
     setFormData((prev) => ({
@@ -137,90 +130,105 @@ const Onboarding = () => {
     }
   }, [editingId, customerError, isLoadingCustomer, navigate, toast]);
 
-  const loadExistingRegistration = async (id: string) => {
-    if (!effectiveUserId) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('homeowner_registrations')
-        .select('*')
-        .eq('id', id)
-        .eq('builder_id', effectiveUserId)
-        .single();
+  const loadExistingRegistration = useCallback(
+    async (id: string) => {
+      if (!effectiveUserId) return;
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('homeowner_registrations')
+          .select('*')
+          .eq('id', id)
+          .eq('builder_id', effectiveUserId)
+          .single();
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          toast({
-            title: "Registration not found",
-            description: "This registration doesn't exist or you don't have access to it.",
-            variant: "destructive"
-          });
-          navigate('/dashboard');
-          return;
+        if (error) {
+          if ((error as { code?: string }).code === 'PGRST116') {
+            toast({
+              title: "Registration not found",
+              description: "This registration doesn't exist or you don't have access to it.",
+              variant: "destructive"
+            });
+            navigate('/dashboard');
+            return;
+          }
+          throw error;
         }
-        throw error;
+
+        // Parse the existing data and populate form
+        setOriginalEmail(data.customer_email);
+        setOriginalStatus(data.status);
+        
+        const existingFormData = {
+          customer: {
+            firstName: data.customer_name?.split(' ')[0] || '',
+            lastName: data.customer_name?.split(' ').slice(1).join(' ') || '',
+            email: data.customer_email || '',
+            phone: data.customer_phone || '',
+            propertyAddress: data.property_address || '',
+            city: data.property_city || '',
+            state: data.property_state || '',
+            zipCode: data.property_zip || '',
+            projectName: data.project_name || '',
+            settlementDate: data.settlement_date || '',
+            notes: data.notes || ''
+          },
+          items: { selected_items: Array.isArray(data.selected_items) ? data.selected_items : [] },
+          documents: data.documents_uploaded || {}
+        };
+
+        setFormData(existingFormData);
+
+        // Determine which step to start on based on data completeness
+        if (data.status === 'ready_for_review') {
+          setCurrentStep('review');
+        } else if (data.selected_items && Array.isArray(data.selected_items) && data.selected_items.length > 0) {
+          setCurrentStep('review');
+        } else if (data.customer_name && data.customer_email) {
+          setCurrentStep('items');
+        }
+      } catch (error: unknown) {
+        toast({
+          title: "Error loading registration",
+          description: error instanceof Error ? error.message : "Failed to load registration",
+          variant: "destructive"
+        });
+        navigate('/dashboard');
+      } finally {
+        setLoading(false);
       }
+    },
+    [effectiveUserId, navigate, toast]
+  );
 
-      // Parse the existing data and populate form
-      setOriginalEmail(data.customer_email);
-      setOriginalStatus(data.status);
-      
-      const existingFormData = {
-        customer: {
-          firstName: data.customer_name?.split(' ')[0] || '',
-          lastName: data.customer_name?.split(' ').slice(1).join(' ') || '',
-          email: data.customer_email || '',
-          phone: data.customer_phone || '',
-          propertyAddress: data.property_address || '',
-          city: data.property_city || '',
-          state: data.property_state || '',
-          zipCode: data.property_zip || '',
-          projectName: data.project_name || '',
-          settlementDate: data.settlement_date || '',
-          notes: data.notes || ''
-        },
-        items: { selected_items: Array.isArray(data.selected_items) ? data.selected_items : [] },
-        documents: data.documents_uploaded || {}
-      };
-
-      setFormData(existingFormData);
-
-      // Determine which step to start on based on data completeness
-      if (data.status === 'ready_for_review') {
-        setCurrentStep('review');
-      } else if (data.selected_items && Array.isArray(data.selected_items) && data.selected_items.length > 0) {
-        setCurrentStep('review');
-      } else if (data.customer_name && data.customer_email) {
-        setCurrentStep('items');
-      }
-
-    } catch (error: any) {
-      toast({
-        title: "Error loading registration",
-        description: error.message,
-        variant: "destructive"
-      });
-      navigate('/dashboard');
-    } finally {
-      setLoading(false);
+  // Set registrationId from URL when editing existing customer
+  useEffect(() => {
+    if (!editingId || !isAuthenticated) return;
+    setRegistrationId(editingId);
+    if (hasBuilderAuth()) {
+      // Builder flow: don't call Supabase; customer data comes from getCustomerDetailsQuery above
+      return;
     }
-  };
+    if (effectiveUserId) {
+      loadExistingRegistration(editingId);
+    }
+  }, [editingId, isAuthenticated, effectiveUserId, loadExistingRegistration]);
 
   const handleStepClick = (stepId: string) => {
     setCurrentStep(stepId);
   };
 
-  const saveRegistrationData = async (stepData: any, step: string) => {
+  const saveRegistrationData = async (stepData: unknown, step: string) => {
     const orgId = organization?.id ?? getBuilderId();
     if (!isAuthenticated || !effectiveUserId || !orgId) return;
 
     try {
       console.log('Onboarding - saveRegistrationData called:', { step, stepData });
-      const updatedFormData = { ...formData, [step]: stepData };
+      const updatedFormData = { ...formData, [step]: stepData as unknown };
       console.log('Onboarding - updatedFormData:', updatedFormData);
       setFormData(updatedFormData);
 
-      let registrationData: any = {
+      let registrationData: Record<string, unknown> = {
         builder_id: effectiveUserId,
         organization_id: orgId,
         status: 'draft'
@@ -228,7 +236,19 @@ const Onboarding = () => {
 
       // Add customer data
       if (updatedFormData.customer) {
-        const customerData = updatedFormData.customer as any;
+        const customerData = updatedFormData.customer as {
+          firstName?: string;
+          lastName?: string;
+          email?: string;
+          phone?: string;
+          propertyAddress?: string;
+          city?: string;
+          state?: string;
+          zipCode?: string;
+          projectName?: string;
+          settlementDate?: string | null;
+          notes?: string;
+        };
         console.log('Onboarding - Processing customer data:', customerData);
         registrationData = {
           ...registrationData,
@@ -250,13 +270,14 @@ const Onboarding = () => {
 
       // Add items data - extract the array from the nested structure
       if (updatedFormData.items) {
-        const itemsData = updatedFormData.items as any;
-        registrationData.selected_items = itemsData.selected_items || itemsData;
+        const itemsData = updatedFormData.items as { selected_items?: unknown };
+        (registrationData as { selected_items?: unknown }).selected_items =
+          itemsData.selected_items ?? updatedFormData.items;
       }
 
       // Add documents data
       if (updatedFormData.documents) {
-        registrationData.documents_uploaded = updatedFormData.documents;
+        (registrationData as { documents_uploaded?: unknown }).documents_uploaded = updatedFormData.documents;
       }
 
       // Update status based on current step
@@ -270,7 +291,7 @@ const Onboarding = () => {
         // Update existing registration
         const { error } = await supabase
           .from('homeowner_registrations')
-          .update(registrationData)
+          .update(registrationData as never)
           .eq('id', registrationId);
 
         if (error) throw error;
@@ -278,23 +299,23 @@ const Onboarding = () => {
         // Create new registration
         const { data, error } = await supabase
           .from('homeowner_registrations')
-          .insert(registrationData)
+          .insert(registrationData as never)
           .select()
           .single();
 
         if (error) throw error;
         setRegistrationId(data.id);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error saving data",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to save data",
         variant: "destructive"
       });
     }
   };
 
-  const handleCustomerNext = async (customerData: any) => {
+  const handleCustomerNext = async (customerData: CustomerFormData) => {
     // Check if email changed for sent registrations
     if (originalStatus === 'sent' && originalEmail && customerData.email !== originalEmail) {
       setPendingCustomerData(customerData);
@@ -321,14 +342,17 @@ const Onboarding = () => {
     handleNextStep();
   };
 
-  const handleItemsNext = async (itemsData: any) => {
+  const handleItemsNext = async (itemsData: unknown) => {
     // Extract the actual items array from the nested structure
-    const items = itemsData?.selected_items || itemsData;
+    let items: unknown = itemsData;
+    if (itemsData && typeof itemsData === 'object' && 'selected_items' in (itemsData as Record<string, unknown>)) {
+      items = (itemsData as { selected_items: unknown }).selected_items;
+    }
     setFormData(prev => ({ ...prev, items: { selected_items: items } }));
     handleNextStep();
   };
 
-  const handleDocumentsNext = async (documentsData: any) => {
+  const handleDocumentsNext = async (documentsData: unknown) => {
     await saveRegistrationData(documentsData, 'documents');
     handleNextStep();
   };
@@ -383,10 +407,16 @@ const Onboarding = () => {
       });
 
       handleNextStep();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const description =
+        error && typeof error === 'object' && 'data' in error
+          ? String((error as { data?: unknown }).data ?? 'Failed to send entitlement')
+          : error instanceof Error
+          ? error.message
+          : 'Failed to send entitlement';
       toast({
         title: "Error sending entitlement",
-        description: error?.data ?? error?.message ?? 'Failed to send entitlement',
+        description,
         variant: "destructive"
       });
     }

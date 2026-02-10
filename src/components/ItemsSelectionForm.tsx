@@ -74,8 +74,10 @@ interface BillOfMaterials {
 }
 
 interface ItemsSelectionFormProps {
-  onNext: (data: any) => void;
-  initialData?: any;
+  onNext: (data: unknown) => void;
+  initialData?: {
+    selected_items?: RegistrationItem[];
+  };
   registrationId?: string;
 }
 
@@ -169,13 +171,26 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
 
   const builderId = organization?.id ?? getBuilderId();
   // Customer details API: /api/customerdetails?builderId=...&customerId=...
-  useGetCustomerDetailsQuery(
+  const { data: customerDetailsResponse } = useGetCustomerDetailsQuery(
     { builderId: builderId ?? '', customerId: registrationId ?? '' },
     { skip: !registrationId || !builderId }
   );
   // Existing customer item map: /api/check/customeritemmap/existing?customerId=... (trigger when registrationId is set)
   const [fetchExistingMap, { data: existingMapResponse }] = useLazyCheckExistingCustomerItemMapQuery();
   const existingMapData = useMemo(() => existingMapResponse?.data ?? [], [existingMapResponse?.data]);
+
+  // When editing an existing customer that already has a BOM assigned in customerDetails,
+  // pre-select that BOM in the dropdown so the UI reflects the actual BOM.
+  useEffect(() => {
+    const customerBomId =
+      customerDetailsResponse?.data?.customer?.billOfMaterials?.id ??
+      (customerDetailsResponse?.data?.customer as unknown as { bill_of_materials?: { id?: string } })?.bill_of_materials
+        ?.id ??
+      null;
+    if (!selectedBomId && customerBomId) {
+      setSelectedBomId(customerBomId);
+    }
+  }, [customerDetailsResponse, selectedBomId]);
 
   useEffect(() => {
     if (registrationId && registrationId.trim() !== '') {
@@ -578,10 +593,10 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
       });
       
       onNext({ selected_items: selectedItems });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error saving items",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to save items",
         variant: "destructive"
       });
     } finally {

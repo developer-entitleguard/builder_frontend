@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useProjects, PropertyType, ProjectStatus, CreateProjectData } from "@/hooks/useProjects";
+import { useProjects, PropertyType, CreateProjectData } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
+import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -49,6 +50,18 @@ const australianStates = [
 const STEPS = ['basics', 'type', 'timeline'] as const;
 type Step = typeof STEPS[number];
 
+// Consider authenticated if Supabase user OR builder JWT in localStorage
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!parsed?.jwt;
+  } catch {
+    return false;
+  }
+};
+
 const ProjectCreate = () => {
   const { user, loading: authLoading } = useAuth();
   const { createProject } = useProjects();
@@ -66,19 +79,22 @@ const ProjectCreate = () => {
     property_type: 'house',
     start_date: null,
     target_end_date: null,
-    status: 'planning',
+    statusId: null,
     description: null
   });
 
+  const { data: statusResponse } = useGetStatusesByModuleQuery({ module: 'PROJECT' });
+  const projectStatuses = statusResponse?.data ?? [];
+
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !user && !hasBuilderAuth()) {
       navigate('/auth');
     }
   }, [user, authLoading, navigate]);
 
   const currentStepIndex = STEPS.indexOf(currentStep);
 
-  const updateField = (field: keyof CreateProjectData, value: any) => {
+  const updateField = (field: keyof CreateProjectData, value: CreateProjectData[keyof CreateProjectData]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -115,7 +131,7 @@ const ProjectCreate = () => {
     setIsSubmitting(false);
     
     if (project) {
-      navigate(`/projects/${project.id}`);
+      navigate(`/projects`);
     }
   };
 
@@ -270,13 +286,20 @@ const ProjectCreate = () => {
       
       <div>
         <Label htmlFor="status">Initial Status</Label>
-        <Select value={formData.status} onValueChange={v => updateField('status', v as ProjectStatus)}>
+        <Select
+          value={formData.statusId ?? ''}
+          onValueChange={v => updateField('statusId', v || null)}
+          disabled={projectStatuses.length === 0}
+        >
           <SelectTrigger className="mt-1.5">
-            <SelectValue placeholder="Select status" />
+            <SelectValue placeholder={projectStatuses.length === 0 ? "Loading statuses..." : "Select status"} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="planning">Planning</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
+            {projectStatuses.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

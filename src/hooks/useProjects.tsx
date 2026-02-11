@@ -3,7 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useToast } from "@/hooks/use-toast";
-import { useProjectsQuery, type BuilderProjectApi } from "@/store/api/projects";
+import {
+  useProjectsQuery,
+  useCreateProjectMutation,
+  type BuilderProjectApi,
+} from "@/store/api/projects";
 
 export type PropertyType = 'house' | 'townhouse' | 'apartment' | 'duplex' | 'renovation' | 'extension' | 'custom';
 export type ProjectStatus = 'planning' | 'in_progress' | 'on_hold' | 'completed' | 'cancelled';
@@ -36,6 +40,8 @@ export interface CreateProjectData {
   property_type: PropertyType;
   start_date?: string | null;
   target_end_date?: string | null;
+  /** Status id from API (e.g. getStatusesByModule PROJECT). Preferred when creating via builder API. */
+  statusId?: string | null;
   status?: ProjectStatus;
   description?: string | null;
 }
@@ -97,6 +103,8 @@ export const useProjects = () => {
     error,
     refetch: refetchProjects,
   } = useProjectsQuery();
+
+  const [createProjectMutation] = useCreateProjectMutation();
 
   const loading = isLoading || isFetching;
 
@@ -169,8 +177,67 @@ export const useProjects = () => {
     }
   };
 
-  const createProject = async (_data: CreateProjectData): Promise<Project | null> => {
-    throw new Error("Project creation via API is not yet implemented for builder flow.");
+  const createProject = async (data: CreateProjectData): Promise<Project | null> => {
+    try {
+      const body = {
+        activitiesVisibleToHomeowner: true,
+        address: data.address,
+        city: data.city,
+        description: data.description ?? "",
+        name: data.name,
+        postcode: data.postcode,
+        propertyType: data.property_type,
+        startDate: data.start_date ?? "",
+        state: data.state,
+        statusId: data.statusId ?? data.status ?? "",
+        targetEndDate: data.target_end_date ?? "",
+      };
+      const result = await createProjectMutation(body).unwrap();
+      if (!result?.success) {
+        toast({
+          title: "Error creating project",
+          description: result?.message || "Failed to create project",
+          variant: "destructive",
+        });
+        return null;
+      }
+      if (!result?.data) return null;
+      toast({
+        title: "Success",
+        description: result.message || "Project created successfully",
+      });
+      const p = result.data;
+      return {
+        id: p.id,
+        builder_id: "",
+        name: p.name,
+        address: p.address,
+        city: p.city,
+        state: p.state,
+        postcode: p.postcode,
+        property_type: mapPropertyType(p.propertyType),
+        start_date: p.startDate,
+        target_end_date: p.targetEndDate,
+        actual_end_date: p.actualEndDate,
+        status: mapStatus(p.status),
+        description: p.description,
+        activities_visible_to_homeowner: p.activitiesVisibleToHomeowner,
+        created_at: p.createdAt,
+        updated_at: p.createdAt,
+      };
+    } catch (err: unknown) {
+      toast({
+        title: "Error creating project",
+        description:
+          err && typeof err === "object" && "data" in err
+            ? String((err as { data: unknown }).data)
+            : err instanceof Error
+              ? err.message
+              : "Failed to create project",
+        variant: "destructive",
+      });
+      return null;
+    }
   };
 
   const updateProject = async (): Promise<boolean> => {

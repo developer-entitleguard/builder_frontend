@@ -29,6 +29,20 @@ export interface BuilderProjectResponse {
   data: BuilderProjectApi;
 }
 
+export interface CreateBuilderProjectBody {
+  activitiesVisibleToHomeowner: boolean;
+  address: string;
+  city: string;
+  description: string;
+  name: string;
+  postcode: string;
+  propertyType: string;
+  startDate: string;
+  state: string;
+  statusId: string;
+  targetEndDate: string;
+}
+
 export const projectsApi = api.injectEndpoints({
   endpoints: (build) => ({
     // GET /api/builder/projects
@@ -37,6 +51,7 @@ export const projectsApi = api.injectEndpoints({
         url: "/api/builder/projects",
         method: "GET",
       }),
+      providesTags: ["Projects"],
     }),
     // GET /api/builder/projects/:id
     projectById: build.query<BuilderProjectResponse, { id: string }>({
@@ -45,8 +60,18 @@ export const projectsApi = api.injectEndpoints({
         method: "GET",
       }),
     }),
+    // POST /api/builder/projects
+    createProject: build.mutation<BuilderProjectResponse, CreateBuilderProjectBody>({
+      query: (body) => ({
+        url: "/api/builder/projects",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (result) =>
+        result?.success ? ["Projects"] : [],
+    }),
   }),
 });
 
-export const { useProjectsQuery, useProjectByIdQuery } = projectsApi;
+export const { useProjectsQuery, useProjectByIdQuery, useCreateProjectMutation } = projectsApi;
 

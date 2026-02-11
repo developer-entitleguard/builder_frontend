@@ -127,10 +127,10 @@ const ProjectCreate = () => {
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    const project = await createProject(formData);
+    const success = await createProject(formData);
     setIsSubmitting(false);
     
-    if (project) {
+    if (success) {
       navigate(`/projects`);
     }
   };

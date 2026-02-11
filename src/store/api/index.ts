@@ -16,6 +16,7 @@ import './bomUpload';
 import './query';
 import './projects';
 import './status';
+import './activities';
 
 // Export the main API slice
 export { api } from './apiSlice';
@@ -76,6 +77,9 @@ export * from './projects';
 
 // Status
 export * from './status';
+
+// Activities
+export * from './activities';
 
 // Re-export types
 export type * from '@/lib/api/types';

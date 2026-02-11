@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   useProjectsQuery,
   useCreateProjectMutation,
+  useUpdateProjectMutation,
   type BuilderProjectApi,
 } from "@/store/api/projects";
 
@@ -105,6 +106,7 @@ export const useProjects = () => {
   } = useProjectsQuery();
 
   const [createProjectMutation] = useCreateProjectMutation();
+  const [updateProjectMutation] = useUpdateProjectMutation();
 
   const loading = isLoading || isFetching;
 
@@ -177,7 +179,7 @@ export const useProjects = () => {
     }
   };
 
-  const createProject = async (data: CreateProjectData): Promise<Project | null> => {
+  const createProject = async (data: CreateProjectData): Promise<boolean> => {
     try {
       const body = {
         activitiesVisibleToHomeowner: true,
@@ -199,32 +201,13 @@ export const useProjects = () => {
           description: result?.message || "Failed to create project",
           variant: "destructive",
         });
-        return null;
+        return false;
       }
-      if (!result?.data) return null;
       toast({
         title: "Success",
         description: result.message || "Project created successfully",
       });
-      const p = result.data;
-      return {
-        id: p.id,
-        builder_id: "",
-        name: p.name,
-        address: p.address,
-        city: p.city,
-        state: p.state,
-        postcode: p.postcode,
-        property_type: mapPropertyType(p.propertyType),
-        start_date: p.startDate,
-        target_end_date: p.targetEndDate,
-        actual_end_date: p.actualEndDate,
-        status: mapStatus(p.status),
-        description: p.description,
-        activities_visible_to_homeowner: p.activitiesVisibleToHomeowner,
-        created_at: p.createdAt,
-        updated_at: p.createdAt,
-      };
+      return true;
     } catch (err: unknown) {
       toast({
         title: "Error creating project",
@@ -236,12 +219,57 @@ export const useProjects = () => {
               : "Failed to create project",
         variant: "destructive",
       });
-      return null;
+      return false;
     }
   };
 
-  const updateProject = async (): Promise<boolean> => {
-    throw new Error("Project update via API is not yet implemented for builder flow.");
+  const updateProject = async (id: string, data: CreateProjectData): Promise<boolean> => {
+    try {
+      const body = {
+        activitiesVisibleToHomeowner: true,
+        address: data.address,
+        city: data.city,
+        description: data.description ?? "",
+        name: data.name,
+        postcode: data.postcode,
+        propertyType: data.property_type,
+        startDate: data.start_date ?? "",
+        state: data.state,
+        statusId: data.statusId ?? data.status ?? "planning",
+        targetEndDate: data.target_end_date ?? "",
+      };
+
+      const result = await updateProjectMutation({ id, body }).unwrap();
+
+      if (!result?.success) {
+        toast({
+          title: "Error updating project",
+          description: result?.message || "Failed to update project",
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      toast({
+        title: "Project updated",
+        description: result.message || "Project updated successfully",
+      });
+
+      await refetchProjects();
+      return true;
+    } catch (error: unknown) {
+      toast({
+        title: "Error updating project",
+        description:
+          error && typeof error === "object" && "data" in error
+            ? String((error as { data: unknown }).data)
+            : error instanceof Error
+              ? error.message
+              : "Failed to update project",
+        variant: "destructive",
+      });
+      return false;
+    }
   };
 
   const deleteProject = async (): Promise<boolean> => {

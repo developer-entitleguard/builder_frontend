@@ -51,6 +51,7 @@ export const api = createApi({
     'Registration',
     'Item',
     'Query',
+    'Activities',
     'Document',
     'Dashboard',
     'Auth',

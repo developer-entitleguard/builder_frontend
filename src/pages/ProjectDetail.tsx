@@ -4,7 +4,7 @@ import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useProjects, Project, PropertyType, ProjectStatus } from "@/hooks/useProjects";
+import { useProjects, Project, PropertyType, ProjectStatus, CreateProjectData } from "@/hooks/useProjects";
 import { useActivities } from "@/hooks/useActivities";
 import { useApprovals } from "@/hooks/useApprovals";
 import { useAuth } from "@/hooks/useAuth";
@@ -150,9 +150,45 @@ const ProjectDetail = () => {
     setLoading(false);
   }, [projectResponse, id, fetchActivities, fetchApprovals]);
 
-  const handleSaveProject = async (): Promise<boolean> => {
-    // Update not yet wired to builder project API
-    return false;
+  const handleSaveProject = async (
+    id: string,
+    changes: Partial<CreateProjectData>
+  ): Promise<boolean> => {
+    if (!project) return false;
+
+    const base: CreateProjectData = {
+      name: project.name,
+      address: project.address,
+      city: project.city,
+      state: project.state,
+      postcode: project.postcode,
+      property_type: project.property_type,
+      start_date: project.start_date,
+      target_end_date: project.target_end_date,
+      status: project.status,
+      description: project.description,
+    };
+
+    const finalData: CreateProjectData = { ...base, ...changes };
+    const success = await updateProject(id, finalData);
+
+    if (success) {
+      setProject({
+        ...project,
+        name: finalData.name,
+        address: finalData.address,
+        city: finalData.city,
+        state: finalData.state,
+        postcode: finalData.postcode,
+        property_type: finalData.property_type,
+        start_date: finalData.start_date ?? null,
+        target_end_date: finalData.target_end_date ?? null,
+        status: finalData.status ?? project.status,
+        description: finalData.description ?? null,
+      });
+    }
+
+    return success;
   };
 
   const handleToggleHomeownerVisibility = async (_visible: boolean) => {

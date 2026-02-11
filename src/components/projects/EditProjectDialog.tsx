@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Project, PropertyType, ProjectStatus, CreateProjectData } from "@/hooks/useProjects";
+import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { 
   Home,
   Building2,
@@ -45,13 +46,21 @@ const australianStates = [
   { value: 'NT', label: 'Northern Territory' }
 ];
 
-const projectStatuses: { value: ProjectStatus; label: string }[] = [
-  { value: 'planning', label: 'Planning' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'on_hold', label: 'On Hold' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' }
-];
+// Map our internal ProjectStatus to the status `name` used by the PROJECT status API
+const mapProjectStatusToApiName = (status: ProjectStatus): string => {
+  switch (status) {
+    case "planning":
+      return "PLANNING";
+    case "in_progress":
+      return "INPROGRESS";
+    case "on_hold":
+      return "ONHOLD";
+    case "completed":
+      return "COMPLETED";
+    case "cancelled":
+      return "CANCELLED";
+  }
+};
 
 export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditProjectDialogProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,6 +76,9 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
     status: project.status,
     description: project.description
   });
+
+  const { data: statusResponse } = useGetStatusesByModuleQuery({ module: "PROJECT" });
+  const projectStatuses = statusResponse?.data ?? [];
 
   useEffect(() => {
     if (open) {
@@ -85,7 +97,21 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
     }
   }, [open, project]);
 
-  const updateField = (field: keyof CreateProjectData, value: any) => {
+  // When editing, pre-select the current status by mapping Project.status -> API status id
+  useEffect(() => {
+    if (!projectStatuses.length || formData.statusId) return;
+
+    const targetName = mapProjectStatusToApiName(project.status);
+    const match = projectStatuses.find(
+      (s) => s.name.toUpperCase() === targetName
+    );
+
+    if (match) {
+      setFormData((prev) => ({ ...prev, statusId: match.id }));
+    }
+  }, [project, projectStatuses, formData.statusId]);
+
+  const updateField = (field: keyof CreateProjectData, value: CreateProjectData[keyof CreateProjectData]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -209,14 +235,18 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
             
             <div>
               <Label htmlFor="edit-status">Status</Label>
-              <Select value={formData.status} onValueChange={v => updateField('status', v as ProjectStatus)}>
+              <Select
+                value={formData.statusId ?? ''}
+                onValueChange={v => updateField('statusId', v || null)}
+                disabled={projectStatuses.length === 0}
+              >
                 <SelectTrigger className="mt-1.5">
-                  <SelectValue placeholder="Select status" />
+                  <SelectValue placeholder={projectStatuses.length === 0 ? "Loading statuses..." : "Select status"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {projectStatuses.map(status => (
-                    <SelectItem key={status.value} value={status.value}>
-                      {status.label}
+                  {projectStatuses.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

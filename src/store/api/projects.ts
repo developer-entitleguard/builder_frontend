@@ -43,6 +43,8 @@ export interface CreateBuilderProjectBody {
   targetEndDate: string;
 }
 
+export type UpdateBuilderProjectBody = CreateBuilderProjectBody;
+
 export const projectsApi = api.injectEndpoints({
   endpoints: (build) => ({
     // GET /api/builder/projects
@@ -70,8 +72,26 @@ export const projectsApi = api.injectEndpoints({
       invalidatesTags: (result) =>
         result?.success ? ["Projects"] : [],
     }),
+    // PUT /api/builder/projects/:id
+    updateProject: build.mutation<
+      BuilderProjectResponse,
+      { id: string; body: UpdateBuilderProjectBody }
+    >({
+      query: ({ id, body }) => ({
+        url: `/api/builder/projects/${id}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (result) =>
+        result?.success ? ["Projects"] : [],
+    }),
   }),
 });
 
-export const { useProjectsQuery, useProjectByIdQuery, useCreateProjectMutation } = projectsApi;
+export const {
+  useProjectsQuery,
+  useProjectByIdQuery,
+  useCreateProjectMutation,
+  useUpdateProjectMutation,
+} = projectsApi;
 

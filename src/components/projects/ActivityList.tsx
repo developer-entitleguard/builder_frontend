@@ -31,7 +31,10 @@ interface ActivityListProps {
   onDeleteActivity: (id: string) => Promise<boolean>;
   onFetchUpdates: (activityId: string) => Promise<ActivityUpdate[]>;
   onPostUpdate: (activityId: string, content: string) => Promise<boolean>;
-  onRequestApproval: (activityId: string, data: CreateApprovalData) => Promise<any>;
+  onRequestApproval: (
+    activityId: string,
+    data: CreateApprovalData
+  ) => Promise<import("@/hooks/useApprovals").ApprovalRequest | null>;
   onToggleHomeownerVisibility: (visible: boolean) => Promise<void>;
 }
 

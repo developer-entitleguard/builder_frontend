@@ -27,6 +27,16 @@ export interface Activity {
   order_index: number;
   created_at: string;
   updated_at: string;
+  /** Optional: for categorized list UI */
+  category_id?: string | null;
+  /** Derived from status === 'done' for checklist UI */
+  completed?: boolean;
+  /** Optional pricing & vendor fields for detail UI */
+  quote?: number | null;
+  price_paid?: number | null;
+  vendor_name?: string | null;
+  vendor_email?: string | null;
+  vendor_phone?: string | null;
 }
 
 export interface ActivityUpdate {
@@ -45,6 +55,7 @@ export interface CreateActivityData {
   priority?: ActivityPriority;
   percentage_complete?: number;
   due_date?: string | null;
+  category_id?: string | null;
 }
 
 // Builder auth helper for JWT stored in localStorage.userData
@@ -111,21 +122,25 @@ export const useActivities = (projectId: string | undefined) => {
   useEffect(() => {
     if (!isBuilder || !apiActivities?.data) return;
 
-    const mapped: Activity[] = apiActivities.data.map((a: BuilderActivityApi) => ({
-      id: a.id,
-      project_id: a.projectId,
-      builder_id: "", // not provided by builder API
-      name: a.name,
-      description: a.description ?? null,
-      status: mapActivityStatus(a.statusName),
-      priority: "medium",
-      percentage_complete: a.percentageComplete ?? 0,
-      due_date: a.dueDate ?? null,
-      completed_at: a.completedAt ?? null,
-      order_index: a.orderIndex ?? 0,
-      created_at: a.createdAt,
-      updated_at: a.updatedAt,
-    }));
+    const mapped: Activity[] = apiActivities.data.map((a: BuilderActivityApi) => {
+      const status = mapActivityStatus(a.statusName);
+      return {
+        id: a.id,
+        project_id: a.projectId,
+        builder_id: "",
+        name: a.name,
+        description: a.description ?? null,
+        status,
+        priority: "medium",
+        percentage_complete: a.percentageComplete ?? 0,
+        due_date: a.dueDate ?? null,
+        completed_at: a.completedAt ?? null,
+        order_index: a.orderIndex ?? 0,
+        created_at: a.createdAt,
+        updated_at: a.updatedAt,
+        completed: status === "done",
+      };
+    });
 
     setActivities(mapped);
   }, [isBuilder, apiActivities]);
@@ -283,11 +298,16 @@ export const useActivities = (projectId: string | undefined) => {
     }
   };
 
-  const updateActivity = async (id: string, data: Partial<CreateActivityData & { status: ActivityStatus; percentage_complete: number }>): Promise<boolean> => {
+  const updateActivity = async (id: string, data: Partial<CreateActivityData & { status: ActivityStatus; percentage_complete: number; completed?: boolean }>): Promise<boolean> => {
     try {
       const updateData: Record<string, unknown> = { ...data };
-      
-      if (data.status === 'done') {
+      if (typeof data.completed === "boolean") {
+        updateData.status = data.completed ? "done" : "pending";
+        updateData.percentage_complete = data.completed ? 100 : 0;
+        if (data.completed) updateData.completed_at = new Date().toISOString();
+        delete updateData.completed;
+      }
+      if (data.status === "done") {
         updateData.completed_at = new Date().toISOString();
         updateData.percentage_complete = 100;
       }

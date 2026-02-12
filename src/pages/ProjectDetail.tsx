@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProjects, Project, PropertyType, ProjectStatus, CreateProjectData } from "@/hooks/useProjects";
 import { useActivities } from "@/hooks/useActivities";
+import { useActivityCategories } from "@/hooks/useActivityCategories";
 import { useApprovals } from "@/hooks/useApprovals";
 import { useAuth } from "@/hooks/useAuth";
 import { useProjectByIdQuery, type BuilderProjectApi } from "@/store/api/projects";
@@ -105,6 +106,7 @@ const ProjectDetail = () => {
   const { user, loading: authLoading } = useAuth();
   const { updateProject } = useProjects();
   const { activities, loading: activitiesLoading, fetchActivities, createActivity, updateActivity, deleteActivity, fetchUpdates, postUpdate } = useActivities(id);
+  const { categories, createCategory, updateCategory, deleteCategory } = useActivityCategories(id);
   const { approvals, loading: approvalsLoading, fetchApprovals, requestApproval, respondToApproval } = useApprovals(id);
   const navigate = useNavigate();
 
@@ -278,6 +280,7 @@ const ProjectDetail = () => {
           <TabsContent value="activities">
             <ActivityList
               activities={activities}
+              categories={categories}
               loading={activitiesLoading}
               projectId={id!}
               approvals={approvals}
@@ -289,6 +292,9 @@ const ProjectDetail = () => {
               onPostUpdate={postUpdate}
               onRequestApproval={requestApproval}
               onToggleHomeownerVisibility={handleToggleHomeownerVisibility}
+              onCreateCategory={createCategory}
+              onUpdateCategory={updateCategory}
+              onDeleteCategory={deleteCategory}
               onRefresh={fetchActivities}
             />
           </TabsContent>

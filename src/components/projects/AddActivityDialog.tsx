@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,18 +13,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Activity, ActivityPriority, CreateActivityData } from "@/hooks/useActivities";
+import type { ActivityCategory } from "@/hooks/useActivityCategories";
 
 interface AddActivityDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: CreateActivityData) => Promise<Activity | null>;
+  categories?: ActivityCategory[];
+  defaultCategoryId?: string | null;
 }
 
-export const AddActivityDialog = ({ open, onOpenChange, onSubmit }: AddActivityDialogProps) => {
+export const AddActivityDialog = ({ open, onOpenChange, onSubmit, categories = [], defaultCategoryId }: AddActivityDialogProps) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<ActivityPriority>("medium");
   const [dueDate, setDueDate] = useState("");
+  const [categoryId, setCategoryId] = useState<string | null>(defaultCategoryId ?? null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
@@ -35,7 +39,8 @@ export const AddActivityDialog = ({ open, onOpenChange, onSubmit }: AddActivityD
       name: name.trim(),
       description: description.trim() || null,
       priority,
-      due_date: dueDate || null
+      due_date: dueDate || null,
+      category_id: categoryId ?? undefined
     });
     setIsSubmitting(false);
     
@@ -44,9 +49,14 @@ export const AddActivityDialog = ({ open, onOpenChange, onSubmit }: AddActivityD
       setDescription("");
       setPriority("medium");
       setDueDate("");
+      setCategoryId(defaultCategoryId ?? null);
       onOpenChange(false);
     }
   };
+
+  useEffect(() => {
+    if (open && defaultCategoryId !== undefined) setCategoryId(defaultCategoryId);
+  }, [open, defaultCategoryId]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -82,6 +92,23 @@ export const AddActivityDialog = ({ open, onOpenChange, onSubmit }: AddActivityD
             />
           </div>
           
+          {categories.length > 0 && (
+            <div>
+              <Label htmlFor="activity-category">Category</Label>
+              <Select value={categoryId ?? ""} onValueChange={v => setCategoryId(v || null)}>
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder="Uncategorized" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Uncategorized</SelectItem>
+                  {categories.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="activity-priority">Priority</Label>

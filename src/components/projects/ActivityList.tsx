@@ -5,29 +5,48 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Activity, ActivityStatus, ActivityPriority, ActivityUpdate, CreateActivityData } from "@/hooks/useActivities";
+import { ActivityCategory, CreateCategoryData } from "@/hooks/useActivityCategories";
 import { CreateApprovalData } from "@/hooks/useApprovals";
 import { AddActivityDialog } from "./AddActivityDialog";
 import { ActivityDetail } from "./ActivityDetail";
 import { ActivityTypeDialog } from "./ActivityTypeDialog";
-import { 
-  Plus, 
-  ListTodo, 
-  Clock, 
-  CheckCircle2, 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Plus,
+  ListTodo,
+  Clock,
+  CheckCircle2,
   ChevronRight,
-  Eye
+  ChevronDown,
+  Eye,
+  FolderPlus,
+  Trash2,
+  Pencil,
+  FileSpreadsheet
 } from "lucide-react";
 import { format } from "date-fns";
 
 interface ActivityListProps {
   activities: Activity[];
+  categories: ActivityCategory[];
   loading: boolean;
   projectId: string;
   approvals: import("@/hooks/useApprovals").ApprovalRequest[];
   activitiesVisibleToHomeowner: boolean;
   onCreateActivity: (data: CreateActivityData) => Promise<Activity | null>;
-  onUpdateActivity: (id: string, data: Partial<CreateActivityData & { status: ActivityStatus }>) => Promise<boolean>;
+  onUpdateActivity: (id: string, data: Partial<CreateActivityData & { status: ActivityStatus; completed?: boolean }>) => Promise<boolean>;
   onDeleteActivity: (id: string) => Promise<boolean>;
   onFetchUpdates: (activityId: string) => Promise<ActivityUpdate[]>;
   onPostUpdate: (activityId: string, content: string) => Promise<boolean>;
@@ -36,6 +55,10 @@ interface ActivityListProps {
     data: CreateApprovalData
   ) => Promise<import("@/hooks/useApprovals").ApprovalRequest | null>;
   onToggleHomeownerVisibility: (visible: boolean) => Promise<void>;
+  onCreateCategory: (data: CreateCategoryData) => Promise<ActivityCategory | null>;
+  onUpdateCategory: (id: string, data: Partial<CreateCategoryData>) => Promise<boolean>;
+  onDeleteCategory: (id: string) => Promise<boolean>;
+  onRefresh?: () => void;
 }
 
 const statusConfig: Record<ActivityStatus, { icon: React.ElementType; color: string; label: string }> = {
@@ -53,6 +76,7 @@ const priorityConfig: Record<ActivityPriority, { color: string; label: string }>
 
 export const ActivityList = ({
   activities,
+  categories,
   loading,
   projectId,
   approvals,
@@ -64,15 +88,26 @@ export const ActivityList = ({
   onPostUpdate,
   onRequestApproval,
   onToggleHomeownerVisibility,
+  onCreateCategory,
+  onUpdateCategory,
+  onDeleteCategory,
   onRefresh
-}: ActivityListProps & { onRefresh?: () => void }) => {
+}: ActivityListProps) => {
   const [typeDialogOpen, setTypeDialogOpen] = useState(false);
   const [singleDialogOpen, setSingleDialogOpen] = useState(false);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState("");
+  const [addActivityCategoryId, setAddActivityCategoryId] = useState<string | null>(null);
 
-  const currentMaxOrder = activities.length > 0 
-    ? Math.max(...activities.map(a => a.order_index)) + 1 
+  const currentMaxOrder = activities.length > 0
+    ? Math.max(...activities.map(a => a.order_index)) + 1
     : 0;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -102,7 +137,50 @@ export const ActivityList = ({
     );
   }
 
-  if (activities.length === 0) {
+  const toggleCollapse = (categoryId: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) next.delete(categoryId);
+      else next.add(categoryId);
+      return next;
+    });
+  };
+
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    await onCreateCategory({ name: newCategoryName.trim() });
+    setNewCategoryName("");
+    setIsAddingCategory(false);
+  };
+
+  const handleSaveEditCategory = async (id: string) => {
+    if (!editingCategoryName.trim()) return;
+    await onUpdateCategory(id, { name: editingCategoryName.trim() });
+    setEditingCategoryId(null);
+  };
+
+  const handleToggleCompleted = async (activity: Activity, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await onUpdateActivity(activity.id, { completed: !(activity.completed ?? activity.status === "done") });
+  };
+
+  const getCategoryProgress = (categoryId: string) => {
+    const catActivities = activities.filter(a => a.category_id === categoryId);
+    if (catActivities.length === 0) return 0;
+    const completed = catActivities.filter(a => a.completed ?? a.status === "done").length;
+    return Math.round((completed / catActivities.length) * 100);
+  };
+
+  const getCategoryStats = (categoryId: string) => {
+    const catActivities = activities.filter(a => a.category_id === categoryId);
+    const completed = catActivities.filter(a => a.completed ?? a.status === "done").length;
+    return { completed, total: catActivities.length };
+  };
+
+  const uncategorizedActivities = activities.filter(a => !a.category_id);
+  const hasNoData = categories.length === 0 && activities.length === 0;
+
+  if (hasNoData) {
     return (
       <div className="text-center py-16">
         <div className="mx-auto w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
@@ -110,25 +188,51 @@ export const ActivityList = ({
         </div>
         <h3 className="text-lg font-semibold mb-2">No activities yet</h3>
         <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-          Add your first activity to start tracking progress on this project.
+          Start by adding a category, then add activities within it. Or import activities from a CSV file.
         </p>
-        <Button onClick={() => setTypeDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Your First Activity
-        </Button>
-        
+        <div className="flex items-center justify-center gap-3">
+          <Button variant="outline" onClick={() => setIsAddingCategory(true)}>
+            <FolderPlus className="h-4 w-4 mr-2" />
+            Add Category
+          </Button>
+          <Button variant="outline" onClick={() => setTypeDialogOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Import from CSV
+          </Button>
+        </div>
+
+        {isAddingCategory && (
+          <div className="flex items-center gap-2 mt-4 max-w-sm mx-auto">
+            <Input
+              value={newCategoryName}
+              onChange={e => setNewCategoryName(e.target.value)}
+              placeholder="Category name..."
+              onKeyDown={e => e.key === "Enter" && handleAddCategory()}
+              autoFocus
+            />
+            <Button size="sm" onClick={handleAddCategory}>Add</Button>
+            <Button size="sm" variant="ghost" onClick={() => setIsAddingCategory(false)}>Cancel</Button>
+          </div>
+        )}
+
         <ActivityTypeDialog
           open={typeDialogOpen}
           onOpenChange={setTypeDialogOpen}
           projectId={projectId}
           currentMaxOrder={currentMaxOrder}
+          categories={categories}
           onSuccess={onRefresh}
           onSingleAdd={() => setSingleDialogOpen(true)}
+          onCreateCategory={onCreateCategory}
         />
         <AddActivityDialog
           open={singleDialogOpen}
-          onOpenChange={setSingleDialogOpen}
-          onSubmit={onCreateActivity}
+          onOpenChange={(open) => { setSingleDialogOpen(open); if (!open) setAddActivityCategoryId(null); }}
+          onSubmit={async (data) => {
+            return onCreateActivity({ ...data, category_id: addActivityCategoryId ?? undefined });
+          }}
+          categories={categories}
+          defaultCategoryId={addActivityCategoryId}
         />
       </div>
     );
@@ -148,72 +252,250 @@ export const ActivityList = ({
             onCheckedChange={onToggleHomeownerVisibility}
           />
         </div>
-        <Button onClick={() => setTypeDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Activity
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setTypeDialogOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Import CSV
+          </Button>
+          <Button variant="outline" onClick={() => setIsAddingCategory(true)}>
+            <FolderPlus className="h-4 w-4 mr-2" />
+            Add Category
+          </Button>
+        </div>
       </div>
 
-      <div className="space-y-3">
-        {activities.map(activity => {
-          const status = statusConfig[activity.status] || statusConfig.pending;
-          const StatusIcon = status.icon;
-          
+      {isAddingCategory && (
+        <div className="flex items-center gap-2 mb-4">
+          <Input
+            value={newCategoryName}
+            onChange={e => setNewCategoryName(e.target.value)}
+            placeholder="Category name..."
+            onKeyDown={e => e.key === "Enter" && handleAddCategory()}
+            autoFocus
+          />
+          <Button size="sm" onClick={handleAddCategory}>Add</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setIsAddingCategory(false); setNewCategoryName(""); }}>Cancel</Button>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {categories.map(category => {
+          const isCollapsed = collapsedCategories.has(category.id);
+          const progress = getCategoryProgress(category.id);
+          const stats = getCategoryStats(category.id);
+          const catActivities = activities.filter(a => a.category_id === category.id);
+
           return (
-            <Card
-              key={activity.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => setSelectedActivityId(activity.id)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
+            <Card key={category.id}>
+              <CardContent className="p-0">
+                <div
+                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30 transition-colors"
+                  onClick={() => toggleCollapse(category.id)}
+                >
                   <div className="flex items-center gap-3 flex-1">
-                    <div className={`p-2 rounded-lg ${status.color}`}>
-                      <StatusIcon className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-medium text-foreground">{activity.name}</h4>
-                      {activity.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-1">{activity.description}</p>
-                      )}
-                      {/* Progress bar */}
-                      <div className="flex items-center gap-2 mt-2">
-                        <Progress value={activity.percentage_complete || 0} className="h-1.5 flex-1 max-w-32" />
-                        <span className="text-xs text-muted-foreground">{activity.percentage_complete || 0}%</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className={status.color}>
-                      {status.label}
-                    </Badge>
-                    {activity.due_date && (
-                      <span className="text-sm text-muted-foreground">
-                        Due: {format(new Date(activity.due_date), 'MMM d')}
-                      </span>
+                    {isCollapsed ? (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
                     )}
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    {editingCategoryId === category.id ? (
+                      <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                        <Input
+                          value={editingCategoryName}
+                          onChange={e => setEditingCategoryName(e.target.value)}
+                          className="h-8 w-48"
+                          onKeyDown={e => {
+                            if (e.key === "Enter") handleSaveEditCategory(category.id);
+                            if (e.key === "Escape") setEditingCategoryId(null);
+                          }}
+                          autoFocus
+                        />
+                        <Button size="sm" variant="ghost" onClick={() => handleSaveEditCategory(category.id)}>Save</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingCategoryId(null)}>Cancel</Button>
+                      </div>
+                    ) : (
+                      <h3 className="font-semibold text-foreground">{category.name}</h3>
+                    )}
+                    <Badge variant="secondary" className="text-xs">
+                      {stats.completed}/{stats.total}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-3" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-2 w-32">
+                      <Progress value={progress} className="h-2 flex-1" />
+                      <span className="text-xs text-muted-foreground w-8">{progress}%</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingCategoryId(category.id);
+                        setEditingCategoryName(category.name);
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() => setDeleteCategoryId(category.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => { setAddActivityCategoryId(category.id); setSingleDialogOpen(true); }}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Activity
+                    </Button>
                   </div>
                 </div>
+
+                {!isCollapsed && (
+                  <div className="border-t">
+                    {catActivities.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">
+                        No activities in this category yet.
+                      </p>
+                    ) : (
+                      <div className="divide-y">
+                        {catActivities.map(activity => {
+                          const status = statusConfig[activity.status] || statusConfig.pending;
+                          const isCompleted = activity.completed ?? activity.status === "done";
+                          return (
+                            <div
+                              key={activity.id}
+                              className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 cursor-pointer transition-colors"
+                              onClick={() => setSelectedActivityId(activity.id)}
+                            >
+                              <div onClick={e => handleToggleCompleted(activity, e)}>
+                                <Checkbox checked={isCompleted} className="cursor-pointer" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={`font-medium text-sm ${isCompleted ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                                  {activity.name}
+                                </p>
+                                {activity.description && (
+                                  <p className="text-xs text-muted-foreground line-clamp-1">{activity.description}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {activity.due_date && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {format(new Date(activity.due_date), "MMM d")}
+                                  </span>
+                                )}
+                                <Badge variant="outline" className={`text-xs ${status.color}`}>
+                                  {status.label}
+                                </Badge>
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
         })}
+
+        {uncategorizedActivities.length > 0 && (
+          <Card>
+            <CardContent className="p-0">
+              <div className="p-4">
+                <h3 className="font-semibold text-muted-foreground">Uncategorized</h3>
+              </div>
+              <div className="border-t divide-y">
+                {uncategorizedActivities.map(activity => {
+                  const status = statusConfig[activity.status] || statusConfig.pending;
+                  const isCompleted = activity.completed ?? activity.status === "done";
+                  return (
+                    <div
+                      key={activity.id}
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 cursor-pointer transition-colors"
+                      onClick={() => setSelectedActivityId(activity.id)}
+                    >
+                      <div onClick={e => handleToggleCompleted(activity, e)}>
+                        <Checkbox checked={isCompleted} className="cursor-pointer" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-medium text-sm ${isCompleted ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                          {activity.name}
+                        </p>
+                        {activity.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-1">{activity.description}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {activity.due_date && (
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(activity.due_date), "MMM d")}
+                          </span>
+                        )}
+                        <Badge variant="outline" className={`text-xs ${status.color}`}>
+                          {status.label}
+                        </Badge>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      <AlertDialog open={!!deleteCategoryId} onOpenChange={() => setDeleteCategoryId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Category?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this category and all activities within it. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (deleteCategoryId) {
+                  await onDeleteCategory(deleteCategoryId);
+                  onRefresh?.();
+                }
+                setDeleteCategoryId(null);
+              }}
+              className="bg-destructive text-destructive-foreground"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ActivityTypeDialog
         open={typeDialogOpen}
         onOpenChange={setTypeDialogOpen}
         projectId={projectId}
         currentMaxOrder={currentMaxOrder}
+        categories={categories}
         onSuccess={onRefresh}
         onSingleAdd={() => setSingleDialogOpen(true)}
+        onCreateCategory={onCreateCategory}
       />
       <AddActivityDialog
         open={singleDialogOpen}
-        onOpenChange={setSingleDialogOpen}
-        onSubmit={onCreateActivity}
+        onOpenChange={(open) => { setSingleDialogOpen(open); if (!open) setAddActivityCategoryId(null); }}
+        onSubmit={async (data) => {
+          return onCreateActivity({ ...data, category_id: addActivityCategoryId ?? undefined });
+        }}
+        categories={categories}
+        defaultCategoryId={addActivityCategoryId}
       />
     </div>
   );

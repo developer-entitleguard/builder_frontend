@@ -9,26 +9,31 @@ import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
 import { ListTodo, FileSpreadsheet, Upload, Download } from 'lucide-react';
 import { ActivityPriority, ActivityStatus } from '@/hooks/useActivities';
+import type { ActivityCategory, CreateCategoryData } from '@/hooks/useActivityCategories';
 
-interface ActivityTypeDialogProps {
+export interface ActivityTypeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
   currentMaxOrder: number;
   onSuccess?: () => void;
   onSingleAdd?: () => void;
+  categories?: ActivityCategory[];
+  onCreateCategory?: (data: CreateCategoryData) => Promise<ActivityCategory | null>;
 }
 
 const validStatuses: ActivityStatus[] = ['pending', 'in_progress', 'done'];
 const validPriorities: ActivityPriority[] = ['low', 'medium', 'high', 'urgent'];
 
-export const ActivityTypeDialog = ({ 
-  open, 
-  onOpenChange, 
+export const ActivityTypeDialog = ({
+  open,
+  onOpenChange,
   projectId,
   currentMaxOrder,
   onSuccess,
-  onSingleAdd 
+  onSingleAdd,
+  categories = [],
+  onCreateCategory
 }: ActivityTypeDialogProps) => {
   const { toast } = useToast();
   const { user } = useAuth();

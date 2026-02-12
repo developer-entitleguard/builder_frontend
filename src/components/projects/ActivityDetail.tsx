@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -19,36 +21,152 @@ import {
 import { Activity, ActivityStatus, ActivityUpdate, CreateActivityData } from "@/hooks/useActivities";
 import { CreateApprovalData } from "@/hooks/useApprovals";
 import { RequestApprovalDialog } from "./RequestApprovalDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/hooks/useOrganization";
 import { 
   ArrowLeft, 
   Trash2, 
   Send, 
-  Clock, 
   CheckCircle2, 
-  ListTodo, 
-  AlertTriangle,
   ShieldCheck,
-  Calendar
+  Calendar,
+  DollarSign,
+  User,
+  Mail,
+  Phone
 } from "lucide-react";
 import { format } from "date-fns";
+
+interface Vendor {
+  id: string;
+  name: string;
+  contact_email: string;
+  contact_phone: string;
+}
 
 interface ActivityDetailProps {
   activity: Activity;
   projectId: string;
   onBack: () => void;
-  onUpdateActivity: (id: string, data: Partial<CreateActivityData & { status: ActivityStatus }>) => Promise<boolean>;
+  onUpdateActivity: (
+    id: string,
+    data: Partial<CreateActivityData & { status: ActivityStatus; completed?: boolean }>
+  ) => Promise<boolean>;
   onDeleteActivity: (id: string) => Promise<boolean>;
   onFetchUpdates: (activityId: string) => Promise<ActivityUpdate[]>;
   onPostUpdate: (activityId: string, content: string) => Promise<boolean>;
-  onRequestApproval: (activityId: string, data: CreateApprovalData) => Promise<any>;
+  onRequestApproval: (activityId: string, data: CreateApprovalData) => Promise<import("@/hooks/useApprovals").ApprovalRequest | null>;
   activityApprovals: import("@/hooks/useApprovals").ApprovalRequest[];
 }
 
-const statusOptions: { value: ActivityStatus; label: string; icon: React.ElementType }[] = [
-  { value: 'pending', label: 'Pending', icon: ListTodo },
-  { value: 'in_progress', label: 'In Progress', icon: Clock },
-  { value: 'done', label: 'Done', icon: CheckCircle2 }
-];
+const VendorCard = ({
+  vendorName, vendorEmail, vendorPhone,
+  setVendorName, setVendorEmail, setVendorPhone,
+  onUpdateActivity, activityId
+}: {
+  vendorName: string; vendorEmail: string; vendorPhone: string;
+  setVendorName: (v: string) => void; setVendorEmail: (v: string) => void; setVendorPhone: (v: string) => void;
+  onUpdateActivity: (id: string, data: Partial<CreateActivityData>) => Promise<boolean>;
+  activityId: string;
+}) => {
+  const { organization } = useOrganization();
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [loadingVendors, setLoadingVendors] = useState(false);
+
+  useEffect(() => {
+    if (!organization) return;
+    setLoadingVendors(true);
+    supabase
+      .from("vendors")
+      .select("id, name, contact_email, contact_phone")
+      .eq("organization_id", organization.id)
+      .order("name")
+      .then(({ data, error }) => {
+        if (!error && data) setVendors(data as Vendor[]);
+        setLoadingVendors(false);
+      });
+  }, [organization]);
+
+  const handleSelectVendor = (vendorId: string) => {
+    if (vendorId === "none") return;
+    const vendor = vendors.find((v) => v.id === vendorId);
+    if (!vendor) return;
+    setVendorName(vendor.name);
+    setVendorEmail(vendor.contact_email);
+    setVendorPhone(vendor.contact_phone);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <User className="h-4 w-4" />
+          Vendor
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {vendors.length > 0 && (
+          <>
+            <div>
+              <Label className="text-xs text-muted-foreground">Select from org vendors</Label>
+              <Select onValueChange={handleSelectVendor}>
+                <SelectTrigger className="mt-1 h-8">
+                  <SelectValue placeholder="Choose a vendor..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {vendors.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Separator />
+          </>
+        )}
+        <div>
+          <Label htmlFor="vendor-name" className="text-xs text-muted-foreground">
+            Name
+          </Label>
+          <Input
+            id="vendor-name"
+            placeholder="Vendor name"
+            value={vendorName}
+            onChange={(e) => setVendorName(e.target.value)}
+            className="mt-1 h-8"
+          />
+        </div>
+        <div>
+          <Label htmlFor="vendor-email" className="text-xs text-muted-foreground">
+            Email
+          </Label>
+          <Input
+            id="vendor-email"
+            type="email"
+            placeholder="vendor@example.com"
+            value={vendorEmail}
+            onChange={(e) => setVendorEmail(e.target.value)}
+            className="mt-1 h-8"
+          />
+        </div>
+        <div>
+          <Label htmlFor="vendor-phone" className="text-xs text-muted-foreground">
+            Phone
+          </Label>
+          <Input
+            id="vendor-phone"
+            type="tel"
+            placeholder="Phone number"
+            value={vendorPhone}
+            onChange={(e) => setVendorPhone(e.target.value)}
+            className="mt-1 h-8"
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 export const ActivityDetail = ({
   activity,
@@ -59,7 +177,7 @@ export const ActivityDetail = ({
   onFetchUpdates,
   onPostUpdate,
   onRequestApproval,
-  activityApprovals
+  activityApprovals,
 }: ActivityDetailProps) => {
   const [updates, setUpdates] = useState<ActivityUpdate[]>([]);
   const [loadingUpdates, setLoadingUpdates] = useState(true);
@@ -67,72 +185,66 @@ export const ActivityDetail = ({
   const [isPostingUpdate, setIsPostingUpdate] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
-  const [currentStatus, setCurrentStatus] = useState<ActivityStatus>(activity.status);
-  const [percentageComplete, setPercentageComplete] = useState(activity.percentage_complete || 0);
+  const [completed, setCompleted] = useState(activity.completed ?? false);
+  const [quote, setQuote] = useState(activity.quote?.toString() ?? "");
+  const [pricePaid, setPricePaid] = useState(activity.price_paid?.toString() ?? "");
+  const [vendorName, setVendorName] = useState(activity.vendor_name ?? "");
+  const [vendorEmail, setVendorEmail] = useState(activity.vendor_email ?? "");
+  const [vendorPhone, setVendorPhone] = useState(activity.vendor_phone ?? "");
 
-  // Sync local state when activity prop changes (after parent refetch)
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
+
   useEffect(() => {
-    setCurrentStatus(activity.status);
-    setPercentageComplete(activity.percentage_complete || 0);
-  }, [activity.status, activity.percentage_complete]);
+    setCompleted(activity.completed ?? false);
+    setQuote(activity.quote?.toString() ?? "");
+    setPricePaid(activity.price_paid?.toString() ?? "");
+    setVendorName(activity.vendor_name ?? "");
+    setVendorEmail(activity.vendor_email ?? "");
+    setVendorPhone(activity.vendor_phone ?? "");
+  }, [
+    activity.completed,
+    activity.quote,
+    activity.price_paid,
+    activity.vendor_name,
+    activity.vendor_email,
+    activity.vendor_phone,
+  ]);
 
-  useEffect(() => {
-    loadUpdates();
-  }, [activity.id]);
-
-  const loadUpdates = async () => {
+  const loadUpdates = useCallback(async () => {
     setLoadingUpdates(true);
     const data = await onFetchUpdates(activity.id);
     setUpdates(data);
     setLoadingUpdates(false);
+  }, [activity.id, onFetchUpdates]);
+
+  useEffect(() => {
+    void loadUpdates();
+  }, [loadUpdates]);
+
+  const handleToggleCompleted = async (checked: boolean) => {
+    setCompleted(checked);
+    await onUpdateActivity(activity.id, { completed: checked });
   };
 
-  const handleStatusChange = async (newStatus: ActivityStatus) => {
-    setCurrentStatus(newStatus);
-    const newPercentage = newStatus === 'done' ? 100 : percentageComplete;
-    if (newStatus === 'done') setPercentageComplete(100);
-    await onUpdateActivity(activity.id, { status: newStatus, percentage_complete: newPercentage });
-  };
-
-  // Debounced save for percentage
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  const debouncedSave = useCallback((newPercentage: number, newStatus: ActivityStatus) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    saveTimeoutRef.current = setTimeout(async () => {
-      await onUpdateActivity(activity.id, { percentage_complete: newPercentage, status: newStatus });
-    }, 300);
-  }, [activity.id, onUpdateActivity]);
-
-  const handlePercentageChange = (value: number[]) => {
-    const newPercentage = value[0];
-    setPercentageComplete(newPercentage);
-    
-    // Auto-update status based on percentage
-    let newStatus = currentStatus;
-    if (newPercentage === 100 && currentStatus !== 'done') {
-      newStatus = 'done';
-      setCurrentStatus('done');
-    } else if (newPercentage > 0 && newPercentage < 100 && currentStatus === 'pending') {
-      newStatus = 'in_progress';
-      setCurrentStatus('in_progress');
-    } else if (newPercentage === 0 && currentStatus !== 'pending') {
-      newStatus = 'pending';
-      setCurrentStatus('pending');
-    }
-    
-    debouncedSave(newPercentage, newStatus);
+  const handleSaveDetails = async () => {
+    setIsSavingDetails(true);
+    await onUpdateActivity(activity.id, {
+      quote: quote ? parseFloat(quote) : null,
+      price_paid: pricePaid ? parseFloat(pricePaid) : null,
+      vendor_name: vendorName || null,
+      vendor_email: vendorEmail || null,
+      vendor_phone: vendorPhone || null,
+    } as Partial<CreateActivityData>);
+    setIsSavingDetails(false);
   };
 
   const handlePostUpdate = async () => {
     if (!updateContent.trim()) return;
-    
+
     setIsPostingUpdate(true);
     const success = await onPostUpdate(activity.id, updateContent.trim());
     setIsPostingUpdate(false);
-    
+
     if (success) {
       setUpdateContent("");
       await loadUpdates();
@@ -151,13 +263,17 @@ export const ActivityDetail = ({
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Activities
         </Button>
-        
+
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setApprovalDialogOpen(true)}>
             <ShieldCheck className="h-4 w-4 mr-2" />
             Request Approval
           </Button>
-          <Button variant="outline" onClick={() => setDeleteDialogOpen(true)} className="text-destructive">
+          <Button
+            variant="outline"
+            onClick={() => setDeleteDialogOpen(true)}
+            className="text-destructive"
+          >
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
@@ -170,51 +286,53 @@ export const ActivityDetail = ({
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>{activity.name}</CardTitle>
-                <Select value={currentStatus} onValueChange={v => handleStatusChange(v as ActivityStatus)}>
-                  <SelectTrigger className="w-[160px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map(opt => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        <div className="flex items-center gap-2">
-                          <opt.icon className="h-4 w-4" />
-                          {opt.label}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <CardTitle
+                  className={completed ? "line-through text-muted-foreground" : ""}
+                >
+                  {activity.name}
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="completed-toggle" className="text-sm">
+                    Completed
+                  </Label>
+                  <Switch
+                    id="completed-toggle"
+                    checked={completed}
+                    onCheckedChange={handleToggleCompleted}
+                  />
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {activity.description ? (
                 <p className="text-muted-foreground">{activity.description}</p>
               ) : (
-                <p className="text-muted-foreground italic">No description provided.</p>
+                <p className="text-muted-foreground italic">
+                  No description provided.
+                </p>
               )}
-              
-              {/* Percentage Complete */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Progress</span>
-                  <span className="text-sm text-muted-foreground">{percentageComplete}%</span>
+
+              {completed && (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Completed
+                  {activity.completed_at && (
+                    <span className="text-muted-foreground">
+                      on{" "}
+                      {format(
+                        new Date(activity.completed_at),
+                        "MMMM d, yyyy"
+                      )}
+                    </span>
+                  )}
                 </div>
-                <Slider
-                  value={[percentageComplete]}
-                  onValueChange={handlePercentageChange}
-                  max={100}
-                  step={5}
-                  className="w-full"
-                />
-                <Progress value={percentageComplete} className="h-2" />
-              </div>
-              
+              )}
+
               {activity.due_date && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Calendar className="h-4 w-4" />
-                  Due: {format(new Date(activity.due_date), 'MMMM d, yyyy')}
+                  Due:{" "}
+                  {format(new Date(activity.due_date), "MMMM d, yyyy")}
                 </div>
               )}
             </CardContent>
@@ -228,12 +346,15 @@ export const ActivityDetail = ({
             <CardContent>
               <Textarea
                 value={updateContent}
-                onChange={e => setUpdateContent(e.target.value)}
+                onChange={(e) => setUpdateContent(e.target.value)}
                 placeholder="Share progress, notes, or any updates..."
                 rows={3}
               />
               <div className="flex justify-end mt-3">
-                <Button onClick={handlePostUpdate} disabled={!updateContent.trim() || isPostingUpdate}>
+                <Button
+                  onClick={handlePostUpdate}
+                  disabled={!updateContent.trim() || isPostingUpdate}
+                >
                   <Send className="h-4 w-4 mr-2" />
                   {isPostingUpdate ? "Posting..." : "Post Update"}
                 </Button>
@@ -249,16 +370,24 @@ export const ActivityDetail = ({
             <CardContent>
               {loadingUpdates ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
                 </div>
               ) : updates.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">No updates yet.</p>
+                <p className="text-muted-foreground text-center py-8">
+                  No updates yet.
+                </p>
               ) : (
                 <div className="space-y-4">
-                  {updates.map(update => (
-                    <div key={update.id} className="border-l-2 border-muted pl-4 pb-4">
+                  {updates.map((update) => (
+                    <div
+                      key={update.id}
+                      className="border-l-2 border-muted pl-4 pb-4"
+                    >
                       <p className="text-sm text-muted-foreground mb-1">
-                        {format(new Date(update.created_at), 'MMM d, yyyy h:mm a')}
+                        {format(
+                          new Date(update.created_at),
+                          "MMM d, yyyy h:mm a"
+                        )}
                       </p>
                       <p className="text-foreground">{update.content}</p>
                     </div>
@@ -277,21 +406,100 @@ export const ActivityDetail = ({
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
+                <p className="text-sm text-muted-foreground">Status</p>
+                <Badge variant="outline" className="mt-1 capitalize">
+                  {completed ? "Completed" : "Pending"}
+                </Badge>
+              </div>
+              <div>
                 <p className="text-sm text-muted-foreground">Priority</p>
-                <Badge variant="outline" className="mt-1 capitalize">{activity.priority}</Badge>
+                <Badge variant="outline" className="mt-1 capitalize">
+                  {activity.priority}
+                </Badge>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Created</p>
-                <p className="text-sm">{format(new Date(activity.created_at), 'MMM d, yyyy')}</p>
+                <p className="text-sm">
+                  {format(new Date(activity.created_at), "MMM d, yyyy")}
+                </p>
               </div>
               {activity.completed_at && (
                 <div>
                   <p className="text-sm text-muted-foreground">Completed</p>
-                  <p className="text-sm">{format(new Date(activity.completed_at), 'MMM d, yyyy')}</p>
+                  <p className="text-sm">
+                    {format(new Date(activity.completed_at), "MMM d, yyyy")}
+                  </p>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Pricing */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Pricing
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label
+                  htmlFor="quote"
+                  className="text-xs text-muted-foreground"
+                >
+                  Quote
+                </Label>
+                <Input
+                  id="quote"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={quote}
+                  onChange={(e) => setQuote(e.target.value)}
+                  className="mt-1 h-8"
+                />
+              </div>
+              <div>
+                <Label
+                  htmlFor="price-paid"
+                  className="text-xs text-muted-foreground"
+                >
+                  Price Paid
+                </Label>
+                <Input
+                  id="price-paid"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={pricePaid}
+                  onChange={(e) => setPricePaid(e.target.value)}
+                  className="mt-1 h-8"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Vendor */}
+          <VendorCard
+            vendorName={vendorName}
+            vendorEmail={vendorEmail}
+            vendorPhone={vendorPhone}
+            setVendorName={setVendorName}
+            setVendorEmail={setVendorEmail}
+            setVendorPhone={setVendorPhone}
+            onUpdateActivity={onUpdateActivity}
+            activityId={activity.id}
+          />
+
+          {/* Save Button */}
+          <Button
+            onClick={handleSaveDetails}
+            disabled={isSavingDetails}
+            className="w-full"
+          >
+            {isSavingDetails ? "Saving..." : "Save Details"}
+          </Button>
         </div>
       </div>
 
@@ -300,12 +508,16 @@ export const ActivityDetail = ({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Activity?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this activity and all its updates. This action cannot be undone.
+              This will permanently delete this activity and all its updates.
+              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -3,10 +3,9 @@ import { api } from "./apiSlice";
 export interface BuilderActivityApi {
   id: string;
   projectId: string;
-  builderId: string;
   name: string;
   description: string | null;
-  status: string;
+  statusName: string;
   percentageComplete: number;
   dueDate: string | null;
   completedAt: string | null;

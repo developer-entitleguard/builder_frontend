@@ -59,6 +59,21 @@ const hasBuilderAuth = (): boolean => {
   }
 };
 
+const mapActivityStatus = (value: string): ActivityStatus => {
+  const key = value.toLowerCase();
+  switch (key) {
+    case "pending":
+      return "pending";
+    case "inprogress":
+    case "in_progress":
+      return "in_progress";
+    case "done":
+      return "done";
+    default:
+      return "pending";
+  }
+};
+
 export const useActivities = (projectId: string | undefined) => {
   const { user } = useAuth();
   const { organization } = useOrganization();
@@ -99,10 +114,10 @@ export const useActivities = (projectId: string | undefined) => {
     const mapped: Activity[] = apiActivities.data.map((a: BuilderActivityApi) => ({
       id: a.id,
       project_id: a.projectId,
-      builder_id: a.builderId,
+      builder_id: "", // not provided by builder API
       name: a.name,
       description: a.description ?? null,
-      status: (a.status as ActivityStatus) || "pending",
+      status: mapActivityStatus(a.statusName),
       priority: "medium",
       percentage_complete: a.percentageComplete ?? 0,
       due_date: a.dueDate ?? null,
@@ -192,10 +207,10 @@ export const useActivities = (projectId: string | undefined) => {
         const created: Activity = {
           id: createdApi.id,
           project_id: createdApi.projectId,
-          builder_id: createdApi.builderId,
+          builder_id: "",
           name: createdApi.name,
           description: createdApi.description,
-          status: (createdApi.status as ActivityStatus) || "pending",
+          status: mapActivityStatus(createdApi.statusName),
           priority: "medium",
           percentage_complete: createdApi.percentageComplete ?? 0,
           due_date: createdApi.dueDate,

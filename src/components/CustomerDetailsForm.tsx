@@ -8,20 +8,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowRight, MapPin, Phone, Mail, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { australianStates, validateAustralianPhone, formatAustralianPhone, validateAustralianPostcode, validateEmail } from "@/utils/validation";
-import { useProjects } from "@/hooks/useProjects";
+import { useProjectsQuery } from "@/store/api/projects";
 import { useCreateBuilderCustomerMutation } from "@/store/api";
 import { useOrganization } from "@/hooks/useOrganization";
 
-interface CustomerDetailsFormProps {
-  onNext: (data: any) => void;
-  initialData?: any;
+export interface CustomerDetailsFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  propertyAddress: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  projectId: string;
+  projectName: string;
+  settlementDate: string;
+  notes: string;
+  price: string;
+  numBedrooms: string;
+  numRooms: string;
+  totalBuiltUpArea: string;
+}
+
+export interface CustomerDetailsFormProps {
+  onNext: (data: CustomerDetailsFormData & { registrationId?: string }) => void;
+  initialData?: Partial<CustomerDetailsFormData> & { id?: string; registrationId?: string };
   registrationId?: string | null;
 }
 
 const CustomerDetailsForm = ({ onNext, initialData, registrationId }: CustomerDetailsFormProps) => {
   const { toast } = useToast();
   const { organization } = useOrganization();
-  const { projects, loading: projectsLoading } = useProjects();
+  const { data: projectsResponse, isLoading: projectsLoading } = useProjectsQuery();
+  const projects = projectsResponse?.data ?? [];
   const [createBuilderCustomer] = useCreateBuilderCustomerMutation();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -196,10 +216,11 @@ const CustomerDetailsForm = ({ onNext, initialData, registrationId }: CustomerDe
       });
 
       onNext({ ...formData, registrationId: customerId });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { data?: unknown; message?: string };
       toast({
         title: "Error saving customer details",
-        description: error?.data ?? error?.message ?? 'Failed to create customer',
+        description: err?.data != null ? String(err.data) : err?.message ?? 'Failed to create customer',
         variant: "destructive"
       });
     } finally {

@@ -187,10 +187,13 @@ const CustomerDetailsForm = ({ onNext, initialData, registrationId }: CustomerDe
     setLoading(true);
     try {
       const selectedProject = projects.find(p => p.id === formData.projectId);
+      const numBedrooms = formData.numBedrooms ? Number(formData.numBedrooms) : undefined;
+      const numRooms = formData.numRooms ? Number(formData.numRooms) : undefined;
+      const price = formData.price ? Number(formData.price) : undefined;
+      const totalBuiltUpArea = formData.totalBuiltUpArea ? Number(formData.totalBuiltUpArea) : undefined;
+
       const result = await createBuilderCustomer({
-        // When editing an existing customer (opened onboarding with ?id=),
-        // include the id so the API updates instead of creating a new record.
-        id: registrationId || initialData?.id || initialData?.registrationId,
+        id: registrationId || initialData?.id || initialData?.registrationId || undefined,
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         email: formData.email.trim(),
@@ -199,9 +202,19 @@ const CustomerDetailsForm = ({ onNext, initialData, registrationId }: CustomerDe
         city: formData.city.trim(),
         state: formData.state,
         zip: formData.zipCode.trim(),
+        country: 'Australia',
+        projectId: formData.projectId || undefined,
         projectName: selectedProject?.name || formData.projectName || undefined,
         settlementDate: formData.settlementDate || undefined,
         notes: formData.notes?.trim() || undefined,
+        numBedrooms: numBedrooms !== undefined && !Number.isNaN(numBedrooms) ? numBedrooms : undefined,
+        numRooms: numRooms !== undefined && !Number.isNaN(numRooms) ? numRooms : undefined,
+        price: price !== undefined && !Number.isNaN(price) ? price : undefined,
+        totalBuiltUpArea: totalBuiltUpArea !== undefined && !Number.isNaN(totalBuiltUpArea) ? totalBuiltUpArea : undefined,
+        consentMethod: 'form',
+        consentReceived: true,
+        consentReceivedAt: new Date().toISOString(),
+        consentToken: undefined,
         builderOrganizationId,
       }).unwrap();
 
@@ -212,7 +225,7 @@ const CustomerDetailsForm = ({ onNext, initialData, registrationId }: CustomerDe
 
       toast({
         title: "Customer details saved",
-        description: "Moving to item selection"
+        description: result?.message ?? "Moving to item selection"
       });
 
       onNext({ ...formData, registrationId: customerId });

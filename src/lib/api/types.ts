@@ -391,9 +391,19 @@ export interface CreateBuilderCustomerRequest {
   city: string;
   state: string;
   zip: string;
+  country?: string;
+  projectId?: string;
   projectName?: string;
   settlementDate?: string;
   notes?: string;
+  numBedrooms?: number;
+  numRooms?: number;
+  price?: number;
+  totalBuiltUpArea?: number;
+  consentMethod?: string;
+  consentReceived?: boolean;
+  consentReceivedAt?: string;
+  consentToken?: string;
   builderOrganizationId: string;
 }
 

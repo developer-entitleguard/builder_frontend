@@ -70,7 +70,8 @@ const hasBuilderAuth = (): boolean => {
   }
 };
 
-const mapActivityStatus = (value: string): ActivityStatus => {
+const mapActivityStatus = (value: string | undefined | null): ActivityStatus => {
+  if (value == null || value === "") return "pending";
   const key = value.toLowerCase();
   switch (key) {
     case "pending":

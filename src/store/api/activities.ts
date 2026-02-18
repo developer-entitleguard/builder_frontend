@@ -11,6 +11,9 @@ export interface BuilderActivityApi {
   completedAt: string | null;
   orderIndex: number;
   categoryId?: string | null;
+  categoryName?: string | null;
+  completed?: boolean;
+  isActive?: boolean;
   quote?: number | null;
   pricePaid?: number | null;
   vendorName?: string | null;
@@ -57,6 +60,21 @@ export interface CreateBuilderActivityBody {
   statusId: string;
 }
 
+export interface UpdateBuilderActivityBody {
+  categoryId?: string | null;
+  completed?: boolean;
+  completedAt: string | null;
+  description: string;
+  dueDate: string | null;
+  name: string;
+  orderIndex: number;
+  pricePaid?: number | null;
+  quote?: number | null;
+  vendorEmail?: string | null;
+  vendorName?: string | null;
+  vendorPhone?: string | null;
+}
+
 export const activitiesApi = api.injectEndpoints({
   endpoints: (build) => ({
     // GET /api/builder/projects/:projectId/activities
@@ -73,6 +91,21 @@ export const activitiesApi = api.injectEndpoints({
       ],
     }),
 
+    // GET /api/builder/projects/:projectId/activities/:id
+    getActivityById: build.query<
+      BuilderActivityResponse,
+      { projectId: string; id: string }
+    >({
+      query: ({ projectId, id }) => ({
+        url: `/api/builder/projects/${projectId}/activities/${id}`,
+        method: "GET",
+      }),
+      providesTags: (_result, _error, { projectId, id }) => [
+        { type: "Activities", id: projectId },
+        { type: "Activities", id },
+      ],
+    }),
+
     // POST /api/builder/projects/:projectId/activities
     createActivity: build.mutation<
       BuilderActivityResponse,
@@ -85,6 +118,22 @@ export const activitiesApi = api.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: "Activities", id: projectId },
+      ],
+    }),
+
+    // PUT /api/builder/projects/:projectId/activities/:id
+    updateActivity: build.mutation<
+      BuilderActivityResponse,
+      { projectId: string; id: string; body: UpdateBuilderActivityBody }
+    >({
+      query: ({ projectId, id, body }) => ({
+        url: `/api/builder/projects/${projectId}/activities/${id}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { projectId, id }) => [
+        { type: "Activities", id: projectId },
+        { type: "Activities", id },
       ],
     }),
 
@@ -106,7 +155,9 @@ export const activitiesApi = api.injectEndpoints({
 
 export const {
   useGetActivitiesByProjectQuery,
+  useGetActivityByIdQuery,
   useCreateActivityMutation,
+  useUpdateActivityMutation,
   useDeleteActivityMutation,
 } = activitiesApi;
 

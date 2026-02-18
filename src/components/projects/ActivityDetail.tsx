@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Activity, ActivityStatus, ActivityUpdate, CreateActivityData } from "@/hooks/useActivities";
+import { useGetActivityByIdQuery, useUpdateActivityMutation } from "@/store/api/activities";
 import { CreateApprovalData } from "@/hooks/useApprovals";
 import { RequestApprovalDialog } from "./RequestApprovalDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -58,6 +59,18 @@ interface ActivityDetailProps {
   onRequestApproval: (activityId: string, data: CreateApprovalData) => Promise<import("@/hooks/useApprovals").ApprovalRequest | null>;
   activityApprovals: import("@/hooks/useApprovals").ApprovalRequest[];
 }
+
+// Builder auth helper for JWT stored in localStorage.userData
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData) as { jwt?: string } | null;
+    return !!parsed?.jwt;
+  } catch {
+    return false;
+  }
+};
 
 const VendorCard = ({
   vendorName, vendorEmail, vendorPhone,
@@ -179,6 +192,16 @@ export const ActivityDetail = ({
   onRequestApproval,
   activityApprovals,
 }: ActivityDetailProps) => {
+  const isBuilder = hasBuilderAuth();
+
+  const [updateActivityMutation] = useUpdateActivityMutation();
+
+  // Call builder GET /api/builder/projects/{projectId}/activities/{id} when in builder mode
+  useGetActivityByIdQuery(
+    { projectId, id: activity.id },
+    { skip: !isBuilder }
+  );
+
   const [updates, setUpdates] = useState<ActivityUpdate[]>([]);
   const [loadingUpdates, setLoadingUpdates] = useState(true);
   const [updateContent, setUpdateContent] = useState("");
@@ -228,6 +251,39 @@ export const ActivityDetail = ({
 
   const handleSaveDetails = async () => {
     setIsSavingDetails(true);
+
+    // For builder mode, also PUT /api/builder/projects/{projectId}/activities/{id}
+    if (isBuilder) {
+      const isCompleted = completed;
+
+      const body = {
+        categoryId: activity.category_id ?? null,
+        completed: isCompleted,
+        completedAt: isCompleted
+          ? activity.completed_at ?? new Date().toISOString()
+          : null,
+        description: activity.description ?? "",
+        dueDate: activity.due_date ?? "",
+        name: activity.name,
+        orderIndex: activity.order_index,
+        pricePaid: pricePaid ? parseFloat(pricePaid) : 0,
+        quote: quote ? parseFloat(quote) : 0,
+        vendorEmail: vendorEmail || "",
+        vendorName: vendorName || "",
+        vendorPhone: vendorPhone || "",
+      };
+
+      try {
+        await updateActivityMutation({
+          projectId,
+          id: activity.id,
+          body,
+        }).unwrap();
+      } catch {
+        // Swallow error here; Supabase update below still runs to keep legacy data in sync
+      }
+    }
+
     await onUpdateActivity(activity.id, {
       quote: quote ? parseFloat(quote) : null,
       price_paid: pricePaid ? parseFloat(pricePaid) : null,
@@ -235,6 +291,7 @@ export const ActivityDetail = ({
       vendor_email: vendorEmail || null,
       vendor_phone: vendorPhone || null,
     } as Partial<CreateActivityData>);
+
     setIsSavingDetails(false);
   };
 
@@ -242,7 +299,42 @@ export const ActivityDetail = ({
     if (!updateContent.trim()) return;
 
     setIsPostingUpdate(true);
-    const success = await onPostUpdate(activity.id, updateContent.trim());
+    const content = updateContent.trim();
+
+    // For builder mode, also PUT /api/builder/projects/{projectId}/activities/{id}
+    if (isBuilder) {
+      const isCompleted = completed;
+
+      const body = {
+        categoryId: activity.category_id ?? null,
+        completed: isCompleted,
+        completedAt: isCompleted
+          ? activity.completed_at ?? new Date().toISOString()
+          : null,
+        // Use the update content as the description for this PUT
+        description: content,
+        dueDate: activity.due_date ?? "",
+        name: activity.name,
+        orderIndex: activity.order_index,
+        pricePaid: activity.price_paid ?? 0,
+        quote: activity.quote ?? 0,
+        vendorEmail: activity.vendor_email ?? "",
+        vendorName: activity.vendor_name ?? "",
+        vendorPhone: activity.vendor_phone ?? "",
+      };
+
+      try {
+        await updateActivityMutation({
+          projectId,
+          id: activity.id,
+          body,
+        }).unwrap();
+      } catch {
+        // Ignore builder PUT errors here; still try to save the Supabase update
+      }
+    }
+
+    const success = await onPostUpdate(activity.id, content);
     setIsPostingUpdate(false);
 
     if (success) {

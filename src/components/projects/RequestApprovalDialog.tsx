@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dialog";
 import { CreateApprovalData, ApprovalType } from "@/hooks/useApprovals";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { useCreateApprovalMutation } from "@/store/api/approvals";
 
 interface Registration {
   id: string;
@@ -27,7 +29,7 @@ interface RequestApprovalDialogProps {
   activityId: string;
   activityName: string;
   projectId: string;
-  onSubmit: (activityId: string, data: CreateApprovalData) => Promise<any>;
+  onSubmit: (activityId: string, data: CreateApprovalData) => Promise<unknown>;
 }
 
 const approvalTypes: ApprovalType[] = [
@@ -47,6 +49,8 @@ export const RequestApprovalDialog = ({
   projectId,
   onSubmit 
 }: RequestApprovalDialogProps) => {
+  const { toast } = useToast();
+  const [createApprovalMutation] = useCreateApprovalMutation();
   const [approvalType, setApprovalType] = useState<ApprovalType>('Other');
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -58,13 +62,7 @@ export const RequestApprovalDialog = ({
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [loadingRegistrations, setLoadingRegistrations] = useState(false);
 
-  useEffect(() => {
-    if (open && projectId) {
-      fetchRegistrations();
-    }
-  }, [open, projectId]);
-
-  const fetchRegistrations = async () => {
+  const fetchRegistrations = useCallback(async () => {
     setLoadingRegistrations(true);
     try {
       const { data, error } = await supabase
@@ -72,14 +70,29 @@ export const RequestApprovalDialog = ({
         .select('id, customer_name, customer_email')
         .eq('project_id', projectId);
       
-      if (error) throw error;
-      setRegistrations(data || []);
-    } catch (error) {
-      console.error('Error fetching registrations:', error);
+      if (error) {
+        throw error;
+      }
+      setRegistrations((data as Registration[]) || []);
+    } catch (error: unknown) {
+      toast({
+        title: "Error fetching registrations",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to load homeowner registrations.",
+        variant: "destructive",
+      });
     } finally {
       setLoadingRegistrations(false);
     }
-  };
+  }, [projectId, toast]);
+
+  useEffect(() => {
+    if (open && projectId) {
+      void fetchRegistrations();
+    }
+  }, [open, projectId, fetchRegistrations]);
 
   const handleRegistrationChange = (regId: string) => {
     const actualId = regId === "none" ? "" : regId;
@@ -98,15 +111,51 @@ export const RequestApprovalDialog = ({
     if (!title.trim() || !approvalType) return;
     
     setIsSubmitting(true);
-    const result = await onSubmit(activityId, {
-      approval_type: approvalType,
-      title: title.trim(),
-      description: description.trim() || null,
-      registration_id: registrationId || null,
-      approver_name: approverName.trim() || null,
-      approver_email: approverEmail.trim() || null,
-      due_by: dueBy || null
-    });
+    let result: unknown = null;
+
+    // First, try the builder POST /api/builder/projects/{projectId}/activities/{activityId}/approvals
+    // This should always be attempted, regardless of Supabase availability.
+    try {
+      const body = {
+        approvalType: approvalType,
+        approverEmail: approverEmail.trim() || "",
+        approverName: approverName.trim() || "",
+        description: description.trim() || "",
+        dueBy: dueBy || "",
+        registrationId: registrationId || "",
+        statusId: "pending",
+        title: title.trim(),
+      };
+
+      await createApprovalMutation({
+        projectId,
+        activityId,
+        body,
+      }).unwrap();
+    } catch {
+      // Ignore builder API errors; Supabase remains source of truth for UI
+    }
+
+    // Then, best-effort Supabase-based approval request
+    try {
+      result = await onSubmit(activityId, {
+        approval_type: approvalType,
+        title: title.trim(),
+        description: description.trim() || null,
+        registration_id: registrationId || null,
+        approver_name: approverName.trim() || null,
+        approver_email: approverEmail.trim() || null,
+        due_by: dueBy || null
+      });
+    } catch (error: unknown) {
+      toast({
+        title: "Error requesting approval",
+        description:
+          error instanceof Error ? error.message : "Failed to submit approval request.",
+        variant: "destructive",
+      });
+    }
+
     setIsSubmitting(false);
     
     if (result) {
@@ -135,8 +184,8 @@ export const RequestApprovalDialog = ({
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-          <div>
+        <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-1">
+          <div className="space-y-1.5">
             <Label htmlFor="approval-type">Approval Type *</Label>
             <Select value={approvalType} onValueChange={v => setApprovalType(v as ApprovalType)}>
               <SelectTrigger className="mt-1.5">
@@ -150,7 +199,7 @@ export const RequestApprovalDialog = ({
             </Select>
           </div>
 
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="approval-title">Title *</Label>
             <Input
               id="approval-title"
@@ -161,7 +210,7 @@ export const RequestApprovalDialog = ({
             />
           </div>
           
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="approval-description">Description</Label>
             <Textarea
               id="approval-description"
@@ -173,7 +222,7 @@ export const RequestApprovalDialog = ({
             />
           </div>
 
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="registration">Link to Registration (for email approval)</Label>
             <Select value={registrationId || "none"} onValueChange={handleRegistrationChange}>
               <SelectTrigger className="mt-1.5">
@@ -190,8 +239,8 @@ export const RequestApprovalDialog = ({
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
               <Label htmlFor="approver-name">Approver Name</Label>
               <Input
                 id="approver-name"
@@ -201,7 +250,7 @@ export const RequestApprovalDialog = ({
                 className="mt-1.5"
               />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="approver-email">Approver Email</Label>
               <Input
                 id="approver-email"
@@ -214,7 +263,7 @@ export const RequestApprovalDialog = ({
             </div>
           </div>
 
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="due-by">Due By (optional)</Label>
             <Input
               id="due-by"

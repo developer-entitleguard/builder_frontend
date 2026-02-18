@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useToast } from "@/hooks/use-toast";
+import { useCreateApprovalMutation, useUpdateApprovalMutation } from "@/store/api/approvals";
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 export type ApprovalType = 'Scope Change' | 'Variation' | 'Material Change' | 'Schedule Change' | 'Payment Milestone' | 'Other';
@@ -39,6 +40,18 @@ export interface CreateApprovalData {
   due_by?: string | null;
 }
 
+// Builder auth helper for JWT stored in localStorage.userData
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData) as { jwt?: string } | null;
+    return !!parsed?.jwt;
+  } catch {
+    return false;
+  }
+};
+
 export const useApprovals = (projectId: string | undefined) => {
   const { user } = useAuth();
   const { organization } = useOrganization();
@@ -46,12 +59,16 @@ export const useApprovals = (projectId: string | undefined) => {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const isBuilder = hasBuilderAuth();
+  const [createApprovalMutation] = useCreateApprovalMutation();
+  const [updateApprovalMutation] = useUpdateApprovalMutation();
+
   const fetchApprovals = useCallback(async () => {
     if (!projectId || !user) return;
     
     try {
       setLoading(true);
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('approval_requests')
         .select('*')
         .eq('project_id', projectId)
@@ -72,7 +89,7 @@ export const useApprovals = (projectId: string | undefined) => {
 
   const fetchApproval = async (approvalId: string): Promise<ApprovalRequest | null> => {
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('approval_requests')
         .select('*')
         .eq('id', approvalId)
@@ -98,7 +115,7 @@ export const useApprovals = (projectId: string | undefined) => {
       // Generate approval token for email-based approval
       const approvalToken = crypto.randomUUID();
       
-      const { data: result, error } = await (supabase as any)
+      const { data: result, error } = await supabase
         .from('approval_requests')
         .insert({
           ...data,
@@ -114,7 +131,7 @@ export const useApprovals = (projectId: string | undefined) => {
       if (error) throw error;
 
       // Auto-create activity update for audit trail
-      await (supabase as any)
+      await supabase
         .from('activity_updates')
         .insert({
           activity_id: activityId,
@@ -138,7 +155,7 @@ export const useApprovals = (projectId: string | undefined) => {
           // Don't fail the approval creation if email fails
         }
       }
-      
+
       await fetchApprovals();
       toast({
         title: "Approval requested",
@@ -164,13 +181,13 @@ export const useApprovals = (projectId: string | undefined) => {
     
     try {
       // Get the approval first to create audit trail
-      const { data: approval } = await (supabase as any)
+      const { data: approval } = await supabase
         .from('approval_requests')
         .select('activity_id, title, approval_type')
         .eq('id', id)
         .single();
 
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from('approval_requests')
         .update({
           status,
@@ -182,10 +199,29 @@ export const useApprovals = (projectId: string | undefined) => {
 
       if (error) throw error;
 
+      // Also call builder approvals API when in builder mode
+      if (isBuilder && projectId && approval?.activity_id) {
+        try {
+          const body = {
+            decisionComment: decisionComment || "",
+            statusId: status,
+          };
+
+          await updateApprovalMutation({
+            projectId,
+            activityId: approval.activity_id,
+            id,
+            body,
+          }).unwrap();
+        } catch {
+          // Ignore builder API errors; Supabase remains source of truth for UI
+        }
+      }
+
       // Auto-create activity update for audit trail
       if (approval && organization) {
         const statusEmoji = status === 'approved' ? '✅' : status === 'rejected' ? '❌' : '🚫';
-        await (supabase as any)
+        await supabase
           .from('activity_updates')
           .insert({
             activity_id: approval.activity_id,

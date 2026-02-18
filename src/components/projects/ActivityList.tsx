@@ -465,6 +465,15 @@ export const ActivityList = ({
             <AlertDialogAction
               onClick={async () => {
                 if (deleteCategoryId) {
+                  // Delete all activities in this category via the activities DELETE API
+                  const catActivities = activities.filter(
+                    (a) => a.category_id === deleteCategoryId
+                  );
+                  for (const activity of catActivities) {
+                    await onDeleteActivity(activity.id);
+                  }
+
+                  // Then delete the category itself (no-op for builder until wired)
                   await onDeleteCategory(deleteCategoryId);
                   onRefresh?.();
                 }

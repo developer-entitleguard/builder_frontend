@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   useGetActivitiesByProjectQuery,
   useCreateActivityMutation,
+  useDeleteActivityMutation,
   type BuilderActivityApi,
 } from "@/store/api/activities";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
@@ -56,6 +57,11 @@ export interface CreateActivityData {
   percentage_complete?: number;
   due_date?: string | null;
   category_id?: string | null;
+  quote?: number | null;
+  price_paid?: number | null;
+  vendor_name?: string | null;
+  vendor_email?: string | null;
+  vendor_phone?: string | null;
 }
 
 // Builder auth helper for JWT stored in localStorage.userData
@@ -118,6 +124,7 @@ export const useActivities = (projectId: string | undefined) => {
   );
 
   const [createActivityMutation] = useCreateActivityMutation();
+  const [deleteActivityMutation] = useDeleteActivityMutation();
 
   // Map builder API activities into local Activity shape
   useEffect(() => {
@@ -137,9 +144,15 @@ export const useActivities = (projectId: string | undefined) => {
         due_date: a.dueDate ?? null,
         completed_at: a.completedAt ?? null,
         order_index: a.orderIndex ?? 0,
+        category_id: a.categoryId ?? null,
         created_at: a.createdAt,
         updated_at: a.updatedAt,
         completed: status === "done",
+        quote: a.quote ?? null,
+        price_paid: a.pricePaid ?? null,
+        vendor_name: a.vendorName ?? null,
+        vendor_email: a.vendorEmail ?? null,
+        vendor_phone: a.vendorPhone ?? null,
       };
     });
 
@@ -190,17 +203,26 @@ export const useActivities = (projectId: string | undefined) => {
             ? Math.max(...activities.map((a) => a.order_index)) + 1
             : 0;
 
+        const isCompleted = data.status === "done";
+
         const body = {
-          completedAt: data.status === "done" ? new Date().toISOString() : null,
+          // New swagger requestDto fields
+          categoryId: data.category_id ?? null,
+          completed: isCompleted,
+          completedAt: isCompleted ? new Date().toISOString() : null,
           description: data.description ?? "",
           dueDate: data.due_date ?? "",
           name: data.name,
           orderIndex: maxOrder,
+          pricePaid: data.price_paid ?? 0,
+          quote: data.quote ?? 0,
+          vendorEmail: data.vendor_email ?? "",
+          vendorName: data.vendor_name ?? "",
+          vendorPhone: data.vendor_phone ?? "",
+          // Legacy fields kept for compatibility with existing backend
           percentageComplete:
             data.percentage_complete ??
-            (data.status === "done" ? 100 : 0),
-          // For now, use the activity status string as the statusId;
-          // backend can map this to its internal status record.
+            (isCompleted ? 100 : 0),
           statusId: pendingStatusId ?? data.status ?? "pending",
         };
 
@@ -333,6 +355,46 @@ export const useActivities = (projectId: string | undefined) => {
   };
 
   const deleteActivity = async (id: string): Promise<boolean> => {
+    // Builder API path via RTK Query
+    if (isBuilder && projectId) {
+      try {
+        const result = await deleteActivityMutation({
+          projectId,
+          id,
+        }).unwrap();
+
+        if (!result?.success) {
+          toast({
+            title: "Error deleting activity",
+            description:
+              result?.message || "Failed to delete activity",
+            variant: "destructive",
+          });
+          return false;
+        }
+
+        toast({
+          title: "Activity deleted",
+          description:
+            result.message || "Activity has been removed.",
+        });
+
+        // RTK Query invalidates and refetches; local state will update via useEffect
+        return true;
+      } catch (error: unknown) {
+        toast({
+          title: "Error deleting activity",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Failed to delete activity",
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+
+    // Legacy Supabase path
     try {
       const { error } = await (supabase as typeof supabase)
         .from('project_activities')

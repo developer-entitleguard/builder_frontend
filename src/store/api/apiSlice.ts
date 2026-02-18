@@ -52,6 +52,7 @@ export const api = createApi({
     'Item',
     'Query',
     'Activities',
+    'ActivityCategories',
     'Document',
     'Dashboard',
     'Auth',

@@ -95,12 +95,15 @@ export const AddActivityDialog = ({ open, onOpenChange, onSubmit, categories = [
           {categories.length > 0 && (
             <div>
               <Label htmlFor="activity-category">Category</Label>
-              <Select value={categoryId ?? ""} onValueChange={v => setCategoryId(v || null)}>
+              <Select
+                // Radix Select does not allow empty-string item values; use undefined for "no selection"
+                value={categoryId ?? undefined}
+                onValueChange={v => setCategoryId(v || null)}
+              >
                 <SelectTrigger className="mt-1.5">
                   <SelectValue placeholder="Uncategorized" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Uncategorized</SelectItem>
                   {categories.map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}

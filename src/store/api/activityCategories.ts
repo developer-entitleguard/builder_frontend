@@ -26,6 +26,11 @@ export interface CreateBuilderActivityCategoryBody {
   orderIndex: number;
 }
 
+export interface UpdateBuilderActivityCategoryBody {
+  name: string;
+  orderIndex: number;
+}
+
 export const activityCategoriesApi = api.injectEndpoints({
   endpoints: (build) => ({
     // GET /api/builder/projects/:projectId/activity_categories
@@ -56,11 +61,27 @@ export const activityCategoriesApi = api.injectEndpoints({
         { type: "ActivityCategories", id: projectId },
       ],
     }),
+
+    // PUT /api/builder/projects/:projectId/activity_categories/:id
+    updateActivityCategory: build.mutation<
+      BuilderActivityCategoryResponse,
+      { projectId: string; id: string; body: UpdateBuilderActivityCategoryBody }
+    >({
+      query: ({ projectId, id, body }) => ({
+        url: `/api/builder/projects/${projectId}/activity_categories/${id}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: "ActivityCategories", id: projectId },
+      ],
+    }),
   }),
 });
 
 export const {
   useGetActivityCategoriesByProjectQuery,
   useCreateActivityCategoryMutation,
+  useUpdateActivityCategoryMutation,
 } = activityCategoriesApi;
 

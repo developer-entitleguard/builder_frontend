@@ -3,6 +3,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   useGetActivityCategoriesByProjectQuery,
   useCreateActivityCategoryMutation,
+  useUpdateActivityCategoryMutation,
   type BuilderActivityCategoryApi,
 } from "@/store/api/activityCategories";
 
@@ -48,6 +49,7 @@ export const useActivityCategories = (projectId: string | undefined) => {
   );
 
   const [createCategoryMutation] = useCreateActivityCategoryMutation();
+  const [updateCategoryMutation] = useUpdateActivityCategoryMutation();
 
   useEffect(() => {
     if (!isBuilder || !apiCategories?.data) return;
@@ -141,10 +143,70 @@ export const useActivityCategories = (projectId: string | undefined) => {
   );
 
   const updateCategory = useCallback(
-    async (_id: string, _data: Partial<CreateCategoryData>): Promise<boolean> => {
-      return false;
+    async (id: string, data: Partial<CreateCategoryData>): Promise<boolean> => {
+      if (!projectId) {
+        throw new Error("No project");
+      }
+
+      if (!isBuilder) {
+        // Non-builder path not yet implemented
+        return false;
+      }
+
+      try {
+        const existing = categories.find((c) => c.id === id);
+        if (!existing) {
+          toast({
+            title: "Category not found",
+            description: "Unable to update activity category.",
+            variant: "destructive",
+          });
+          return false;
+        }
+
+        const body = {
+          name: data.name ?? existing.name,
+          orderIndex: existing.order_index ?? 0,
+        };
+
+        const result = await updateCategoryMutation({
+          projectId,
+          id,
+          body,
+        }).unwrap();
+
+        if (!result?.data) {
+          toast({
+            title: "Error updating category",
+            description:
+              result?.message || "Failed to update activity category",
+            variant: "destructive",
+          });
+          return false;
+        }
+
+        toast({
+          title: "Category updated",
+          description:
+            result.message ||
+            "Activity category has been updated.",
+        });
+
+        // RTK Query invalidates and refetches; local state will be updated via useEffect
+        return true;
+      } catch (error: unknown) {
+        toast({
+          title: "Error updating category",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Failed to update activity category",
+          variant: "destructive",
+        });
+        return false;
+      }
     },
-    []
+    [projectId, isBuilder, categories, updateCategoryMutation, toast]
   );
 
   const deleteCategory = useCallback(async (_id: string): Promise<boolean> => {

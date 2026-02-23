@@ -5,8 +5,16 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { useToast } from "@/hooks/use-toast";
 import { Project } from "@/hooks/useProjects";
 import { Activity } from "@/hooks/useActivities";
-import { useLazyGetProjectPricingQuery } from "@/store/api/pricing";
-import type { BuilderPricingEntry } from "@/store/api/pricing";
+import {
+  useLazyGetProjectPricingQuery,
+  useLazyGetPricingCostItemsQuery,
+  useCreatePricingCostItemsMutation,
+  useUpdatePricingCostItemMutation,
+} from "@/store/api/pricing";
+import type {
+  BuilderPricingEntry,
+  BuilderPricingCostItem,
+} from "@/store/api/pricing";
 
 export type CostCategory = 'materials' | 'labour' | 'subcontractors' | 'overheads';
 
@@ -63,14 +71,14 @@ const hasBuilderAuth = (): boolean => {
   }
 };
 
-function mapBuilderPricingToState(entry: BuilderPricingEntry | undefined): {
+function mapBuilderPricingToState(
+  entry: BuilderPricingEntry | undefined
+): {
   pricing: ProjectPricing | null;
-  costItems: CostItem[];
 } {
   if (!entry || entry.id == null) {
-    return { pricing: null, costItems: [] };
+    return { pricing: null };
   }
-  const pricingId = entry.id;
   const pricingRecord: ProjectPricing = {
     id: entry.id,
     project_id: entry.projectId ?? "",
@@ -84,7 +92,15 @@ function mapBuilderPricingToState(entry: BuilderPricingEntry | undefined): {
     created_at: entry.createdAt ?? new Date().toISOString(),
     updated_at: entry.updatedAt ?? new Date().toISOString(),
   };
-  const items: CostItem[] = (entry.costItems ?? []).map((c, idx) => ({
+  return { pricing: pricingRecord };
+}
+
+function mapBuilderCostItemToState(
+  c: BuilderPricingCostItem,
+  pricingId: string,
+  idx: number
+): CostItem {
+  return {
     id: c.id ?? `item-${idx}`,
     pricing_id: c.pricingId ?? pricingId,
     category: (c.category as CostCategory) ?? "materials",
@@ -100,8 +116,7 @@ function mapBuilderPricingToState(entry: BuilderPricingEntry | undefined): {
     from_bom: c.fromBom ?? false,
     created_at: c.createdAt ?? new Date().toISOString(),
     updated_at: c.updatedAt ?? new Date().toISOString(),
-  }));
-  return { pricing: pricingRecord, costItems: items };
+  };
 }
 
 export const useProjectPricing = (projectId: string | undefined) => {
@@ -115,6 +130,9 @@ export const useProjectPricing = (projectId: string | undefined) => {
 
   const isBuilder = hasBuilderAuth();
   const [fetchBuilderPricing] = useLazyGetProjectPricingQuery();
+  const [fetchBuilderCostItems] = useLazyGetPricingCostItemsQuery();
+  const [createPricingCostItems] = useCreatePricingCostItemsMutation();
+  const [updatePricingCostItem] = useUpdatePricingCostItemMutation();
 
   const fetchPricing = useCallback(async () => {
     if (!projectId) return;
@@ -125,9 +143,31 @@ export const useProjectPricing = (projectId: string | undefined) => {
         const result = await fetchBuilderPricing({ projectId }).unwrap();
         if (result?.success && Array.isArray(result.data)) {
           const latest = result.data.length > 0 ? result.data[result.data.length - 1] : undefined;
-          const { pricing: p, costItems: items } = mapBuilderPricingToState(latest);
+          const { pricing: p } = mapBuilderPricingToState(latest);
           setPricing(p);
-          setCostItems(items);
+
+          if (latest?.id) {
+            try {
+              const costItemsResult = await fetchBuilderCostItems({
+                pricingId: latest.id,
+              }).unwrap();
+              if (
+                costItemsResult?.success &&
+                Array.isArray(costItemsResult.data)
+              ) {
+                const items = costItemsResult.data.map((c, idx) =>
+                  mapBuilderCostItemToState(c, latest.id!, idx)
+                );
+                setCostItems(items);
+              } else {
+                setCostItems([]);
+              }
+            } catch {
+              setCostItems([]);
+            }
+          } else {
+            setCostItems([]);
+          }
         } else {
           setPricing(null);
           setCostItems([]);
@@ -188,7 +228,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
     } finally {
       setLoading(false);
     }
-  }, [user, projectId, toast, isBuilder, fetchBuilderPricing]);
+  }, [user, projectId, toast, isBuilder, fetchBuilderPricing, fetchBuilderCostItems]);
 
   useEffect(() => {
     if (projectId && (isBuilder || user)) {
@@ -211,17 +251,55 @@ export const useProjectPricing = (projectId: string | undefined) => {
         setGenerating(true);
         const result = await fetchBuilderPricing({ projectId }).unwrap();
         if (result?.success && Array.isArray(result.data)) {
-          const latest = result.data.length > 0 ? result.data[result.data.length - 1] : undefined;
-          const { pricing: p, costItems: items } = mapBuilderPricingToState(latest);
+          const latest =
+            result.data.length > 0
+              ? result.data[result.data.length - 1]
+              : undefined;
+          const { pricing: p } = mapBuilderPricingToState(latest);
           setPricing(p);
-          setCostItems(items);
-          const total = p?.final_price ?? items.reduce((s, i) => s + i.total_cost, 0);
-          toast({
-            title: "Pricing loaded",
-            description: items.length
-              ? `${items.length} cost items, total $${total.toLocaleString()}`
-              : "No pricing entries yet.",
-          });
+
+          if (latest?.id) {
+            try {
+              const costItemsResult = await fetchBuilderCostItems({
+                pricingId: latest.id,
+              }).unwrap();
+              if (
+                costItemsResult?.success &&
+                Array.isArray(costItemsResult.data)
+              ) {
+                const items = costItemsResult.data.map((c, idx) =>
+                  mapBuilderCostItemToState(c, latest.id!, idx)
+                );
+                setCostItems(items);
+                const total =
+                  p?.final_price ??
+                  items.reduce((s, i) => s + Number(i.total_cost), 0);
+                toast({
+                  title: "Pricing loaded",
+                  description: items.length
+                    ? `${items.length} cost items, total $${total.toLocaleString()}`
+                    : "No pricing entries yet.",
+                });
+              } else {
+                setCostItems([]);
+                toast({
+                  title: "No pricing data",
+                  description: "No cost items returned.",
+                });
+              }
+            } catch (e) {
+              setCostItems([]);
+              toast({
+                title: "Error loading pricing",
+                description:
+                  e instanceof Error ? e.message : "Failed to load cost items",
+                variant: "destructive",
+              });
+              return false;
+            }
+          } else {
+            setCostItems([]);
+          }
           return true;
         }
         setPricing(null);
@@ -234,7 +312,8 @@ export const useProjectPricing = (projectId: string | undefined) => {
       } catch (e) {
         toast({
           title: "Error loading pricing",
-          description: e instanceof Error ? e.message : "Failed to load pricing",
+          description:
+            e instanceof Error ? e.message : "Failed to load pricing",
           variant: "destructive",
         });
         return false;
@@ -350,32 +429,88 @@ export const useProjectPricing = (projectId: string | undefined) => {
     }
   };
 
-  const updateCostItem = async (itemId: string, updates: Partial<CostItem>): Promise<boolean> => {
+  const updateCostItem = async (
+    itemId: string,
+    updates: Partial<CostItem>
+  ): Promise<boolean> => {
+    if (isBuilder && pricing?.id) {
+      // Builder API path: PUT /api/builder/pricing/:pricingId/cost-items/:id
+      try {
+        const existing = costItems.find((i) => i.id === itemId);
+        if (!existing) return false;
+
+        const merged: CostItem = {
+          ...existing,
+          ...updates,
+          is_modified: true,
+        };
+
+        const dto: BuilderPricingCostItem = {
+          id: merged.id,
+          pricingId: merged.pricing_id,
+          category: merged.category,
+          name: merged.name,
+          description: merged.description,
+          unitRate: merged.unit_rate ?? undefined,
+          quantity: merged.quantity,
+          totalCost: merged.total_cost,
+          linkedActivityId: merged.linked_activity_id ?? undefined,
+          isAiGenerated: merged.is_ai_generated,
+          isModified: merged.is_modified,
+          aiAssumptions: merged.ai_assumptions ?? undefined,
+          fromBom: merged.from_bom,
+        };
+
+        await updatePricingCostItem({
+          pricingId: pricing.id,
+          id: itemId,
+          item: dto,
+        }).unwrap();
+
+        setCostItems((prev) =>
+          prev.map((item) =>
+            item.id === itemId ? { ...merged } : item
+          )
+        );
+
+        await recalculateTotals();
+        return true;
+      } catch (error: any) {
+        toast({
+          title: "Error updating cost item",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+
+    // Legacy Supabase path
     try {
       const { error } = await (supabase as any)
-        .from('project_cost_items')
+        .from("project_cost_items")
         .update({
           ...updates,
-          is_modified: true
+          is_modified: true,
         })
-        .eq('id', itemId);
+        .eq("id", itemId);
 
       if (error) throw error;
-      
-      // Update local state
-      setCostItems(prev => prev.map(item => 
-        item.id === itemId ? { ...item, ...updates, is_modified: true } : item
-      ));
-      
-      // Recalculate totals
+
+      setCostItems((prev) =>
+        prev.map((item) =>
+          item.id === itemId ? { ...item, ...updates, is_modified: true } : item
+        )
+      );
+
       await recalculateTotals();
-      
+
       return true;
     } catch (error: any) {
       toast({
         title: "Error updating cost item",
         description: error.message,
-        variant: "destructive"
+        variant: "destructive",
       });
       return false;
     }
@@ -404,28 +539,66 @@ export const useProjectPricing = (projectId: string | undefined) => {
     }
   };
 
-  const addCostItem = async (item: Omit<CostItem, 'id' | 'pricing_id' | 'created_at' | 'updated_at'>): Promise<boolean> => {
+  const addCostItem = async (
+    item: Omit<CostItem, "id" | "pricing_id" | "created_at" | "updated_at">
+  ): Promise<boolean> => {
     if (!pricing) return false;
-    
+
+    if (isBuilder) {
+      // Builder API path: POST /api/builder/pricing/:pricingId/cost-items
+      try {
+        const dto: BuilderPricingCostItem = {
+          pricingId: pricing.id,
+          category: item.category,
+          name: item.name,
+          description: item.description,
+          unitRate: item.unit_rate ?? undefined,
+          quantity: item.quantity,
+          totalCost: item.total_cost,
+          linkedActivityId: item.linked_activity_id ?? undefined,
+          isAiGenerated: false,
+          isModified: false,
+          aiAssumptions: item.ai_assumptions ?? undefined,
+          fromBom: item.from_bom,
+        };
+
+        await createPricingCostItems({
+          pricingId: pricing.id,
+          items: [dto],
+        }).unwrap();
+
+        await fetchPricing();
+        return true;
+      } catch (error: any) {
+        toast({
+          title: "Error adding cost item",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+
+    // Legacy Supabase path
     try {
       const { error } = await (supabase as any)
-        .from('project_cost_items')
+        .from("project_cost_items")
         .insert({
           ...item,
           pricing_id: pricing.id,
           is_ai_generated: false,
-          is_modified: false
+          is_modified: false,
         });
 
       if (error) throw error;
-      
+
       await fetchPricing();
       return true;
     } catch (error: any) {
       toast({
         title: "Error adding cost item",
         description: error.message,
-        variant: "destructive"
+        variant: "destructive",
       });
       return false;
     }

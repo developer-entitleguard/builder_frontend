@@ -169,6 +169,7 @@ const ProjectDetail = () => {
       target_end_date: project.target_end_date,
       status: project.status,
       description: project.description,
+      activities_visible_to_homeowner: project.activities_visible_to_homeowner,
     };
 
     const finalData: CreateProjectData = { ...base, ...changes };
@@ -187,14 +188,20 @@ const ProjectDetail = () => {
         target_end_date: finalData.target_end_date ?? null,
         status: finalData.status ?? project.status,
         description: finalData.description ?? null,
+        activities_visible_to_homeowner:
+          finalData.activities_visible_to_homeowner ??
+          project.activities_visible_to_homeowner,
       });
     }
 
     return success;
   };
 
-  const handleToggleHomeownerVisibility = async (_visible: boolean) => {
-    // Update not yet wired to builder project API
+  const handleToggleHomeownerVisibility = async (visible: boolean) => {
+    if (!project) return;
+    await handleSaveProject(project.id, {
+      activities_visible_to_homeowner: visible,
+    });
   };
 
   if (authLoading || loading || projectLoading) {

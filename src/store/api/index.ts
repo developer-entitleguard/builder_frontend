@@ -17,6 +17,7 @@ import './query';
 import './projects';
 import './status';
 import './activities';
+import './pricing';
 
 // Export the main API slice
 export { api } from './apiSlice';
@@ -80,6 +81,9 @@ export * from './status';
 
 // Activities
 export * from './activities';
+
+// Pricing
+export * from './pricing';
 
 // Re-export types
 export type * from '@/lib/api/types';

@@ -64,7 +64,8 @@ export const api = createApi({
     'CustomerItem',
     'ItemMap',
     'Projects',
-    'Approvals'
+    'Approvals',
+    'ProjectPricing'
   ],
   endpoints: () => ({}),
 });

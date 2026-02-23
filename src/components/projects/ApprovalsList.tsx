@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApprovalRequest, ApprovalStatus, ApprovalType } from "@/hooks/useApprovals";
 import { Activity } from "@/hooks/useActivities";
+import { useGetStatusesByModuleQuery } from "@/store/api/status";
+import { useGetProjectApprovalsQuery } from "@/store/api/approvals";
+import type { BuilderApprovalApi } from "@/store/api/approvals";
 import { 
   Clock, 
   CheckCircle2, 
@@ -33,13 +36,47 @@ const statusConfig: Record<ApprovalStatus, { icon: React.ElementType; color: str
 };
 
 const approvalTypes: ApprovalType[] = [
-  'Scope Change',
-  'Variation',
-  'Material Change',
-  'Schedule Change',
-  'Payment Milestone',
-  'Other'
+  "Scope Change",
+  "Variation",
+  "Material Change",
+  "Schedule Change",
+  "Payment Milestone",
+  "Other",
 ];
+
+function mapApiApprovalToRequest(
+  item: BuilderApprovalApi,
+  projectId: string
+): ApprovalRequest {
+  const statusRaw = item.statusName ?? item.status ?? "PENDING";
+  const statusName = String(statusRaw).toLowerCase();
+  const status: ApprovalStatus = ["pending", "approved", "rejected", "cancelled"].includes(statusName)
+    ? (statusName as ApprovalStatus)
+    : "pending";
+  const approvalTypeRaw = item.approvalType ?? item.approval_type ?? "Other";
+  const approvalType = (typeof approvalTypeRaw === "string" ? approvalTypeRaw : "Other") as ApprovalType;
+  return {
+    id: typeof item.id === "string" ? item.id : "",
+    activity_id: typeof (item.activityId ?? item.activity_id) === "string" ? (item.activityId ?? item.activity_id) : "",
+    project_id: projectId,
+    registration_id: null,
+    builder_id: "",
+    approval_type: approvalType,
+    title: typeof item.title === "string" ? item.title : "",
+    description: typeof item.description === "string" ? item.description : null,
+    approver_name: typeof (item.approverName ?? item.approver_name) === "string" ? (item.approverName ?? item.approver_name) as string : null,
+    approver_email: typeof (item.approverEmail ?? item.approver_email) === "string" ? (item.approverEmail ?? item.approver_email) as string : null,
+    status,
+    requested_at: typeof (item.requestedAt ?? item.requested_at) === "string" ? (item.requestedAt ?? item.requested_at) as string : new Date().toISOString(),
+    due_by: typeof (item.dueBy ?? item.due_by) === "string" ? (item.dueBy ?? item.due_by) : null,
+    decided_at: typeof (item.decidedAt ?? item.decided_at) === "string" ? (item.decidedAt ?? item.decided_at) : null,
+    decided_by: null,
+    decision_comment: null,
+    approval_token: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
 
 export const ApprovalsList = ({
   approvals,
@@ -51,12 +88,34 @@ export const ApprovalsList = ({
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
+  const { data: statusResponse } = useGetStatusesByModuleQuery({ module: "APPROVAL_REQUEST" });
+  const statusOptions = statusResponse?.success && Array.isArray(statusResponse.data) ? statusResponse.data : [];
+
+  const selectedStatusId =
+    statusFilter !== "all"
+      ? statusOptions.find((s) => s.name.toLowerCase() === statusFilter)?.id
+      : undefined;
+  const { data: approvalsResponse, isLoading: apiLoading } = useGetProjectApprovalsQuery({
+    projectId,
+    statusIds: selectedStatusId,
+    approvalTypes: typeFilter !== "all" ? typeFilter : undefined,
+  });
+
+  const apiApprovals: ApprovalRequest[] =
+    approvalsResponse?.success && Array.isArray(approvalsResponse.data)
+      ? approvalsResponse.data.map((item) => mapApiApprovalToRequest(item, projectId))
+      : [];
+  const useApiData =
+    approvalsResponse?.success === true && Array.isArray(approvalsResponse.data);
+  const approvalsList = useApiData ? apiApprovals : approvals;
+  const loadingList = apiLoading || loading;
+
   const getActivityName = (activityId: string) => {
-    const activity = activities.find(a => a.id === activityId);
-    return activity?.name || 'Unknown Activity';
+    const activity = activities.find((a) => a.id === activityId);
+    return activity?.name || "Unknown Activity";
   };
 
-  const filteredApprovals = approvals.filter(approval => {
+  const filteredApprovals = approvalsList.filter((approval) => {
     if (statusFilter !== "all" && approval.status !== statusFilter) return false;
     if (typeFilter !== "all" && approval.approval_type !== typeFilter) return false;
     return true;
@@ -66,10 +125,10 @@ export const ApprovalsList = ({
     navigate(`/projects/${projectId}/approvals/${approvalId}`);
   };
 
-  if (loading) {
+  if (loadingList) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
       </div>
     );
   }
@@ -89,10 +148,11 @@ export const ApprovalsList = ({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
+            {statusOptions.map((status) => (
+              <SelectItem key={status.id} value={status.name.toLowerCase()}>
+                {status.name.charAt(0) + status.name.slice(1).toLowerCase()}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
@@ -121,7 +181,7 @@ export const ApprovalsList = ({
 
       {/* Results count */}
       <p className="text-sm text-muted-foreground">
-        Showing {filteredApprovals.length} of {approvals.length} approval requests
+        Showing {filteredApprovals.length} of {approvalsList.length} approval requests
       </p>
 
       {filteredApprovals.length === 0 ? (
@@ -131,16 +191,15 @@ export const ApprovalsList = ({
           </div>
           <h3 className="text-lg font-semibold mb-2">No approvals</h3>
           <p className="text-muted-foreground max-w-sm mx-auto">
-            {approvals.length === 0 
+            {approvalsList.length === 0
               ? "Request approvals from activity details to track sign-offs."
-              : "No approvals match the current filters."
-            }
+              : "No approvals match the current filters."}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredApprovals.map(approval => {
-            const config = statusConfig[approval.status];
+          {filteredApprovals.map((approval) => {
+            const config = statusConfig[approval.status as ApprovalStatus] ?? statusConfig.pending;
             const StatusIcon = config.icon;
             
             return (

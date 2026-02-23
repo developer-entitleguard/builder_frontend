@@ -45,6 +45,7 @@ export interface CreateProjectData {
   statusId?: string | null;
   status?: ProjectStatus;
   description?: string | null;
+  activities_visible_to_homeowner?: boolean;
 }
 
 const mapPropertyType = (value: string): PropertyType => {
@@ -182,7 +183,7 @@ export const useProjects = () => {
   const createProject = async (data: CreateProjectData): Promise<boolean> => {
     try {
       const body = {
-        activitiesVisibleToHomeowner: true,
+        activitiesVisibleToHomeowner: data.activities_visible_to_homeowner ?? true,
         address: data.address,
         city: data.city,
         description: data.description ?? "",
@@ -226,7 +227,7 @@ export const useProjects = () => {
   const updateProject = async (id: string, data: CreateProjectData): Promise<boolean> => {
     try {
       const body = {
-        activitiesVisibleToHomeowner: true,
+        activitiesVisibleToHomeowner: data.activities_visible_to_homeowner ?? true,
         address: data.address,
         city: data.city,
         description: data.description ?? "",

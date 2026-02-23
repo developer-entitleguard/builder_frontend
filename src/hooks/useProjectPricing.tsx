@@ -5,6 +5,8 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { useToast } from "@/hooks/use-toast";
 import { Project } from "@/hooks/useProjects";
 import { Activity } from "@/hooks/useActivities";
+import { useLazyGetProjectPricingQuery } from "@/store/api/pricing";
+import type { BuilderPricingEntry } from "@/store/api/pricing";
 
 export type CostCategory = 'materials' | 'labour' | 'subcontractors' | 'overheads';
 
@@ -50,17 +52,101 @@ interface GeneratedCostItem {
   from_bom?: boolean;
 }
 
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData) as { jwt?: string } | null;
+    return !!parsed?.jwt;
+  } catch {
+    return false;
+  }
+};
+
+function mapBuilderPricingToState(entry: BuilderPricingEntry | undefined): {
+  pricing: ProjectPricing | null;
+  costItems: CostItem[];
+} {
+  if (!entry || entry.id == null) {
+    return { pricing: null, costItems: [] };
+  }
+  const pricingId = entry.id;
+  const pricingRecord: ProjectPricing = {
+    id: entry.id,
+    project_id: entry.projectId ?? "",
+    builder_id: "",
+    total_estimated_cost: entry.totalEstimatedCost ?? 0,
+    buffer_percentage: entry.bufferPercentage ?? 0,
+    buffer_amount: entry.bufferAmount ?? 0,
+    margin_percentage: entry.marginPercentage ?? 0,
+    margin_amount: entry.marginAmount ?? 0,
+    final_price: entry.finalPrice ?? entry.totalEstimatedCost ?? 0,
+    created_at: entry.createdAt ?? new Date().toISOString(),
+    updated_at: entry.updatedAt ?? new Date().toISOString(),
+  };
+  const items: CostItem[] = (entry.costItems ?? []).map((c, idx) => ({
+    id: c.id ?? `item-${idx}`,
+    pricing_id: c.pricingId ?? pricingId,
+    category: (c.category as CostCategory) ?? "materials",
+    name: c.name ?? "",
+    description: c.description ?? null,
+    unit_rate: c.unitRate ?? null,
+    quantity: c.quantity ?? 1,
+    total_cost: c.totalCost ?? 0,
+    linked_activity_id: c.linkedActivityId ?? null,
+    is_ai_generated: c.isAiGenerated ?? false,
+    is_modified: c.isModified ?? false,
+    ai_assumptions: c.aiAssumptions ?? null,
+    from_bom: c.fromBom ?? false,
+    created_at: c.createdAt ?? new Date().toISOString(),
+    updated_at: c.updatedAt ?? new Date().toISOString(),
+  }));
+  return { pricing: pricingRecord, costItems: items };
+}
+
 export const useProjectPricing = (projectId: string | undefined) => {
   const { user } = useAuth();
   const { organization } = useOrganization();
   const { toast } = useToast();
   const [pricing, setPricing] = useState<ProjectPricing | null>(null);
   const [costItems, setCostItems] = useState<CostItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
 
+  const isBuilder = hasBuilderAuth();
+  const [fetchBuilderPricing] = useLazyGetProjectPricingQuery();
+
   const fetchPricing = useCallback(async () => {
-    if (!user || !projectId) return;
+    if (!projectId) return;
+
+    if (isBuilder) {
+      try {
+        setLoading(true);
+        const result = await fetchBuilderPricing({ projectId }).unwrap();
+        if (result?.success && Array.isArray(result.data)) {
+          const latest = result.data.length > 0 ? result.data[result.data.length - 1] : undefined;
+          const { pricing: p, costItems: items } = mapBuilderPricingToState(latest);
+          setPricing(p);
+          setCostItems(items);
+        } else {
+          setPricing(null);
+          setCostItems([]);
+        }
+      } catch (e) {
+        toast({
+          title: "Error fetching pricing",
+          description: e instanceof Error ? e.message : "Failed to load pricing",
+          variant: "destructive",
+        });
+        setPricing(null);
+        setCostItems([]);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (!user) return;
     
     try {
       setLoading(true);
@@ -102,16 +188,69 @@ export const useProjectPricing = (projectId: string | undefined) => {
     } finally {
       setLoading(false);
     }
-  }, [user, projectId, toast]);
+  }, [user, projectId, toast, isBuilder, fetchBuilderPricing]);
 
   useEffect(() => {
-    if (user && projectId) {
+    if (projectId && (isBuilder || user)) {
       fetchPricing();
     }
-  }, [user, projectId, fetchPricing]);
+  }, [projectId, isBuilder, user, fetchPricing]);
 
   const generatePricing = async (project: Project, activities: Activity[]): Promise<boolean> => {
-    if (!user || !projectId) return false;
+    if (!projectId) {
+      toast({
+        title: "Cannot generate pricing",
+        description: "No project is selected.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (isBuilder) {
+      try {
+        setGenerating(true);
+        const result = await fetchBuilderPricing({ projectId }).unwrap();
+        if (result?.success && Array.isArray(result.data)) {
+          const latest = result.data.length > 0 ? result.data[result.data.length - 1] : undefined;
+          const { pricing: p, costItems: items } = mapBuilderPricingToState(latest);
+          setPricing(p);
+          setCostItems(items);
+          const total = p?.final_price ?? items.reduce((s, i) => s + i.total_cost, 0);
+          toast({
+            title: "Pricing loaded",
+            description: items.length
+              ? `${items.length} cost items, total $${total.toLocaleString()}`
+              : "No pricing entries yet.",
+          });
+          return true;
+        }
+        setPricing(null);
+        setCostItems([]);
+        toast({
+          title: "No pricing data",
+          description: result?.message ?? "No pricing entries returned.",
+        });
+        return true;
+      } catch (e) {
+        toast({
+          title: "Error loading pricing",
+          description: e instanceof Error ? e.message : "Failed to load pricing",
+          variant: "destructive",
+        });
+        return false;
+      } finally {
+        setGenerating(false);
+      }
+    }
+
+    if (!user) {
+      toast({
+        title: "Cannot generate pricing",
+        description: "You must be signed in to generate an AI cost estimate.",
+        variant: "destructive",
+      });
+      return false;
+    }
     
     try {
       setGenerating(true);

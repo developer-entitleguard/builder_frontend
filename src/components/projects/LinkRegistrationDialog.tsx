@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,9 +11,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
+import { useGetNonLinkedRegistrationsQuery, useUpdateProjectRegistrationsMutation } from "@/store/api/projects";
+import type { NonLinkedRegistrationApi } from "@/store/api/projects";
 import { Search, User } from "lucide-react";
 
 interface UnlinkedRegistration {
@@ -30,50 +30,56 @@ interface LinkRegistrationDialogProps {
   onLinked: () => void;
 }
 
+function mapNonLinkedToDisplay(r: NonLinkedRegistrationApi): UnlinkedRegistration {
+  const str = (v: unknown): string => (typeof v === "string" ? v : "");
+  const firstName = str(r.firstName).trim();
+  const lastName = str(r.lastName).trim();
+  const customer_name = [firstName, lastName].filter(Boolean).join(" ") || "—";
+  const customer_email = str(r.email) || "—";
+  const address = str(r.address).trim();
+  const cityStateZip = [str(r.city), str(r.state), str(r.zip)].filter(Boolean).join(" ").trim();
+  const property_address = [address, cityStateZip].filter(Boolean).join(", ") || "—";
+  return {
+    id: r.id,
+    customer_name,
+    customer_email,
+    property_address,
+  };
+}
+
 export const LinkRegistrationDialog = ({ 
   open, 
   onOpenChange, 
   projectId, 
   onLinked 
 }: LinkRegistrationDialogProps) => {
-  const { user } = useAuth();
   const { toast } = useToast();
-  const [registrations, setRegistrations] = useState<UnlinkedRegistration[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isLinking, setIsLinking] = useState(false);
+  const [updateProjectRegistrations] = useUpdateProjectRegistrationsMutation();
+
+  const { data: registrationsResponse, isLoading: loading, isError, error } = useGetNonLinkedRegistrationsQuery(
+    undefined,
+    { skip: !open }
+  );
 
   useEffect(() => {
-    if (open) {
-      fetchUnlinkedRegistrations();
-    }
-  }, [open]);
-
-  const fetchUnlinkedRegistrations = async () => {
-    if (!user) return;
-    
-    try {
-      setLoading(true);
-      const { data, error } = await (supabase as any)
-        .from('homeowner_registrations')
-        .select('id, customer_name, customer_email, property_address')
-        .eq('builder_id', user.id)
-        .is('project_id', null)
-        .order('customer_name', { ascending: true });
-
-      if (error) throw error;
-      setRegistrations(data || []);
-    } catch (error: any) {
+    if (open && isError && error) {
       toast({
         title: "Error fetching registrations",
-        description: error.message,
-        variant: "destructive"
+        description: "message" in error ? String(error.message) : "Failed to load registrations",
+        variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [open, isError, error, toast]);
+
+  const registrations = useMemo(() => {
+    if (!registrationsResponse?.success || !Array.isArray(registrationsResponse.data)) {
+      return [];
+    }
+    return registrationsResponse.data.map(mapNonLinkedToDisplay);
+  }, [registrationsResponse]);
 
   const filteredRegistrations = registrations.filter(reg =>
     reg.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -89,29 +95,27 @@ export const LinkRegistrationDialog = ({
 
   const handleLink = async () => {
     if (selectedIds.length === 0) return;
-    
+
     setIsLinking(true);
     try {
-      const { error } = await (supabase as any)
-        .from('homeowner_registrations')
-        .update({ project_id: projectId })
-        .in('id', selectedIds);
+      await updateProjectRegistrations({
+        projectId,
+        builderCustomerIds: selectedIds,
+      }).unwrap();
 
-      if (error) throw error;
-      
       toast({
         title: "Registrations linked",
-        description: `${selectedIds.length} registration(s) linked to this project.`
+        description: `${selectedIds.length} registration(s) linked to this project.`,
       });
-      
+
       setSelectedIds([]);
       onLinked();
       onOpenChange(false);
-    } catch (error: any) {
+    } catch (err: unknown) {
       toast({
         title: "Error linking registrations",
-        description: error.message,
-        variant: "destructive"
+        description: err instanceof Error ? err.message : "Failed to link registrations",
+        variant: "destructive",
       });
     } finally {
       setIsLinking(false);
@@ -120,17 +124,17 @@ export const LinkRegistrationDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[80vh]">
-        <DialogHeader>
+      <DialogContent className="flex flex-col w-[calc(100%-2rem)] max-w-[500px] max-h-[85vh] overflow-hidden p-4 sm:p-6">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Link Registrations</DialogTitle>
           <DialogDescription>
             Select existing registrations to link to this project.
           </DialogDescription>
         </DialogHeader>
-        
-        <div className="py-4">
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+
+        <div className="flex flex-col flex-1 min-h-0 py-4 overflow-hidden">
+          <div className="relative mb-4 flex-shrink-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
@@ -140,34 +144,33 @@ export const LinkRegistrationDialog = ({
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+            <div className="flex items-center justify-center py-8 flex-1 min-h-[120px]">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
             </div>
           ) : filteredRegistrations.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              {registrations.length === 0 
-                ? "No unlinked registrations available." 
-                : "No registrations match your search."
-              }
+            <p className="text-center text-muted-foreground py-8 flex-shrink-0">
+              {registrations.length === 0
+                ? "No unlinked registrations available."
+                : "No registrations match your search."}
             </p>
           ) : (
-            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+            <div className="space-y-2 flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 -mr-1">
               {filteredRegistrations.map(reg => (
-                <Card 
+                <Card
                   key={reg.id}
-                  className={`cursor-pointer transition-colors ${
-                    selectedIds.includes(reg.id) ? 'border-primary bg-primary/5' : ''
+                  className={`cursor-pointer transition-colors flex-shrink-0 ${
+                    selectedIds.includes(reg.id) ? "border-primary bg-primary/5" : ""
                   }`}
                   onClick={() => toggleSelection(reg.id)}
                 >
                   <CardContent className="p-3 flex items-center gap-3">
-                    <Checkbox 
+                    <Checkbox
                       checked={selectedIds.includes(reg.id)}
                       onCheckedChange={() => toggleSelection(reg.id)}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
+                        <User className="h-4 w-4 shrink-0 text-muted-foreground" />
                         <span className="font-medium truncate">{reg.customer_name}</span>
                       </div>
                       <p className="text-sm text-muted-foreground truncate">{reg.customer_email}</p>
@@ -179,19 +182,18 @@ export const LinkRegistrationDialog = ({
             </div>
           )}
         </div>
-        
-        <DialogFooter>
+
+        <DialogFooter className="flex-shrink-0 pt-2 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button 
-            onClick={handleLink} 
+          <Button
+            onClick={handleLink}
             disabled={selectedIds.length === 0 || isLinking}
           >
-            {isLinking 
-              ? "Linking..." 
-              : `Link ${selectedIds.length > 0 ? `(${selectedIds.length})` : ''}`
-            }
+            {isLinking
+              ? "Linking..."
+              : `Link ${selectedIds.length > 0 ? `(${selectedIds.length})` : ""}`}
           </Button>
         </DialogFooter>
       </DialogContent>

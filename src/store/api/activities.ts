@@ -41,6 +41,15 @@ export interface DeleteBuilderActivityResponse {
   data: unknown;
 }
 
+export interface BuilderActivityUpdate {
+  id?: string;
+  activityId?: string;
+  content?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
 export interface CreateBuilderActivityBody {
   // New builder API fields (requestDto) from swagger
   categoryId?: string | null;
@@ -150,12 +159,43 @@ export const activitiesApi = api.injectEndpoints({
         { type: "Activities", id: projectId },
       ],
     }),
+
+    // GET /api/builder/activity/:activityId/activity_updates
+    getActivityUpdates: build.query<
+      { success: boolean; message: string; data: BuilderActivityUpdate[] },
+      { activityId: string }
+    >({
+      query: ({ activityId }) => ({
+        url: `/api/builder/activity/${activityId}/activity_updates`,
+        method: "GET",
+      }),
+      providesTags: (_result, _error, { activityId }) => [
+        { type: "Activities", id: `updates-${activityId}` },
+      ],
+    }),
+
+    // POST /api/builder/activity/:activityId/activity_updates
+    postActivityUpdate: build.mutation<
+      { success: boolean; message: string; data?: BuilderActivityUpdate },
+      { activityId: string; body: { content: string } }
+    >({
+      query: ({ activityId, body }) => ({
+        url: `/api/builder/activity/${activityId}/activity_updates`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { activityId }) => [
+        { type: "Activities", id: `updates-${activityId}` },
+      ],
+    }),
   }),
 });
 
 export const {
   useGetActivitiesByProjectQuery,
   useGetActivityByIdQuery,
+  useGetActivityUpdatesQuery,
+  usePostActivityUpdateMutation,
   useCreateActivityMutation,
   useUpdateActivityMutation,
   useDeleteActivityMutation,

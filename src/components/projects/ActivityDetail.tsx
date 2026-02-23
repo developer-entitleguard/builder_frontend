@@ -19,7 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Activity, ActivityStatus, ActivityUpdate, CreateActivityData } from "@/hooks/useActivities";
-import { useGetActivityByIdQuery, useUpdateActivityMutation } from "@/store/api/activities";
+import { useGetActivityByIdQuery, useGetActivityUpdatesQuery, usePostActivityUpdateMutation, useUpdateActivityMutation } from "@/store/api/activities";
 import { CreateApprovalData } from "@/hooks/useApprovals";
 import { RequestApprovalDialog } from "./RequestApprovalDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -195,6 +195,7 @@ export const ActivityDetail = ({
   const isBuilder = hasBuilderAuth();
 
   const [updateActivityMutation] = useUpdateActivityMutation();
+  const [postActivityUpdateMutation] = usePostActivityUpdateMutation();
 
   // Call builder GET /api/builder/projects/{projectId}/activities/{id} when in builder mode
   useGetActivityByIdQuery(
@@ -217,6 +218,15 @@ export const ActivityDetail = ({
 
   const [isSavingDetails, setIsSavingDetails] = useState(false);
 
+  const {
+    data: builderUpdatesResponse,
+    isLoading: builderUpdatesLoading,
+    refetch: refetchBuilderUpdates,
+  } = useGetActivityUpdatesQuery(
+    { activityId: activity.id },
+    { skip: !isBuilder || !activity.id }
+  );
+
   useEffect(() => {
     setCompleted(activity.completed ?? false);
     setQuote(activity.quote?.toString() ?? "");
@@ -234,15 +244,40 @@ export const ActivityDetail = ({
   ]);
 
   const loadUpdates = useCallback(async () => {
+    if (isBuilder) {
+      await refetchBuilderUpdates();
+      return;
+    }
     setLoadingUpdates(true);
     const data = await onFetchUpdates(activity.id);
     setUpdates(data);
     setLoadingUpdates(false);
-  }, [activity.id, onFetchUpdates]);
+  }, [activity.id, onFetchUpdates, isBuilder, refetchBuilderUpdates]);
 
   useEffect(() => {
-    void loadUpdates();
-  }, [loadUpdates]);
+    if (isBuilder) {
+      setLoadingUpdates(builderUpdatesLoading);
+      if (!builderUpdatesLoading && builderUpdatesResponse?.success && Array.isArray(builderUpdatesResponse.data)) {
+        const list: ActivityUpdate[] = builderUpdatesResponse.data.map((u, i) => ({
+          id: u.id ?? `update-${i}`,
+          activity_id: activity.id,
+          builder_id: "",
+          content: u.content ?? "",
+          attachments: [],
+          created_at: u.createdAt ?? u.updatedAt ?? new Date().toISOString(),
+        }));
+        setUpdates(list);
+      } else if (!builderUpdatesLoading) {
+        setUpdates([]);
+      }
+    }
+  }, [isBuilder, builderUpdatesLoading, builderUpdatesResponse, activity.id]);
+
+  useEffect(() => {
+    if (!isBuilder) {
+      void loadUpdates();
+    }
+  }, [loadUpdates, isBuilder]);
 
   const handleToggleCompleted = async (checked: boolean) => {
     setCompleted(checked);
@@ -301,37 +336,19 @@ export const ActivityDetail = ({
     setIsPostingUpdate(true);
     const content = updateContent.trim();
 
-    // For builder mode, also PUT /api/builder/projects/{projectId}/activities/{id}
     if (isBuilder) {
-      const isCompleted = completed;
-
-      const body = {
-        categoryId: activity.category_id ?? null,
-        completed: isCompleted,
-        completedAt: isCompleted
-          ? activity.completed_at ?? new Date().toISOString()
-          : null,
-        // Use the update content as the description for this PUT
-        description: content,
-        dueDate: activity.due_date ?? "",
-        name: activity.name,
-        orderIndex: activity.order_index,
-        pricePaid: activity.price_paid ?? 0,
-        quote: activity.quote ?? 0,
-        vendorEmail: activity.vendor_email ?? "",
-        vendorName: activity.vendor_name ?? "",
-        vendorPhone: activity.vendor_phone ?? "",
-      };
-
       try {
-        await updateActivityMutation({
-          projectId,
-          id: activity.id,
-          body,
+        await postActivityUpdateMutation({
+          activityId: activity.id,
+          body: { content },
         }).unwrap();
+        setUpdateContent("");
+        await loadUpdates();
       } catch {
-        // Ignore builder PUT errors here; still try to save the Supabase update
+        // Error toast could be added here
       }
+      setIsPostingUpdate(false);
+      return;
     }
 
     const success = await onPostUpdate(activity.id, content);

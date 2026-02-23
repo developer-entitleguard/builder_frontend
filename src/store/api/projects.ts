@@ -45,6 +45,48 @@ export interface CreateBuilderProjectBody {
 
 export type UpdateBuilderProjectBody = CreateBuilderProjectBody;
 
+export interface BuilderProjectRegistration {
+  id?: string;
+  customerName?: string;
+  customer_email?: string;
+  customerEmail?: string;
+  property_address?: string;
+  propertyAddress?: string;
+  projectId?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BuilderProjectRegistrationsResponse {
+  success: boolean;
+  message: string;
+  data: BuilderProjectRegistration[];
+}
+
+/** Single item from GET /api/builder/registrations/nonlinked */
+export interface NonLinkedRegistrationApi {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  contact?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  country?: string | null;
+  project?: unknown;
+  status?: { id: string; name: string; module?: string };
+  builderOrganization?: unknown;
+  billOfMaterials?: unknown;
+  [key: string]: unknown;
+}
+
+export interface NonLinkedRegistrationsResponse {
+  success: boolean;
+  message: string;
+  data: NonLinkedRegistrationApi[];
+}
+
 export const projectsApi = api.injectEndpoints({
   endpoints: (build) => ({
     // GET /api/builder/projects
@@ -85,12 +127,49 @@ export const projectsApi = api.injectEndpoints({
       invalidatesTags: (result) =>
         result?.success ? ["Projects"] : [],
     }),
+    // GET /api/builder/projects/:projectId/registrations
+    getProjectRegistrations: build.query<
+      BuilderProjectRegistrationsResponse,
+      { projectId: string }
+    >({
+      query: ({ projectId }) => ({
+        url: `/api/builder/projects/${projectId}/registrations`,
+        method: "GET",
+      }),
+      providesTags: (_result, _error, { projectId }) => [
+        { type: "Projects", id: projectId },
+        { type: "Projects", id: `${projectId}-registrations` },
+      ],
+    }),
+    // GET /api/builder/registrations/nonlinked
+    getNonLinkedRegistrations: build.query<NonLinkedRegistrationsResponse, void>({
+      query: () => ({
+        url: "/api/builder/registrations/nonlinked",
+        method: "GET",
+      }),
+      providesTags: ["Projects"],
+    }),
+    // PUT /api/builder/projects/:projectId/registrations/Update
+    updateProjectRegistrations: build.mutation<
+      { success: boolean; message: string; data?: unknown },
+      { projectId: string; builderCustomerIds: string[] }
+    >({
+      query: ({ projectId, builderCustomerIds }) => ({
+        url: `/api/builder/projects/${projectId}/registrations/Update`,
+        method: "PUT",
+        body: builderCustomerIds,
+      }),
+      invalidatesTags: ["Projects"],
+    }),
   }),
 });
 
 export const {
   useProjectsQuery,
   useProjectByIdQuery,
+  useGetProjectRegistrationsQuery,
+  useGetNonLinkedRegistrationsQuery,
+  useUpdateProjectRegistrationsMutation,
   useCreateProjectMutation,
   useUpdateProjectMutation,
 } = projectsApi;

@@ -158,7 +158,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   });
   const billMaterials = billMaterialsResponse?.data ?? [];
 
-  // Builder items by BOM + customer (for debugging/visibility; response not yet used in UI)
+
   const { data: builderItemsByBOMResponse } = useGetBuilderItemsByBOMQuery(
     selectedBomId && registrationId
       ? { billMaterialId: selectedBomId, customerId: registrationId }
@@ -258,11 +258,15 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
 
   const handleBOMSelect = (bomId: string) => {
     setSelectedBomId(bomId);
-    // When user chooses a BOM, re-fetch existing customer item map so API shows again
-    if (registrationId && registrationId.trim() !== '') {
-      fetchExistingMap(registrationId);
-    }
   };
+
+  // After /api/getbuilderitems/bybom has run successfully for the selected BOM,
+  // fetch the existing customer item map so the mapped items are shown.
+  useEffect(() => {
+    if (!registrationId || !selectedBomId) return;
+    if (!builderItemsByBOMResponse?.success) return;
+    fetchExistingMap(registrationId);
+  }, [registrationId, selectedBomId, builderItemsByBOMResponse, fetchExistingMap]);
 
   const handleRemoveItem = (itemId: string) => {
     setPendingItemFiles((prev) => {

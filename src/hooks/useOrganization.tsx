@@ -140,17 +140,21 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
+    // Prefer builder JWT-based auth when present, regardless of Supabase user state
+    const fromBuilder = initFromBuilderAuth();
+    if (fromBuilder) {
+      setLoading(false);
+      return;
+    }
+
     if (user) {
       fetchUserOrganizations();
     } else {
       setLoading(true);
-      const fromBuilder = initFromBuilderAuth();
-      if (!fromBuilder) {
-        setOrganizations([]);
-        setCurrentOrganizationState(null);
-        setCurrentRole(null);
-        setImpersonatedOrgState(null);
-      }
+      setOrganizations([]);
+      setCurrentOrganizationState(null);
+      setCurrentRole(null);
+      setImpersonatedOrgState(null);
       setLoading(false);
     }
   }, [user, initFromBuilderAuth]);

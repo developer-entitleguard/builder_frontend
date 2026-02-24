@@ -65,9 +65,9 @@ const Header = () => {
             <Link to="/dashboard" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
               <div className="p-1">
                 <img 
-                  src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
+                  src="/images/feature-home-1.jpg" 
                   alt="Entitle Guard for Builders Logo" 
-                  className="h-10 w-10 rounded-lg"
+                  className="h-10 w-10 rounded-lg object-cover"
                 />
               </div>
               <div>

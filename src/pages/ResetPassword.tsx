@@ -118,14 +118,13 @@ const ResetPassword = () => {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            {/* <Building2 className="h-8 w-8 text-primary mr-2" /> */}
             <div className="p-1">
-                <img 
-                  src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
-                  alt="Entitle Guard for Builders Logo" 
-                  className="h-8 w-8 rounded-lg"
-                />
-              </div>
+              <img 
+                src="/images/feature-home-1.jpg" 
+                alt="Entitle Guard for Builders Logo" 
+                className="h-8 w-8 rounded-lg object-cover"
+              />
+            </div>
             <h1 className="text-2xl font-bold text-foreground">Entitle Guard for Builders</h1>
           </div>
           <p className="text-muted-foreground">Because Builders Deserve Clarity.</p>

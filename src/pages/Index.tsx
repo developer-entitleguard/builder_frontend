@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { 
-  Building2, 
-  ClipboardCheck, 
-  Calculator, 
-  Home, 
-  ArrowRight, 
+import {
+  Building2,
+  ClipboardCheck,
+  Calculator,
+  Home,
+  ArrowRight,
   CheckCircle2,
   FileCheck,
   Users,
@@ -17,18 +17,38 @@ import {
   Mail,
   FolderKanban,
   Sparkles,
-  ChevronRight
+  ChevronRight,
 } from "lucide-react";
+
+// Treat builder JWT login as authenticated (even without Supabase user)
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!parsed?.jwt;
+  } catch {
+    return false;
+  }
+};
 
 const Index = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const builderAuth = hasBuilderAuth();
 
   useEffect(() => {
+    // If builder JWT exists, always send to dashboard (builder app),
+    // regardless of Supabase auth state.
+    if (builderAuth) {
+      navigate('/dashboard');
+      return;
+    }
+
     if (!loading && user) {
       navigate('/dashboard');
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, builderAuth, navigate]);
 
   if (loading) {
     return (
@@ -121,9 +141,9 @@ Thanks`);
           <div className="flex items-center justify-between h-20">
             <div className="flex items-center">
               <img 
-                src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
+                src="/images/feature-home-1.jpg" 
                 alt="Entitle Guard for Builders Logo" 
-                className="h-10 w-10 rounded-lg mr-3"
+                className="h-10 w-10 rounded-lg mr-3 object-cover"
               />
               <div>
                 <span className="text-xl font-semibold text-white">Entitle Guard for Builders</span>
@@ -393,9 +413,9 @@ Thanks`);
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center">
               <img 
-                src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
+                src="/images/feature-home-1.jpg" 
                 alt="Entitle Guard for Builders Logo" 
-                className="h-8 w-8 rounded mr-3"
+                className="h-8 w-8 rounded mr-3 object-cover"
               />
               <div>
                 <span className="text-white font-medium">Entitle Guard for Builders</span>

@@ -108,13 +108,15 @@ const Auth = () => {
       // API returns { success, message, data: { jwt, userInfo, builderOrganization?, ... } }
       if (response?.data?.jwt) {
         const userInfo = response.data.userInfo ?? {};
-        const builderOrg = response.data.userInfo?.builderOrganization ?? response.data.builderOrganization;
+        const builderOrg =
+          response.data.userInfo?.builderOrganization ??
+          (response.data as { builderOrganization?: unknown }).builderOrganization;
         localStorage.setItem(
-          'userData',
+          "userData",
           JSON.stringify({
             jwt: response.data.jwt,
             ...userInfo,
-            builderOrganization: builderOrg ?? userInfo.builderOrganization,
+            builderOrganization: builderOrg,
           })
         );
         toast({
@@ -243,9 +245,9 @@ const Auth = () => {
           <div className="flex items-center justify-between h-20">
             <div className="flex items-center cursor-pointer" onClick={() => navigate('/')}>
               <img 
-                src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
+                src="/images/feature-home-1.jpg" 
                 alt="Entitle Guard for Builders Logo" 
-                className="h-10 w-10 rounded-lg mr-3"
+                className="h-10 w-10 rounded-lg mr-3 object-cover"
               />
               <div>
                 <span className="text-xl font-semibold text-white">Entitle Guard for Builders</span>
@@ -431,9 +433,9 @@ const Auth = () => {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center">
               <img 
-                src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
+                src="/images/feature-home-1.jpg" 
                 alt="Entitle Guard for Builders Logo" 
-                className="h-8 w-8 rounded mr-3"
+                className="h-8 w-8 rounded mr-3 object-cover"
               />
               <div>
                 <span className="text-white font-medium">Entitle Guard for Builders</span>

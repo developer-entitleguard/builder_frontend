@@ -1,21 +1,14 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-import { User, Users, Upload, Download } from "lucide-react";
-import { getApiBaseUrl } from "@/lib/config";
-import { useRegTempDownload } from "@/lib/api/services/templateDownload";
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useOrganization } from '@/hooks/useOrganization';
+import { User, Users, Upload, Download } from 'lucide-react';
 
 interface RegistrationTypeDialogProps {
   open: boolean;
@@ -23,56 +16,28 @@ interface RegistrationTypeDialogProps {
   onSuccess?: () => void;
 }
 
-export const RegistrationTypeDialog = ({
-  open,
-  onOpenChange,
-  onSuccess,
-}: RegistrationTypeDialogProps) => {
+export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: RegistrationTypeDialogProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
-  const [selectedType, setSelectedType] = useState<"single" | "bulk" | null>(
-    null
-  );
+  const { organization } = useOrganization();
+  const [selectedType, setSelectedType] = useState<'single' | 'bulk' | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const { download: downloadRegistrationTemplate, isLoading: downloadingTemplate } =
-    useRegTempDownload();
 
   const handleSingleRegistration = () => {
     onOpenChange(false);
-    navigate("/onboarding");
+    navigate('/onboarding');
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const fileName = file.name.toLowerCase();
-    const isValidCsv =
-      fileName.endsWith(".csv") ||
-      file.type === "text/csv" ||
-      file.type === "application/csv";
-
-    if (!isValidCsv) {
+    if (!file.name.endsWith('.csv')) {
       toast({
         title: "Invalid file type",
-        description: "Please upload a CSV (.csv) file",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setSelectedFile(file);
-  };
-
-  const handleFileUpload = async (file?: File) => {
-    const fileToUpload = file || selectedFile;
-    if (!fileToUpload) {
-      toast({
-        title: "No file selected",
-        description: "Please select a CSV (.csv) file to upload",
-        variant: "destructive",
+        description: "Please upload a CSV file",
+        variant: "destructive"
       });
       return;
     }
@@ -80,84 +45,97 @@ export const RegistrationTypeDialog = ({
     setUploading(true);
 
     try {
-      // Get builderOrganizationId and JWT token from localStorage
-      const userData = localStorage.getItem("userData");
-      let authToken = "";
-      let builderOrganizationId = "";
-
-      if (userData) {
-        try {
-          const parsedData = JSON.parse(userData);
-          if (parsedData.jwt) {
-            authToken = parsedData.jwt;
-          }
-          if (parsedData.userInfo?.builderOrganization?.id) {
-            builderOrganizationId = parsedData.userInfo.builderOrganization.id;
-          }
-        } catch (error) {
-          console.warn("Failed to parse userData:", error);
-        }
-      }
-
-      if (!builderOrganizationId) {
+      const text = await file.text();
+      const rows = text.split('\n').filter(row => row.trim());
+      const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
+      
+      // Validate headers
+      const requiredHeaders = ['customer_name', 'customer_email', 'property_address', 'property_city', 'property_state', 'property_zip'];
+      const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+      
+      if (missingHeaders.length > 0) {
         toast({
-          title: "Error",
-          description: "Organization ID is missing. Please log in again.",
-          variant: "destructive",
+          title: "Invalid CSV format",
+          description: `Missing required columns: ${missingHeaders.join(', ')}`,
+          variant: "destructive"
         });
         setUploading(false);
         return;
       }
 
-      // Create FormData for file upload (file in body)
-      const formData = new FormData();
-      formData.append("file", fileToUpload);
+      // Helper to convert date formats to ISO (YYYY-MM-DD)
+      const parseDate = (dateStr: string): string | null => {
+        if (!dateStr) return null;
+        
+        // Already ISO format
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+        
+        // DD/MM/YYYY or D/M/YYYY format
+        const slashMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (slashMatch) {
+          const [, day, month, year] = slashMatch;
+          return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+        
+        // DD-MM-YYYY format
+        const dashMatch = dateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+        if (dashMatch) {
+          const [, day, month, year] = dashMatch;
+          return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+        
+        return dateStr; // Return as-is if no match
+      };
 
-      // Get API base URL
-      const apiBaseUrl = getApiBaseUrl();
-      // builderOrganizationId as query parameter
-      const url = import.meta.env.DEV
-        ? `/api/upload/registration-template?builderOrganizationId=${encodeURIComponent(
-            builderOrganizationId
-          )}`
-        : `${apiBaseUrl}/api/upload/registration-template?builderOrganizationId=${encodeURIComponent(
-            builderOrganizationId
-          )}`;
-
-      // Upload file to API
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: authToken ? `Bearer ${authToken}` : "",
-        },
-        body: formData,
+      // Parse data rows
+      const registrations = rows.slice(1).map(row => {
+        const values = row.split(',').map(v => v.trim());
+        const registration: any = {
+          builder_id: user?.id,
+          organization_id: organization?.id,
+          status: 'draft'
+        };
+        
+        headers.forEach((header, index) => {
+          if (values[index]) {
+            // Convert date fields to ISO format
+            if (header === 'settlement_date') {
+              registration[header] = parseDate(values[index]);
+            } else if (header === 'num_bedrooms' || header === 'num_rooms') {
+              const intVal = parseInt(values[index], 10);
+              registration[header] = isNaN(intVal) ? null : intVal;
+            } else if (header === 'total_built_up_area') {
+              const floatVal = parseFloat(values[index]);
+              registration[header] = isNaN(floatVal) ? null : floatVal;
+            } else {
+              registration[header] = values[index];
+            }
+          }
+        });
+        
+        return registration;
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message || `Failed to upload file: ${response.statusText}`
-        );
-      }
+      // Insert registrations
+      const { error } = await supabase
+        .from('homeowner_registrations')
+        .insert(registrations);
 
-      const result = await response.json();
+      if (error) throw error;
 
       toast({
         title: "Success",
-        description: result.message || "Registration(s) created successfully",
+        description: `${registrations.length} registration(s) created successfully`
       });
 
       onOpenChange(false);
       setSelectedType(null);
-      setSelectedFile(null);
       onSuccess?.();
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to process file";
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: errorMessage,
-        variant: "destructive",
+        description: error.message || "Failed to process CSV file",
+        variant: "destructive"
       });
     } finally {
       setUploading(false);
@@ -168,22 +146,35 @@ export const RegistrationTypeDialog = ({
     setSelectedType(null);
   };
 
+  const downloadTemplate = () => {
+    const headers = ["customer_name", "customer_email", "customer_phone", "property_address", "property_city", "property_state", "property_zip", "project_name", "settlement_date", "notes", "num_bedrooms", "num_rooms", "total_built_up_area"];
+    const sampleRow = ["John Smith", "john.smith@email.com", "0412345678", "123 Main Street", "Sydney", "NSW", "2000", "Sunrise Estate", "2024-06-15", "Corner lot unit", "4", "8", "250"];
+    
+    const csvContent = [headers.join(","), sampleRow.join(",")].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "registration_template.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
             {selectedType === null && "New Registration"}
-            {selectedType === "single" && "Single Registration"}
-            {selectedType === "bulk" && "Bulk Registration"}
+            {selectedType === 'single' && "Single Registration"}
+            {selectedType === 'bulk' && "Bulk Registration"}
           </DialogTitle>
           <DialogDescription>
-            {selectedType === null &&
-              "Choose how you want to create registrations"}
-            {selectedType === "single" &&
-              "Create a single homeowner registration"}
-            {selectedType === "bulk" &&
-              "Upload a CSV file to create multiple registrations"}
+            {selectedType === null && "Choose how you want to create registrations"}
+            {selectedType === 'single' && "Create a single homeowner registration"}
+            {selectedType === 'bulk' && "Upload a CSV file to create multiple registrations"}
           </DialogDescription>
         </DialogHeader>
 
@@ -196,73 +187,46 @@ export const RegistrationTypeDialog = ({
             >
               <User className="h-8 w-8" />
               <span className="font-semibold">Single Registration</span>
-              <span className="text-xs text-muted-foreground">
-                Create one registration at a time
-              </span>
+              <span className="text-xs text-muted-foreground">Create one registration at a time</span>
             </Button>
-
+            
             <Button
               variant="outline"
               className="h-24 flex-col gap-2"
-              onClick={() => setSelectedType("bulk")}
+              onClick={() => setSelectedType('bulk')}
             >
               <Users className="h-8 w-8" />
               <span className="font-semibold">Bulk Registration</span>
-              <span className="text-xs text-muted-foreground">
-                Upload CSV to create multiple
-              </span>
+              <span className="text-xs text-muted-foreground">Upload CSV to create multiple</span>
             </Button>
           </div>
         )}
 
-        {selectedType === "bulk" && (
+        {selectedType === 'bulk' && (
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="csv-file">Select CSV File (.csv)</Label>
+              <Label htmlFor="csv-file">Upload CSV File</Label>
               <Input
                 id="csv-file"
                 type="file"
-                accept=".csv,text/csv,application/csv"
-                onChange={handleFileSelect}
+                accept=".csv"
+                onChange={handleFileUpload}
                 disabled={uploading}
               />
-              {selectedFile && (
-                <p className="text-sm text-muted-foreground">
-                  Selected: {selectedFile.name}
-                </p>
-              )}
               <p className="text-xs text-muted-foreground">
-                Required columns: customer_name, customer_email,
-                property_address, property_city, property_state, property_zip
+                Required columns: customer_name, customer_email, property_address, property_city, property_state, property_zip
               </p>
               <p className="text-xs text-muted-foreground">
-                Optional columns: customer_phone, project_name, settlement_date,
-                notes
+                Optional columns: customer_phone, project_name, settlement_date, notes, num_bedrooms, num_rooms, total_built_up_area
               </p>
             </div>
-            {/* Download and Upload buttons */}
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={downloadRegistrationTemplate}
-                className="flex-1"
-                disabled={uploading || downloadingTemplate}
-              >
+
+            <div className="flex justify-between items-center">
+              <Button variant="ghost" size="sm" onClick={downloadTemplate}>
                 <Download className="w-4 h-4 mr-2" />
-                {downloadingTemplate ? "Downloading..." : "Download Template"}
+                Download Template
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleFileUpload()}
-                className="flex-1"
-                disabled={uploading || !selectedFile}
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                {uploading ? "Uploading..." : "Upload"}
-              </Button>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleBack} className="flex-1">
+              <Button variant="outline" onClick={handleBack}>
                 Back
               </Button>
             </div>

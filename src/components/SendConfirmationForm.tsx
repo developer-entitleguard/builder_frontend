@@ -1,61 +1,67 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Mail, Download, Eye, ArrowLeft } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
-import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
-import { skipToken } from "@reduxjs/toolkit/query";
+import { useGetCustomerDetailsQuery } from "@/store/api";
+import { useOrganization } from "@/hooks/useOrganization";
+
+const getBuilderId = (): string | null => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return null;
+    const parsed = JSON.parse(userData);
+    const orgId = parsed?.userInfo?.builderOrganization?.id ?? parsed?.builderOrganization?.id ?? parsed?.builder_organization?.id;
+    return orgId ?? parsed?.userInfo?.id ?? parsed?.id ?? null;
+  } catch {
+    return null;
+  }
+};
 
 interface SendConfirmationFormProps {
   onNext?: () => void;
-  customerId?: string;
+  registrationId?: string | null;
 }
 
-const SendConfirmationForm = ({ onNext, customerId }: SendConfirmationFormProps) => {
-  const { user } = useAuth();
+const SendConfirmationForm = ({ onNext, registrationId }: SendConfirmationFormProps) => {
+  const navigate = useNavigate();
+  const { organization } = useOrganization();
+  const builderId = organization?.id ?? getBuilderId();
+
+  const { data: customerDetailsResponse, isLoading: loadingDetails } = useGetCustomerDetailsQuery(
+    { builderId: builderId ?? "", customerId: registrationId ?? "" },
+    { skip: !registrationId || !builderId }
+  );
+
   const [status, setStatus] = useState<'sending' | 'sent' | 'delivered'>('sending');
 
   useEffect(() => {
-    // Simulate sending process
     const timer1 = setTimeout(() => setStatus('sent'), 2000);
     const timer2 = setTimeout(() => setStatus('delivered'), 4000);
-    
     return () => {
       clearTimeout(timer1);
       clearTimeout(timer2);
     };
   }, []);
 
-  const { data: customerDetailsData, refetch } = useGetCustomerDetailsQuery(
-    user?.id && customerId
-      ? { builderId: user.id as string, customerId }
-      : skipToken
-  );
-
-  useEffect(() => {
-    if (user?.id && customerId) {
-      refetch();
-    }
-  }, [user?.id, customerId, refetch]);
-
-  const apiCustomer = customerDetailsData?.data?.customer;
-  const apiSummary = customerDetailsData?.data;
-
-  const customerData = apiCustomer
-    ? {
-        name: `${apiCustomer.firstName} ${apiCustomer.lastName}`.trim(),
-        email: apiCustomer.email,
-        propertyAddress:
-          apiCustomer.address && apiCustomer.city && apiCustomer.state
-            ? `${apiCustomer.address}, ${apiCustomer.city}, ${apiCustomer.state} ${apiCustomer.zip || ""}`
-            : apiCustomer.address || "",
-      }
-    : {
-        name: "Homeowner",
-        email: "",
-        propertyAddress: "",
-      };
+  const apiData = customerDetailsResponse?.data;
+  const customer = apiData?.customer;
+  const customerData = {
+    name: customer
+      ? [customer.firstName, customer.lastName].filter(Boolean).join(" ") || customer.email
+      : "—",
+    email: customer?.email ?? "—",
+    propertyAddress: customer
+      ? [customer.address, customer.city, customer.state, customer.zip].filter(Boolean).join(", ") || "—"
+      : "—",
+  };
+  const packageStats = {
+    totalItems: apiData?.totalItems ?? 0,
+    totalDocuments: apiData?.totalDocuments ?? 0,
+    totalCategories: apiData?.totalCategories ?? 0,
+    completionPercent: apiData?.completionPercent ?? 100,
+  };
 
   const getStatusMessage = () => {
     switch (status) {
@@ -107,71 +113,71 @@ const SendConfirmationForm = ({ onNext, customerId }: SendConfirmationFormProps)
         </CardContent>
       </Card>
 
-      {/* Delivery Details */}
+      {/* Delivery Details - from getCustomerDetails API */}
       <Card>
         <CardHeader>
           <CardTitle>Delivery Details</CardTitle>
           <CardDescription>Package sent to homeowner</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="font-medium">Sent to</p>
-              <p className="text-muted-foreground">{customerData.name}</p>
+          {loadingDetails ? (
+            <p className="text-muted-foreground">Loading delivery details...</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="font-medium">Sent to</p>
+                <p className="text-muted-foreground">{customerData.name}</p>
+              </div>
+              <div>
+                <p className="font-medium">Email</p>
+                <p className="text-muted-foreground">{customerData.email}</p>
+              </div>
+              <div>
+                <p className="font-medium">Property</p>
+                <p className="text-muted-foreground">{customerData.propertyAddress}</p>
+              </div>
+              <div>
+                <p className="font-medium">Sent at</p>
+                <p className="text-muted-foreground">{new Date().toLocaleString()}</p>
+              </div>
             </div>
-            <div>
-              <p className="font-medium">Email</p>
-              <p className="text-muted-foreground">{customerData.email}</p>
-            </div>
-            <div>
-              <p className="font-medium">Property</p>
-              <p className="text-muted-foreground">{customerData.propertyAddress}</p>
-            </div>
-            <div>
-              <p className="font-medium">Sent at</p>
-              <p className="text-muted-foreground">{new Date().toLocaleString()}</p>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Package Summary */}
+      {/* Package Summary - from getCustomerDetails API */}
       <Card>
         <CardHeader>
           <CardTitle>Package Contents</CardTitle>
           <CardDescription>Documentation included in this delivery</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">
-                {apiSummary?.totalItems ?? 0}
-              </p>
-              <p className="text-sm text-muted-foreground">Items</p>
+          {loadingDetails ? (
+            <p className="text-muted-foreground text-center py-4">Loading package details...</p>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+              <div className="p-4 border rounded-lg">
+                <p className="text-2xl font-bold text-primary">{packageStats.totalItems}</p>
+                <p className="text-sm text-muted-foreground">Items</p>
+              </div>
+              <div className="p-4 border rounded-lg">
+                <p className="text-2xl font-bold text-primary">{packageStats.totalDocuments}</p>
+                <p className="text-sm text-muted-foreground">Documents</p>
+              </div>
+              <div className="p-4 border rounded-lg">
+                <p className="text-2xl font-bold text-primary">{packageStats.totalCategories}</p>
+                <p className="text-sm text-muted-foreground">Categories</p>
+              </div>
+              <div className="p-4 border rounded-lg">
+                <p className="text-2xl font-bold text-primary">{packageStats.completionPercent}%</p>
+                <p className="text-sm text-muted-foreground">Complete</p>
+              </div>
             </div>
-            <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">
-                {apiSummary?.totalDocuments ?? 0}
-              </p>
-              <p className="text-sm text-muted-foreground">Documents</p>
-            </div>
-            <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">
-                {apiSummary?.totalCategories ?? 0}
-              </p>
-              <p className="text-sm text-muted-foreground">Categories</p>
-            </div>
-            {/* <div className="p-4 border rounded-lg">
-              <p className="text-2xl font-bold text-primary">
-                {apiSummary ? `${apiSummary.completionPercent}%` : "0%"}
-              </p>
-              <p className="text-sm text-muted-foreground">Complete</p>
-            </div> */}
-          </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* {status === 'delivered' && (
+      {status === 'delivered' && (
         <Card>
           <CardHeader>
             <CardTitle>Next Steps</CardTitle>
@@ -194,17 +200,17 @@ const SendConfirmationForm = ({ onNext, customerId }: SendConfirmationFormProps)
             </div>
           </CardContent>
         </Card>
-      )} */}
+      )}
 
-      <div className="flex justify-end items-center pt-6 border-t">
-        {/* <Button 
-          variant="outline" 
-          onClick={() => window.location.reload()}
+      <div className="flex justify-between items-center pt-6 border-t">
+        <Button
+          variant="outline"
+          onClick={() => navigate("/onboarding")}
           className="flex items-center space-x-2"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Create New Package</span>
-        </Button> */}
+        </Button>
         {status === 'delivered' && (
           <Badge className="bg-green-100 text-green-800 px-4 py-2">
             ✓ Documentation Package Delivered Successfully

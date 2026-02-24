@@ -13,8 +13,8 @@ export default defineConfig(({ mode }) => ({
         target: "http://localhost:8080",
         changeOrigin: true,
         secure: false,
-        configure: (proxy, options) => {
-          proxy.on("proxyReq", (proxyReq, req, res) => {
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
             proxyReq.removeHeader("Origin");
           });
         },
@@ -23,28 +23,68 @@ export default defineConfig(({ mode }) => ({
         target: "http://localhost:8080",
         changeOrigin: true,
         secure: false,
-        configure: (proxy, options) => {
-          proxy.on("proxyReq", (proxyReq, req, res) => {
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
             proxyReq.removeHeader("Origin");
           });
         },
       },
-      "^/(profile|signup|signout|reset-password|update-password|verify-email|resend-verification)": {
+      "/profile": {
         target: "http://localhost:8080",
         changeOrigin: true,
         secure: false,
-        configure: (proxy, options) => {
-          proxy.on("proxyReq", (proxyReq, req, res) => {
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
             proxyReq.removeHeader("Origin");
           });
         },
       },
-      "/auth": {
+      "/signup": {
         target: "http://localhost:8080",
         changeOrigin: true,
         secure: false,
-        configure: (proxy, options) => {
-          proxy.on("proxyReq", (proxyReq, req, res) => {
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
+            proxyReq.removeHeader("Origin");
+          });
+        },
+      },
+      "/signout": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
+            proxyReq.removeHeader("Origin");
+          });
+        },
+      },
+      "/update-password": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
+            proxyReq.removeHeader("Origin");
+          });
+        },
+      },
+      "/verify-email": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
+            proxyReq.removeHeader("Origin");
+          });
+        },
+      },
+      "/resend-verification": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
             proxyReq.removeHeader("Origin");
           });
         },
@@ -54,7 +94,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === "development" &&
-      componentTagger(),
+    componentTagger(),
   ].filter(Boolean),
   resolve: {
     alias: {

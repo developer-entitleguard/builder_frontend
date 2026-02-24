@@ -1,141 +1,235 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { User, Home, FileText, Building, CheckCircle } from "lucide-react";
+import { User, Home, FileText, Building, CheckCircle, MessageSquare, Loader2, Lock, Copy } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
-import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
-import { useCreateCustomerEntitlementMutation } from "@/lib/api/services/customerEntitlement";
-import { skipToken } from "@reduxjs/toolkit/query";
-
-interface SelectedItem {
-  id: string;
-  name: string;
-  category: string;
-  brand?: string;
-  model?: string;
-  make?: string;
-  color?: string;
-  serial_number?: string;
-  custom_notes?: string;
-  warranty_documents?: Array<{ name: string; url: string; path: string }>;
-  manual_documents?: Array<{ name: string; url: string; path: string }>;
-}
-
-interface FormData {
-  customer?: {
-    customerId?: string;
-    customer_name?: string;
-    customer_email?: string;
-    customer_phone?: string;
-    settlement_date?: string;
-    property_address?: string;
-    property_city?: string;
-    property_state?: string;
-    property_zip?: string;
-    notes?: string;
-    project_name?: string;
-  };
-  items?: {
-    selected_items?: SelectedItem[];
-  };
-  documents?: Record<string, unknown>;
-}
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface ReviewApprovalFormProps {
   onNext: () => void;
-  formData?: FormData;
+  formData?: any;
   registrationId?: string | null;
 }
 
 const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
-  const { user } = useAuth();
   const [approved, setApproved] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
-  // Use items passed from previous step instead of fetching from Supabase
-  const selectedItems: SelectedItem[] = formData?.items?.selected_items || [];
+  const [consentConfirmed, setConsentConfirmed] = useState(false);
+  const [consentLocked, setConsentLocked] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [requestingConsent, setRequestingConsent] = useState(false);
+  const [consentDialogOpen, setConsentDialogOpen] = useState(false);
+  const [consentUrl, setConsentUrl] = useState<string | null>(null);
 
-  const customerId: string | undefined = formData?.customer?.customerId || registrationId || undefined;
+  useEffect(() => {
+    const items = formData?.items?.selected_items;
+    console.log('ReviewApprovalForm - items from formData:', items);
 
-  const { data: customerDetailsData } = useGetCustomerDetailsQuery(
-    user?.id && customerId
-      ? { builderId: user.id as string, customerId }
-      : skipToken,
-    {
-      refetchOnMountOrArgChange: true,
-    }
-  );
-
-  const apiCustomer = customerDetailsData?.data?.customer;
-  const apiSummary = customerDetailsData?.data;
-
-  const customerData = apiCustomer
-    ? {
-        customer_name: `${apiCustomer.firstName} ${apiCustomer.lastName}`.trim(),
-        customer_email: apiCustomer.email,
-        customer_phone: apiCustomer.contact,
-        settlement_date: apiCustomer.settlementDate || null,
-        property_address: apiCustomer.address,
-        property_city: apiCustomer.city,
-        property_state: apiCustomer.state,
-        property_zip: apiCustomer.zip,
-        notes: apiCustomer.notes,
-        project_name: apiCustomer.projectName,
+    if (Array.isArray(items) && items.length > 0) {
+      // selected_items can be either an array of UUIDs OR an array of item objects
+      const firstItem = items[0];
+      if (typeof firstItem === "string") {
+        console.log('ReviewApprovalForm - items are UUIDs, fetching from DB');
+        fetchSelectedItems(items as string[]);
+      } else if (typeof firstItem === "object" && firstItem !== null) {
+        console.log('ReviewApprovalForm - items are objects, using directly:', items.length, 'items');
+        setSelectedItems(items as any[]);
+        setLoading(false);
+      } else {
+        console.log('ReviewApprovalForm - unknown item type:', typeof firstItem);
+        setLoading(false);
       }
-    : formData?.customer || {};
+    } else {
+      console.log('ReviewApprovalForm - no items found in formData');
+      setLoading(false);
+    }
+
+    // Check if consent was already received via customer link
+    if (registrationId) {
+      checkExistingConsent();
+    }
+  }, [formData, registrationId]);
+
+  const checkExistingConsent = async () => {
+    if (!registrationId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('homeowner_registrations')
+        .select('consent_received, consent_method')
+        .eq('id', registrationId)
+        .single();
+
+      if (error) throw error;
+
+      if (data?.consent_received) {
+        setConsentConfirmed(true);
+        // Lock the checkbox if consent was received via customer link
+        if (data.consent_method === 'customer_link') {
+          setConsentLocked(true);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error checking consent:', error);
+    }
+  };
+
+  const fetchSelectedItems = async (itemIds: string[]) => {
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+      setLoading(false);
+      return;
+    }
+
+    // Only fetch real builder_items UUIDs (skip custom items / invalid values)
+    const uuidIds = itemIds.filter((id) =>
+      typeof id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+    );
+
+    if (uuidIds.length === 0) {
+      setSelectedItems([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('builder_items')
+        .select('*')
+        .in('id', uuidIds);
+
+      if (error) throw error;
+      setSelectedItems(data || []);
+    } catch (error: any) {
+      toast({
+        title: "Error fetching selected items",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConsentChange = async (checked: boolean) => {
+    if (consentLocked) return;
+    
+    setConsentConfirmed(checked);
+    
+    if (checked && registrationId) {
+      // Update database with builder-confirmed consent
+      try {
+        await supabase
+          .from('homeowner_registrations')
+          .update({
+            consent_received: true,
+            consent_received_at: new Date().toISOString(),
+            consent_method: 'builder_confirmed',
+          })
+          .eq('id', registrationId);
+      } catch (error: any) {
+        console.error('Error saving consent:', error);
+      }
+    }
+  };
+
+  const handleRequestConsent = async () => {
+    if (!registrationId) {
+      toast({
+        title: "Error",
+        description: "Registration ID not found. Please save the registration first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setRequestingConsent(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('consent-management', {
+        body: {
+          action: 'request_consent',
+          registration_id: registrationId,
+        },
+      });
+
+      if (error) throw error;
+
+      setConsentUrl(data.consentUrl);
+      setConsentDialogOpen(true);
+
+      if (data.emailSent) {
+        toast({
+          title: "Consent request sent",
+          description: `Email sent to ${data.customerEmail}`,
+        });
+      } else {
+        toast({
+          title: "Consent link generated",
+          description: data.emailError ? `Email failed: ${data.emailError}. Please share the link manually.` : `Share the link with ${data.customerEmail}`,
+          variant: data.emailError ? "destructive" : "default"
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error requesting consent",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setRequestingConsent(false);
+    }
+  };
+
+  const copyConsentUrl = () => {
+    if (consentUrl) {
+      navigator.clipboard.writeText(consentUrl);
+      toast({
+        title: "Link copied",
+        description: "Consent link copied to clipboard. Share it with the customer.",
+      });
+    }
+  };
+
+  const customerData = formData?.customer || {};
   const uploadedDocs = formData?.documents || {};
 
   // Count total uploaded documents
   const getTotalDocuments = () => {
-    return Object.values(uploadedDocs).reduce((total: number, docs: unknown) => {
-      return total + (Array.isArray(docs) ? docs.length : 0);
-    }, 0);
+    return Object.values(uploadedDocs).reduce((total: number, docs: any) => total + (Array.isArray(docs) ? docs.length : 0), 0);
   };
 
   const groupedItems = selectedItems.reduce((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
     acc[item.category].push(item);
     return acc;
-  }, {} as Record<string, SelectedItem[]>);
+  }, {} as Record<string, any[]>);
 
-  const handleSendToHomeowner = async () => {
-    if (isSending) return;
-    if (!customerId) {
-      toast({
-        title: "Error",
-        description: "Customer ID is required",
-        variant: "destructive"
-      });
-      return;
-    }
-    try {
-      setIsSending(true);
-      await createCustomerEntitlement({ builderCustomerId: customerId }).unwrap();
-      await Promise.resolve(onNext());
-      toast({
-        title: "Success",
-        description: "Customer entitlement created successfully"
-      });
-    } catch (error) {
-      console.error("Error creating customer entitlement:", error);
-      toast({
-        title: "Error",
-        description: error && typeof error === 'object' && 'data' in error
-          ? String((error.data as { message?: string })?.message || "Failed to create customer entitlement")
-          : error instanceof Error
-          ? error.message
-          : "Failed to create customer entitlement",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSending(false);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-foreground">Loading Review...</h2>
+          <p className="text-muted-foreground mt-1">Preparing review data</p>
+        </div>
+      </div>
+    );
+  }
+
+  const canSubmit = approved && consentConfirmed;
 
   return (
     <div className="space-y-6">
@@ -156,26 +250,26 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="font-medium">Name</p>
-              <p className="text-muted-foreground">{customerData.customer_name || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.customer_name || customerData.firstName && customerData.lastName ? `${customerData.firstName} ${customerData.lastName}` : 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Email</p>
-              <p className="text-muted-foreground">{customerData.customer_email || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.customer_email || customerData.email || 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Phone</p>
-              <p className="text-muted-foreground">{customerData.customer_phone || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.customer_phone || customerData.phone || 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Settlement Date</p>
-              <p className="text-muted-foreground">{customerData.settlement_date || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerData.settlement_date || customerData.settlementDate || 'Not provided'}</p>
             </div>
           </div>
           <div>
             <p className="font-medium">Property Address</p>
             <p className="text-muted-foreground">
-              {customerData.property_address && customerData.property_city && customerData.property_state 
-                ? `${customerData.property_address}, ${customerData.property_city}, ${customerData.property_state} ${customerData.property_zip || ''}`
+              {(customerData.property_address || customerData.propertyAddress) && (customerData.property_city || customerData.city) && (customerData.property_state || customerData.state) 
+                ? `${customerData.property_address || customerData.propertyAddress}, ${customerData.property_city || customerData.city}, ${customerData.property_state || customerData.state} ${customerData.property_zip || customerData.zipCode || ''}`
                 : 'Not provided'
               }
             </p>
@@ -183,7 +277,7 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
         </CardContent>
       </Card>
 
-      {/* {selectedItems.length === 0 ? (
+      {selectedItems.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
@@ -254,10 +348,10 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
             </div>
           </CardContent>
         </Card>
-      )} */}
+      )}
 
       {/* Documentation Status */}
-      {/* <Card>
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <FileText className="w-5 h-5" />
@@ -280,7 +374,74 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
             {getTotalDocuments() as number} document{(getTotalDocuments() as number) !== 1 ? 's' : ''} ready for delivery
           </p>
         </CardContent>
-      </Card> */}
+      </Card>
+
+      {/* Consent Confirmation */}
+      <Card className="border-primary/50">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <MessageSquare className="w-5 h-5" />
+            <span>Customer Consent</span>
+          </CardTitle>
+          <CardDescription>
+            Confirm that you have the customer's permission to send them the warranty documentation digitally
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start space-x-3">
+            <Checkbox 
+              id="consent" 
+              checked={consentConfirmed}
+              onCheckedChange={handleConsentChange}
+              disabled={consentLocked}
+            />
+            <div className="space-y-1 flex-1">
+              <div className="flex items-center gap-2">
+                <label htmlFor="consent" className={`font-medium ${consentLocked ? 'cursor-default' : 'cursor-pointer'}`}>
+                  I confirm that I have the customer's permission to send them this documentation package via email
+                </label>
+                {consentLocked && (
+                  <Badge variant="outline" className="text-green-600 border-green-600">
+                    <Lock className="w-3 h-3 mr-1" />
+                    Verified by Customer
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {consentLocked 
+                  ? "The customer has verified their consent via the consent link."
+                  : "By checking this box, you acknowledge that you have obtained verbal or written consent from the homeowner."}
+              </p>
+            </div>
+          </div>
+
+          {!consentConfirmed && !consentLocked && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
+              <p className="text-sm text-amber-800 mb-3">
+                <strong>Don't have consent yet?</strong> Send a consent request to the customer. They will receive a link to provide their consent digitally.
+              </p>
+              <Button
+                variant="outline"
+                onClick={handleRequestConsent}
+                disabled={requestingConsent}
+                className="border-amber-300 hover:bg-amber-100"
+              >
+                {requestingConsent ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Preparing...
+                  </>
+                ) : (
+                  <>
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Get Customer Consent
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Approval */}
       <Card>
@@ -305,16 +466,40 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
 
       <div className="flex justify-between items-center pt-6 border-t">
         <p className="text-sm text-muted-foreground">
-          {apiSummary?.totalItems ?? selectedItems.length} item{(apiSummary?.totalItems ?? selectedItems.length) !== 1 ? 's' : ''}  • Ready to send
+          {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} • {getTotalDocuments() as number} document{(getTotalDocuments() as number) !== 1 ? 's' : ''} • Ready to send
         </p>
         <Button 
-          onClick={handleSendToHomeowner}
-          disabled={!approved || isSending}
-          className="min-w-[120px]"
+          onClick={onNext}
+          disabled={!canSubmit}
+          className="min-w-[160px]"
         >
-          {isSending ? "Sending..." : "Send to Homeowner"}
+          {!consentConfirmed ? 'Get Customer Consent' : 'Send to Homeowner'}
         </Button>
       </div>
+
+      {/* Consent URL Dialog */}
+      <AlertDialog open={consentDialogOpen} onOpenChange={setConsentDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Consent Link Generated</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4">
+              <p>
+                A consent request email has been sent to the customer. You can also share this link directly if needed:
+              </p>
+              <div className="bg-muted p-3 rounded-lg break-all text-sm font-mono">
+                {consentUrl}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
+            <AlertDialogAction onClick={copyConsentUrl}>
+              <Copy className="w-4 h-4 mr-2" />
+              Copy Link
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

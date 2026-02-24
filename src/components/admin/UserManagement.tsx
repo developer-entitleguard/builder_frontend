@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,11 +10,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
-import { useGetBuilderUsersQuery, useCreateOrUpdateBuilderUserMutation, useDeleteBuilderUserMutation } from "@/lib/api/services/builderUsers";
 import { validateEmail, validatePhone } from "@/utils/validation";
 import { Users, UserPlus, Edit, Trash2, Mail, Phone, User, Shield } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import {
+  useGetBuilderUsersQuery,
+  useCreateOrUpdateBuilderUserMutation,
+  useDeleteBuilderUserMutation,
+} from "@/store/api";
 
 const userSchema = z.object({
   email: z.string().refine((email) => validateEmail(email), {
@@ -44,34 +47,26 @@ interface User {
 }
 
 export function UserManagement({ organizationId }: UserManagementProps) {
-  const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
-  // Get builderId from user (organization ID)
-  const builderId = user && 'builderOrganization' in user && user.builderOrganization
-    ? user.builderOrganization.id
-    : user && 'id' in user 
-    ? user.id 
-    : organizationId || null;
+  const builderId = organizationId;
 
-  // Fetch users from API
-  const { 
-    data: apiResponse, 
-    isLoading: loading, 
-    error: apiError,
-    refetch: refetchUsers
+  const {
+    data: builderUsersResponse,
+    isLoading: loading,
+    refetch: refetchUsers,
   } = useGetBuilderUsersQuery(
-    { builderId: builderId || '' },
+    { builderId: builderId || "" },
     { skip: !builderId }
   );
 
-  // Mutations
-  const [createOrUpdateUser, { isLoading: isUpdating }] = useCreateOrUpdateBuilderUserMutation();
-  const [deleteUser, { isLoading: isDeleting }] = useDeleteBuilderUserMutation();
+  const [createOrUpdateBuilderUser, { isLoading: submitting }] =
+    useCreateOrUpdateBuilderUserMutation();
+  const [deleteBuilderUser, { isLoading: deleting }] =
+    useDeleteBuilderUserMutation();
 
   const form = useForm<UserFormData>({
     resolver: zodResolver(userSchema),
@@ -83,100 +78,56 @@ export function UserManagement({ organizationId }: UserManagementProps) {
     },
   });
 
-  // Map API response to component format
   useEffect(() => {
-    if (apiResponse?.data) {
-      const mappedUsers: User[] = apiResponse.data.map((apiUser) => {
-        const fullName = apiUser.lastName 
-          ? `${apiUser.firstName} ${apiUser.lastName}`
-          : apiUser.firstName;
-        
-        return {
-          id: apiUser.id,
-          email: apiUser.email,
-          company_name: apiUser.builderOrganization?.name || 'Organization',
-          contact_person: fullName,
-          phone: apiUser.contact || '',
-          role: apiUser.role,
-          created_at: new Date().toISOString(), // API doesn't provide created_at, using current date
-        };
-      });
-      setUsers(mappedUsers);
-    } else if (apiError) {
-      toast({
-        title: "Error",
-        description: "Failed to load users",
-        variant: "destructive",
-      });
-    }
-  }, [apiResponse, apiError, toast]);
+    const list = builderUsersResponse?.data ?? [];
+    const mapped: User[] = list.map((u) => ({
+      id: u.id,
+      email: u.email,
+      company_name: u.builderOrganization?.name,
+      contact_person: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || "Team Member",
+      phone: u.contact ?? "",
+      role: (u.role || "user").toLowerCase(),
+      // API doesn't provide createdAt for users; keep UI stable with a valid date
+      created_at: new Date().toISOString(),
+    }));
+    setUsers(mapped);
+  }, [builderUsersResponse?.data]);
 
   const onSubmit = async (data: UserFormData) => {
-    if (!builderId) {
-      toast({
-        title: "Error",
-        description: "Organization ID is missing",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setSubmitting(true);
     try {
-      // Split contact_person into firstName and lastName
-      const nameParts = data.contact_person.trim().split(/\s+/);
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || undefined;
+      if (!builderId) throw new Error("Missing organization id.");
 
-      if (editingUser) {
-        // Update existing user
-        await createOrUpdateUser({
-          id: editingUser.id,
-          email: data.email,
-          firstName,
-          lastName,
-          contact: data.phone || undefined,
-          role: data.role,
-          builderOrganizationId: builderId,
-        }).unwrap();
+      // API expects firstName/lastName/contact; UI collects full name + phone
+      const nameParts = (data.contact_person || "").trim().split(/\s+/);
+      const firstName = nameParts.shift() || data.contact_person;
+      const lastName = nameParts.join(" ") || "";
 
-        toast({
-          title: "Success",
-          description: "User updated successfully",
-        });
-      } else {
-        // Create new user
-        await createOrUpdateUser({
-          email: data.email,
-          firstName,
-          lastName,
-          contact: data.phone || undefined,
-          role: data.role,
-          builderOrganizationId: builderId,
-        }).unwrap();
+      await createOrUpdateBuilderUser({
+        ...(editingUser ? { id: editingUser.id } : {}),
+        email: data.email,
+        firstName,
+        lastName,
+        contact: data.phone || "",
+        role: data.role,
+        builderOrganizationId: builderId,
+      }).unwrap();
 
-        toast({
-          title: "Success",
-          description: "User added successfully",
-        });
-      }
+      toast({
+        title: "Success",
+        description: editingUser ? "User updated successfully" : "User added successfully",
+      });
 
       setIsAddDialogOpen(false);
       setEditingUser(null);
       form.reset();
       refetchUsers();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error saving user:', error);
-      const errorMessage = error && typeof error === 'object' && 'data' in error 
-        ? (error.data as { message?: string })?.message 
-        : undefined;
       toast({
         title: "Error",
-        description: errorMessage || "Failed to save user",
+        description: error instanceof Error ? error.message : "Failed to save user",
         variant: "destructive",
       });
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -193,7 +144,7 @@ export function UserManagement({ organizationId }: UserManagementProps) {
 
   const handleDelete = async (userId: string) => {
     try {
-      await deleteUser(userId).unwrap();
+      await deleteBuilderUser(userId).unwrap();
 
       toast({
         title: "Success",
@@ -202,12 +153,9 @@ export function UserManagement({ organizationId }: UserManagementProps) {
       refetchUsers();
     } catch (error) {
       console.error('Error deleting user:', error);
-      const errorMessage = error && typeof error === 'object' && 'data' in error 
-        ? (error.data as { message?: string })?.message 
-        : undefined;
       toast({
         title: "Error",
-        description: errorMessage || "Failed to remove user",
+        description: "Failed to remove user",
         variant: "destructive",
       });
     }
@@ -357,8 +305,8 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting || isUpdating}>
-                    {(submitting || isUpdating) ? (editingUser ? 'Updating...' : 'Adding...') : (editingUser ? 'Update User' : 'Add User')}
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? (editingUser ? 'Updating...' : 'Adding...') : (editingUser ? 'Update User' : 'Add User')}
                   </Button>
                 </div>
               </form>

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/hooks/useOrganization";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -11,21 +12,28 @@ interface RegistrationData {
   property_city: string;
   property_state: string;
   property_zip: string;
+  project_id?: string;
   project_name?: string;
   settlement_date?: string;
   notes?: string;
   selected_items?: any;
+  price?: number;
 }
 
 export const useRegistrations = () => {
+  const { organization } = useOrganization();
   const { user } = useAuth();
   const { toast } = useToast();
   const [registrations, setRegistrations] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Removed automatic fetch on mount - now only fetches when explicitly called
+  useEffect(() => {
+    if (organization) {
+      fetchRegistrations();
+    }
+  }, [organization]);
+
   const fetchRegistrations = async () => {
-    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('homeowner_registrations')
@@ -47,10 +55,13 @@ export const useRegistrations = () => {
 
   const createRegistration = async (data: RegistrationData) => {
     if (!user) throw new Error('Not authenticated');
+    if (!organization) throw new Error('No organization found');
+    
     const registrationData = {
       ...data,
       status: 'draft',
-      builder_id: user.id
+      builder_id: user.id,
+      organization_id: organization.id
     };
 
     const { data: result, error } = await supabase

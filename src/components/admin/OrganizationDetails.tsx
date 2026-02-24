@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,10 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
-import { useGetBuilderOrganizationQuery, useUpdateBuilderOrganizationMutation } from "@/lib/api/services/builderOrganization";
 import { validatePhone, validateABN } from "@/utils/validation";
 import { Building, Save, Edit } from "lucide-react";
+import { useGetBuilderOrganizationQuery, useUpdateBuilderOrganizationMutation } from "@/store/api";
 
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required"),
@@ -28,113 +27,82 @@ const organizationSchema = z.object({
 type OrganizationFormData = z.infer<typeof organizationSchema>;
 
 interface OrganizationDetailsProps {
-  organization?: {
-    id?: string;
-    name?: string;
-    address?: string;
-    contact?: string;
-    email?: string;
-    contact_email?: string;
-    contact_phone?: string;
-    abn?: string | null;
-    description?: string;
-  }; // Optional for backward compatibility
+  organization: any;
 }
 
-export function OrganizationDetails({ organization: propOrganization }: OrganizationDetailsProps) {
+export function OrganizationDetails({ organization }: OrganizationDetailsProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
 
-  // Get builderId from user (organization ID)
-  const builderId = user && 'builderOrganization' in user && user.builderOrganization
-    ? user.builderOrganization.id
-    : user && 'id' in user 
-    ? user.id 
-    : null;
+  const builderId = useMemo(() => {
+    // Prefer builder organization id from auth payload
+    try {
+      const raw = localStorage.getItem("userData");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const id =
+          parsed?.userInfo?.builderOrganization?.id ??
+          parsed?.builderOrganization?.id ??
+          null;
+        if (id) return id as string;
+      }
+    } catch {
+      // ignore
+    }
+    // Fallback: current org from context
+    return (organization?.id as string | undefined) ?? null;
+  }, [organization?.id]);
 
-  // Fetch organization data from API
-  const { 
-    data: apiResponse, 
-    isLoading: isApiLoading, 
-    error: apiError 
-  } = useGetBuilderOrganizationQuery(
-    builderId || '',
-    { skip: !builderId }
-  );
+  const {
+    data: orgResponse,
+    isFetching: isFetchingOrg,
+    refetch: refetchOrg,
+  } = useGetBuilderOrganizationQuery(builderId ?? "", { skip: !builderId });
 
-  // Update organization mutation
-  const [updateOrganization, { isLoading: isUpdating }] = useUpdateBuilderOrganizationMutation();
+  const [updateBuilderOrganization, { isLoading: isSaving }] =
+    useUpdateBuilderOrganizationMutation();
 
-  // Use API data if available, otherwise fall back to prop
-  const organization = apiResponse?.data || propOrganization;
-
-  // Helper to get email (handles both API format and prop format)
-  const getEmail = () => {
-    if (!organization) return "";
-    if ('email' in organization) return organization.email || "";
-    if ('contact_email' in organization) return organization.contact_email || "";
-    return "";
-  };
-
-  // Helper to get phone (handles both API format and prop format)
-  const getPhone = () => {
-    if (!organization) return "";
-    if ('contact' in organization) return organization.contact || "";
-    if ('contact_phone' in organization) return organization.contact_phone || "";
-    return "";
-  };
+  const effectiveOrg = orgResponse?.data ?? organization;
 
   const form = useForm<OrganizationFormData>({
     resolver: zodResolver(organizationSchema),
     defaultValues: {
-      name: organization?.name || "",
-      address: organization?.address || "",
-      contact_email: getEmail(),
-      contact_phone: getPhone(),
-      abn: organization?.abn || "",
-      description: organization?.description || "",
+      name: effectiveOrg?.name || "",
+      address: effectiveOrg?.address || "",
+      contact_email: effectiveOrg?.contact_email || effectiveOrg?.email || "",
+      contact_phone: effectiveOrg?.contact_phone || effectiveOrg?.contact || "",
+      abn: effectiveOrg?.abn || "",
+      description: effectiveOrg?.description || "",
     },
   });
 
-  // Update form when API data loads
+  // When API org data loads, update form values
   useEffect(() => {
-    if (organization) {
-      const email = 'email' in organization ? organization.email : ('contact_email' in organization ? organization.contact_email : "");
-      const phone = 'contact' in organization ? organization.contact : ('contact_phone' in organization ? organization.contact_phone : "");
-      
-      form.reset({
-        name: organization.name || "",
-        address: organization.address || "",
-        contact_email: email || "",
-        contact_phone: phone || "",
-        abn: organization.abn || "",
-        description: organization.description || "",
-      });
-    }
-  }, [apiResponse, form, organization]);
+    if (!effectiveOrg) return;
+    form.reset({
+      name: effectiveOrg?.name || "",
+      address: effectiveOrg?.address || "",
+      contact_email: effectiveOrg?.contact_email || effectiveOrg?.email || "",
+      contact_phone: effectiveOrg?.contact_phone || effectiveOrg?.contact || "",
+      abn: effectiveOrg?.abn || "",
+      description: effectiveOrg?.description || "",
+    });
+  }, [effectiveOrg, form]);
 
   const onSubmit = async (data: OrganizationFormData) => {
-    if (!organization?.id) {
-      toast({
-        title: "Error",
-        description: "Organization ID is missing",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setLoading(true);
     try {
-      await updateOrganization({
-        id: organization.id,
-          name: data.name,
-          address: data.address,
+      if (!builderId) {
+        throw new Error("Missing builder organization id.");
+      }
+
+      await updateBuilderOrganization({
+        id: builderId,
+        name: data.name,
+        address: data.address,
         contact: data.contact_phone,
         email: data.contact_email,
-          abn: data.abn || null,
-          description: data.description || null,
+        abn: data.abn || null,
+        description: data.description || null,
       }).unwrap();
 
       toast({
@@ -142,55 +110,30 @@ export function OrganizationDetails({ organization: propOrganization }: Organiza
         description: "Organization details updated successfully",
       });
       setIsEditing(false);
+      refetchOrg();
     } catch (error) {
       console.error("Error updating organization:", error);
       toast({
         title: "Error",
-        description: "Failed to update organization details",
+        description:
+          error instanceof Error ? error.message : "Failed to update organization details",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Show loading state
-  if (isApiLoading && !propOrganization) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show error state
-  if (apiError && !propOrganization) {
-    return (
-      <div className="space-y-4">
-        <div className="text-center py-8">
-          <p className="text-destructive">Failed to load organization details</p>
-        </div>
-      </div>
-    );
-  }
-
   if (!isEditing) {
-    // Map API response fields to display fields
-    const displayEmail = organization 
-      ? ('email' in organization ? organization.email : ('contact_email' in organization ? organization.contact_email : ""))
-      : "";
-    const displayPhone = organization
-      ? ('contact' in organization ? organization.contact : ('contact_phone' in organization ? organization.contact_phone : ""))
-      : "";
-
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Building className="h-5 w-5 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">{organization?.name || "Organization"}</h3>
+            <h3 className="text-lg font-semibold">
+              {effectiveOrg?.name}
+              {isFetchingOrg ? (
+                <span className="ml-2 text-xs text-muted-foreground">(Refreshing...)</span>
+              ) : null}
+            </h3>
           </div>
           <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
             <Edit className="h-4 w-4 mr-2" />
@@ -201,24 +144,24 @@ export function OrganizationDetails({ organization: propOrganization }: Organiza
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div>
             <label className="font-medium text-muted-foreground">Address</label>
-            <p className="mt-1">{organization?.address || "Not provided"}</p>
+            <p className="mt-1">{effectiveOrg?.address}</p>
           </div>
           <div>
             <label className="font-medium text-muted-foreground">Contact Email</label>
-            <p className="mt-1">{displayEmail || "Not provided"}</p>
+            <p className="mt-1">{effectiveOrg?.contact_email || effectiveOrg?.email}</p>
           </div>
           <div>
             <label className="font-medium text-muted-foreground">Contact Phone</label>
-            <p className="mt-1">{displayPhone || "Not provided"}</p>
+            <p className="mt-1">{effectiveOrg?.contact_phone || effectiveOrg?.contact}</p>
           </div>
           <div>
             <label className="font-medium text-muted-foreground">ABN</label>
-            <p className="mt-1">{organization?.abn || "Not provided"}</p>
+            <p className="mt-1">{effectiveOrg?.abn || "Not provided"}</p>
           </div>
-          {organization?.description && (
+          {effectiveOrg?.description && (
             <div className="col-span-full">
               <label className="font-medium text-muted-foreground">Description</label>
-              <p className="mt-1">{organization.description}</p>
+              <p className="mt-1">{effectiveOrg.description}</p>
             </div>
           )}
         </div>
@@ -316,15 +259,15 @@ export function OrganizationDetails({ organization: propOrganization }: Organiza
         />
 
         <div className="flex gap-2">
-          <Button type="submit" disabled={loading || isUpdating}>
+          <Button type="submit" disabled={isSaving}>
             <Save className="h-4 w-4 mr-2" />
-            {loading || isUpdating ? "Saving..." : "Save Changes"}
+            {isSaving ? "Saving..." : "Save Changes"}
           </Button>
           <Button
             type="button"
             variant="outline"
             onClick={() => setIsEditing(false)}
-            disabled={loading || isUpdating}
+            disabled={isSaving}
           >
             Cancel
           </Button>

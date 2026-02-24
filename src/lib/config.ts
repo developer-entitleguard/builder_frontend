@@ -1,7 +1,8 @@
 // Configuration for API base URL
 export const getApiBaseUrl = (): string => {
   if (import.meta.env.DEV) {
-    return '';
+    // Same-origin; Vite proxy forwards /unsecure, /profile, etc. -> http://localhost:8080
+    return "";
   }
   const envUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
   const isStagingHost = typeof window !== 'undefined' && window.location?.hostname?.includes('staging');

@@ -1,6 +1,5 @@
 import { createApi, fetchBaseQuery, BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
-import { supabase } from '@/integrations/supabase/client';
-import { getApiBaseUrl } from '../../lib/config.ts';
+import { getApiBaseUrl } from '@/lib/config';
 
 // Base query with authentication
 const baseQuery = fetchBaseQuery({
@@ -52,6 +51,8 @@ export const api = createApi({
     'Registration',
     'Item',
     'Query',
+    'Activities',
+    'ActivityCategories',
     'Document',
     'Dashboard',
     'Auth',
@@ -61,7 +62,10 @@ export const api = createApi({
     'BuilderCustomer',
     'CustomerDetails',
     'CustomerItem',
-    'ItemMap'
+    'ItemMap',
+    'Projects',
+    'Approvals',
+    'ProjectPricing'
   ],
   endpoints: () => ({}),
 });

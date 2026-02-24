@@ -1,12 +1,36 @@
+// Register all API modules (side-effect: inject endpoints into api)
+import './auth';
+import './dashboard';
+import './items';
+import './registrations';
+import './users';
+import './customerDetails';
+import './customerEntitlement';
+import './customerItem';
+import './itemMap';
+import './builderCustomer';
+import './builderOrganization';
+import './builderUsers';
+import './builderVendor';
+import './bomUpload';
+import './query';
+import './projects';
+import './status';
+import './activities';
+import './pricing';
+
 // Export the main API slice
 export { api } from './apiSlice';
 
-// Export all API endpoints
+// Auth
 export * from './auth';
+
+// Registrations, items, users
 export * from './registrations';
 export * from './items';
 export * from './users';
-// Dashboard exports (alias conflicting hooks)
+
+// Dashboard (with aliases for conflicting hook names)
 export {
   useGetDashboardStatsQuery,
   useGetDashboardCountQuery,
@@ -26,22 +50,40 @@ export {
   useGetBuilderQueriesQuery as useDashboardBuilderQueriesQuery,
 } from './dashboard';
 
-// Export API services
-export * from '@/lib/api/services/customerDetails';
-export * from '@/lib/api/services/customerEntitlement';
-export * from '@/lib/api/services/customerItem';
-export * from '@/lib/api/services/itemMap';
-export * from '@/lib/api/services/builderCustomer';
-export * from '@/lib/api/services/builderOrganization';
-export * from '@/lib/api/services/builderUsers';
-export * from '@/lib/api/services/builderVendor';
-export * from '@/lib/api/services/bomUpload';
+// Customer details, entitlement, item, item map
+export * from './customerDetails';
+export * from './customerEntitlement';
+export * from './customerItem';
+export * from './itemMap';
+
+// Builder customer, organization, users, vendor
+export * from './builderCustomer';
+export * from './builderOrganization';
+export * from './builderUsers';
+export * from './builderVendor';
+
+// BOM upload
+export * from './bomUpload';
+
+// Query (builder queries, update, comment)
 export {
   useGetBuilderQueriesQuery,
   useLazyGetQueryByIdQuery,
   useUpdateQueryMutation,
   useAddQueryCommentMutation,
-} from '@/lib/api/services/query';
+} from './query';
+
+// Projects
+export * from './projects';
+
+// Status
+export * from './status';
+
+// Activities
+export * from './activities';
+
+// Pricing
+export * from './pricing';
 
 // Re-export types
-export type * from '@/lib/api/types.ts';
+export type * from '@/lib/api/types';

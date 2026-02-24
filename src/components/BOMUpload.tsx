@@ -1,184 +1,148 @@
 import { useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { useUploadTemplateMutation, UploadTemplateResponse } from "@/lib/api/services/bomUpload";
+import { useOrganization } from "@/hooks/useOrganization";
+import { useUploadTemplateMutation } from "@/store/api";
+import { useDownTemp } from "@/lib/api/services/templateDownload";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Upload, Download } from "lucide-react";
-import { useDownTemp } from "@/lib/api/services/templateDownload";
 
 interface BOMUploadProps {
-  onSuccess: (result?: UploadTemplateResponse, bomName?: string, projectName?: string) => void;
-}
-
-interface CSVItem {
-  name?: string;
-  category?: string;
-  make?: string;
-  brand?: string;
-  model?: string;
-  description?: string;
-  price?: number | null;
-  documentation_url?: string;
-  notes?: string;
-  purchaser?: string;
+  onSuccess: () => void;
 }
 
 export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
-  const { user } = useAuth();
+  const { organization } = useOrganization();
   const { toast } = useToast();
-  const [uploadTemplate, { isLoading: isUploading }] =
-    useUploadTemplateMutation();
+  const [uploadTemplate, { isLoading: isUploading }] = useUploadTemplateMutation();
+  const { download: downloadBomTemplate, isLoading: downloadingTemplate } = useDownTemp();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     projectName: "",
-    file: null as File | null,
+    warrantyYears: "",
+    file: null as File | null
   });
-  const { download: downloadBomTemplate, isLoading: downloadingTemplate } =
-    useDownTemp();
+
+  const builderOrganizationId = organization?.id ?? (() => {
+    try {
+      const d = localStorage.getItem("userData");
+      if (!d) return null;
+      const p = JSON.parse(d);
+      return p?.userInfo?.builderOrganization?.id ?? p?.builderOrganization?.id ?? null;
+    } catch { return null; }
+  })();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const fileName = file.name.toLowerCase();
-      const isValidCsv =
-        fileName.endsWith(".csv") ||
-        file.type === "text/csv" ||
-        file.type === "application/csv";
-
-      if (!isValidCsv) {
-        toast({
-          title: "Invalid file type",
-          description: "Please upload a CSV (.csv) file",
-          variant: "destructive",
-        });
-        return;
-      }
+    if (file && file.type !== "text/csv") {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a CSV file",
+        variant: "destructive"
+      });
+      return;
     }
     setFormData({ ...formData, file });
   };
 
-  const parseCSV = (text: string): CSVItem[] => {
-    const lines = text.split("\n").filter((line) => line.trim());
+  const parseCSV = (text: string, defaultWarrantyYears: number | null): any[] => {
+    const lines = text.split('\n').filter(line => line.trim());
     if (lines.length < 2) return [];
-
-    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-    const items: CSVItem[] = [];
-
+    
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const items = [];
+    
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(",");
-      const item: CSVItem = {};
-
+      const values = lines[i].split(',');
+      const item: any = {};
+      
       headers.forEach((header, index) => {
         const value = values[index]?.trim() || null;
-
+        
         // Map CSV columns to database columns
-        if (header === "name" || header === "item name") {
+        if (header === 'name' || header === 'item name') {
           item.name = value;
-        } else if (header === "category") {
+        } else if (header === 'category') {
           item.category = value;
-        } else if (header === "make") {
+        } else if (header === 'make') {
           item.make = value;
-        } else if (header === "brand") {
+        } else if (header === 'brand') {
           item.brand = value;
-        } else if (header === "model") {
+        } else if (header === 'model') {
           item.model = value;
-        } else if (header === "description") {
+        } else if (header === 'description') {
           item.description = value;
-        } else if (header === "price") {
+        } else if (header === 'price') {
           item.price = value ? parseFloat(value) : null;
-        } else if (
-          header === "documentation_url" ||
-          header === "documentation url"
-        ) {
+        } else if (header === 'documentation_url' || header === 'documentation url') {
           item.documentation_url = value;
-        } else if (header === "notes") {
+        } else if (header === 'notes') {
           item.notes = value;
-        } else if (header === "purchaser") {
+        } else if (header === 'purchaser') {
           item.purchaser = value;
+        } else if (header === 'warranty_years' || header === 'warranty years') {
+          item.warranty_years = value ? parseInt(value, 10) : null;
         }
       });
-
+      
+      // Apply default warranty years if not specified in CSV
+      if (item.warranty_years === undefined || item.warranty_years === null) {
+        item.warranty_years = defaultWarrantyYears;
+      }
+      
       if (item.name && item.category) {
         items.push(item);
       }
     }
-
+    
     return items;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!user || !formData.file || !formData.name) {
+    
+    if (!formData.file || !formData.name) {
       toast({
         title: "Missing information",
-        description: "Please fill in all required fields",
-        variant: "destructive",
+        description: "Please fill in BOM name and select a CSV file.",
+        variant: "destructive"
       });
       return;
     }
-
-    // Get builderOrganizationId from user
-    const builderOrganizationId =
-      user && "builderOrganization" in user && user.builderOrganization
-        ? user.builderOrganization.id
-        : user && "id" in user
-        ? user.id
-        : null;
 
     if (!builderOrganizationId) {
       toast({
         title: "Error",
         description: "Organization ID is missing. Please log in again.",
-        variant: "destructive",
+        variant: "destructive"
       });
       return;
     }
-
     try {
-      const result = await uploadTemplate({
+      await uploadTemplate({
         file: formData.file,
         bomName: formData.name,
         projectName: formData.projectName || undefined,
-        builderOrganizationId: builderOrganizationId,
+        builderOrganizationId,
       }).unwrap();
-
       toast({
         title: "Bill of Materials uploaded successfully",
-        description: result.message || "BOM has been uploaded successfully",
+        description: "BOM has been uploaded successfully."
       });
-
-      const uploadedBomName = formData.name;
-      const uploadedProjectName = formData.projectName || undefined;
       setDialogOpen(false);
-      setFormData({ name: "", projectName: "", file: null });
-      onSuccess(result, uploadedBomName, uploadedProjectName);
-    } catch (error) {
-      console.error("Error uploading BOM:", error);
-      const errorMessage =
-        error && typeof error === "object" && "data" in error
-          ? String(
-              (error.data as { message?: string })?.message ||
-                "Failed to upload Bill of Materials"
-            )
-          : error instanceof Error
-          ? error.message
-          : "Failed to upload Bill of Materials";
+      setFormData({ name: "", projectName: "", warrantyYears: "", file: null });
+      onSuccess();
+    } catch (error: unknown) {
+      const message = error && typeof error === "object" && "data" in error
+        ? String((error as { data?: { message?: string } }).data?.message ?? "Failed to upload Bill of Materials")
+        : error instanceof Error ? error.message : "Failed to upload Bill of Materials";
       toast({
         title: "Error uploading Bill of Materials",
-        description: errorMessage,
-        variant: "destructive",
+        description: message,
+        variant: "destructive"
       });
     }
   };
@@ -195,9 +159,7 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
         <DialogHeader>
           <DialogTitle>Upload Bill of Materials</DialogTitle>
           <DialogDescription>
-            Upload a CSV (.csv) file with your items. Required columns: name,
-            category. Optional: make, brand, model, description, price,
-            documentation_url, notes, purchaser.
+            Upload a CSV file with your items. Required columns: name, category. Optional: make, brand, model, description, price, documentation_url, notes, purchaser, warranty_years.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -206,9 +168,7 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
             <Input
               id="bomName"
               value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
               placeholder="e.g., Master BOM 2024"
             />
@@ -218,51 +178,51 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
             <Input
               id="projectName"
               value={formData.projectName}
-              onChange={(e) =>
-                setFormData({ ...formData, projectName: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
               placeholder="e.g., Riverside Development"
             />
           </div>
           <div>
-            <Label htmlFor="csvFile">CSV File (.csv) *</Label>
+            <Label htmlFor="warrantyYears">Default Warranty Duration (Years)</Label>
+            <Input
+              id="warrantyYears"
+              type="number"
+              min="0"
+              max="99"
+              value={formData.warrantyYears}
+              onChange={(e) => setFormData({ ...formData, warrantyYears: e.target.value })}
+              placeholder="e.g., 2"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Applied to all items unless specified in CSV
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="csvFile">CSV File *</Label>
             <Input
               id="csvFile"
               type="file"
-              accept=".csv,text/csv,application/csv"
+              accept=".csv"
               onChange={handleFileChange}
               required
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Upload a CSV (.csv) file with item data
+              Upload a CSV file with item data
             </p>
           </div>
-          {isUploading && (
-            <p className="text-sm text-muted-foreground text-right">
-              Uploading file, please wait...
-            </p>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={downloadBomTemplate}
-              disabled={isUploading || downloadingTemplate}
-            >
+          <div className="flex justify-between items-center pt-2">
+            <Button type="button" variant="ghost" size="sm" onClick={downloadBomTemplate} disabled={downloadingTemplate}>
               <Download className="w-4 h-4 mr-2" />
               {downloadingTemplate ? "Downloading..." : "Download Template"}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDialogOpen(false)}
-              disabled={isUploading}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isUploading}>
-              {isUploading ? "Uploading..." : "Upload"}
-            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isUploading}>
+                {isUploading ? "Uploading..." : "Upload"}
+              </Button>
+            </div>
           </div>
         </form>
       </DialogContent>

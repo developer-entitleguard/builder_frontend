@@ -1,14 +1,22 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/hooks/use-toast';
-import { useGetBillOfMaterialsQuery, useAssignBOMMutation } from '@/store/api/items';
-import { useLazyCheckBOMRestrictionsQuery } from '@/store/api/items';
-import { Package, Send, X, AlertTriangle } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import {
+  useGetBillOfMaterialsQuery,
+  useAssignBOMMutation,
+  useLazyCheckBOMRestrictionsQuery,
+} from "@/store/api";
+import { Package, Send, X, AlertTriangle } from "lucide-react";
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -17,25 +25,29 @@ interface BulkActionsBarProps {
   onSuccess: () => void;
 }
 
-export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, onSuccess }: BulkActionsBarProps) => {
-  const { user } = useAuth();
+export const BulkActionsBar = ({
+  selectedCount,
+  selectedIds,
+  onClearSelection,
+  onSuccess,
+}: BulkActionsBarProps) => {
   const { toast } = useToast();
   const [bomDialogOpen, setBomDialogOpen] = useState(false);
-  const [selectedBom, setSelectedBom] = useState('');
+  const [selectedBom, setSelectedBom] = useState("");
   const [loading, setLoading] = useState(false);
   const [warningModalOpen, setWarningModalOpen] = useState(false);
   const [mappedCustomers, setMappedCustomers] = useState<Array<{ customerId: string; customerName: string }>>([]);
+
   const [checkBOMRestrictions] = useLazyCheckBOMRestrictionsQuery();
-
-  const { 
-    data: bomsData, 
-    isLoading: isLoadingBoms, 
-    error: bomsError 
-  } = useGetBillOfMaterialsQuery(undefined, {
-    skip: !bomDialogOpen
-  });
-
   const [assignBOM, { isLoading: isAssigningBOM }] = useAssignBOMMutation();
+
+  const {
+    data: bomsData,
+    isLoading: isLoadingBoms,
+    error: bomsError,
+  } = useGetBillOfMaterialsQuery(undefined, {
+    skip: !bomDialogOpen,
+  });
 
   const boms = bomsData?.data || [];
 
@@ -44,7 +56,7 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
       toast({
         title: "Error loading BOMs",
         description: "Failed to load Bill of Materials. Please try again.",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   }, [bomsError, bomDialogOpen, toast]);
@@ -54,7 +66,7 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
       toast({
         title: "No BOM selected",
         description: "Please select a Bill of Materials",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -63,25 +75,26 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
       toast({
         title: "No registrations selected",
         description: "Please select at least one registration",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
 
-    // Check for BOM restrictions first (unless user confirmed)
+    // Check for BOM restrictions first (uses /api/checking/bomrestrict, which internally relies on
+    // /api/getbuilderitems/bybom and /api/check/customeritemmap/existing to detect already-mapped customers)
     if (!skipCheck) {
       try {
         const checkResult = await checkBOMRestrictions({ customerIds: selectedIds }).unwrap();
-        
+
         if (checkResult.success && checkResult.data && checkResult.data.length > 0) {
-          // BOM is already mapped for some customers
           setMappedCustomers(checkResult.data);
           setWarningModalOpen(true);
           return;
         }
       } catch (error) {
         // If check fails, log but continue with assignment
-        console.error('Error checking BOM restrictions:', error);
+        // (backend still enforces correctness)
+        console.error("Error checking BOM restrictions:", error);
       }
     }
 
@@ -89,16 +102,16 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
     try {
       const result = await assignBOM({
         billOfMaterialId: selectedBom,
-        customerIds: selectedIds
+        customerIds: selectedIds,
       }).unwrap();
 
       toast({
         title: "Success",
-        description: result.message || `BOM assigned to ${selectedCount} registration(s)`
+        description: result.message || `BOM assigned to ${selectedCount} registration(s)`,
       });
 
       setBomDialogOpen(false);
-      setSelectedBom('');
+      setSelectedBom("");
       setWarningModalOpen(false);
       setMappedCustomers([]);
       onClearSelection();
@@ -107,7 +120,7 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to assign BOM",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -133,7 +146,7 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
       toast({
         title: "No registrations selected",
         description: "Please select at least one registration",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -142,23 +155,23 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
     try {
       const result = await assignBOM({
         billOfMaterialId: selectedBom,
-        customerIds: selectedIds
+        customerIds: selectedIds,
       }).unwrap();
 
       toast({
         title: "Success",
-        description: result.message || `${selectedCount} registration(s) submitted successfully`
+        description: result.message || `${selectedCount} registration(s) submitted successfully`,
       });
 
       setBomDialogOpen(false);
-      setSelectedBom('');
+      setSelectedBom("");
       onClearSelection();
       onSuccess();
     } catch (error) {
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to submit registrations",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -171,11 +184,11 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
     <>
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-primary text-primary-foreground px-6 py-4 rounded-lg shadow-lg flex items-center gap-4">
         <span className="font-semibold">{selectedCount} selected</span>
-        
+
         <div className="flex gap-2">
-          <Button 
+          <Button
             type="button"
-            variant="secondary" 
+            variant="secondary"
             size="sm"
             onClick={(e) => {
               e.preventDefault();
@@ -187,10 +200,10 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
             <Package className="h-4 w-4 mr-2" />
             Assign BOM
           </Button>
-          
-          <Button 
+
+          <Button
             type="button"
-            variant="secondary" 
+            variant="secondary"
             size="sm"
             onClick={(e) => {
               e.preventDefault();
@@ -200,12 +213,12 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
             disabled={loading || isAssigningBOM}
           >
             <Send className="h-4 w-4 mr-2" />
-            {loading || isAssigningBOM ? 'Submitting...' : 'Bulk Submit'}
+            {loading || isAssigningBOM ? "Submitting..." : "Bulk Submit"}
           </Button>
         </div>
 
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           size="sm"
           onClick={onClearSelection}
           className="hover:bg-primary-foreground/20"
@@ -218,9 +231,7 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Assign Bill of Materials</DialogTitle>
-            <DialogDescription>
-              Select a BOM to assign to {selectedCount} registration(s)
-            </DialogDescription>
+            <DialogDescription>Select a BOM to assign to {selectedCount} registration(s)</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
@@ -258,8 +269,11 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
               <Button variant="outline" onClick={() => setBomDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={() => handleAssignBOM(false)} disabled={loading || isAssigningBOM || !selectedBom}>
-                {loading || isAssigningBOM ? 'Assigning...' : 'Assign BOM'}
+              <Button
+                onClick={() => handleAssignBOM(false)}
+                disabled={loading || isAssigningBOM || !selectedBom}
+              >
+                {loading || isAssigningBOM ? "Assigning..." : "Assign BOM"}
               </Button>
             </div>
           </div>
@@ -274,11 +288,9 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
               <AlertTriangle className="h-5 w-5 text-yellow-600" />
               BOM Already Mapped
             </DialogTitle>
-            <DialogDescription>
-              Bom Already Mapped for a customer
-            </DialogDescription>
+            <DialogDescription>Bom Already Mapped for a customer</DialogDescription>
           </DialogHeader>
-          
+
           <div className="py-4">
             <p className="text-sm text-muted-foreground mb-4">
               The following customer(s) already have a BOM mapped:
@@ -296,10 +308,13 @@ export const BulkActionsBar = ({ selectedCount, selectedIds, onClearSelection, o
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setWarningModalOpen(false);
-              setMappedCustomers([]);
-            }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setWarningModalOpen(false);
+                setMappedCustomers([]);
+              }}
+            >
               No
             </Button>
             <Button onClick={handleConfirmAssign} disabled={loading || isAssigningBOM}>

@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useOrganization } from "@/hooks/useOrganization";
 import { useToast } from "@/hooks/use-toast";
 import type { BuilderQuery } from "@/lib/api/services/query";
 import {
@@ -121,6 +122,7 @@ const mockHistory: CaseHistory[] = [
 
 const QueriesComplete = () => {
   const { user } = useAuth();
+  const { organization } = useOrganization();
   const navigate = useNavigate();
   const location = useLocation();
   const [queryData, setQueryData] = useState<BuilderQuery | null>(null);
@@ -135,9 +137,19 @@ const QueriesComplete = () => {
   const [getQueryById] = useLazyGetQueryByIdQuery();
   const [updateQuery, { isLoading: isUpdatingQuery }] = useUpdateQueryMutation();
 
-  const builderId = user && 'builderOrganization' in user 
-    ? user.builderOrganization.id 
-    : null;
+  const builderId = useMemo(() => {
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        if (parsed.userInfo?.builderOrganization?.id) return parsed.userInfo.builderOrganization.id;
+        if (parsed.builderOrganization?.id) return parsed.builderOrganization.id;
+      } catch {
+        // ignore
+      }
+    }
+    return organization?.id ?? null;
+  }, [organization?.id]);
 
   // Fetch vendors from API
   const { data: vendorsData, isLoading: isLoadingVendors } = useGetBuilderVendorsQuery(

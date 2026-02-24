@@ -6,14 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowRight, MapPin, Phone, Mail, User } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
-import { useCreateBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
-import { useGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
 import { useToast } from "@/hooks/use-toast";
-import { skipToken } from "@reduxjs/toolkit/query";
 import { australianStates, validateAustralianPhone, formatAustralianPhone, validateAustralianPostcode, validateEmail } from "@/utils/validation";
+import { useProjectsQuery } from "@/store/api/projects";
+import { useCreateBuilderCustomerMutation } from "@/store/api";
+import { useOrganization } from "@/hooks/useOrganization";
 
-interface CustomerFormData {
+export interface CustomerDetailsFormData {
   firstName: string;
   lastName: string;
   email: string;
@@ -22,24 +21,28 @@ interface CustomerFormData {
   city: string;
   state: string;
   zipCode: string;
+  projectId: string;
   projectName: string;
   settlementDate: string;
   notes: string;
-  customerId?: string;
-  registrationId?: string;
+  price: string;
+  numBedrooms: string;
+  numRooms: string;
+  totalBuiltUpArea: string;
 }
 
-interface CustomerDetailsFormProps {
-  onNext: (data: CustomerFormData) => void;
-  initialData?: Partial<CustomerFormData>;
-  customerId?: string;
-  onFormDataChange?: (data: Partial<CustomerFormData>) => void;
+export interface CustomerDetailsFormProps {
+  onNext: (data: CustomerDetailsFormData & { registrationId?: string }) => void;
+  initialData?: Partial<CustomerDetailsFormData> & { id?: string; registrationId?: string };
+  registrationId?: string | null;
 }
 
-const CustomerDetailsForm = ({ onNext, initialData, customerId, onFormDataChange }: CustomerDetailsFormProps) => {
-  const { user } = useAuth();
+const CustomerDetailsForm = ({ onNext, initialData, registrationId }: CustomerDetailsFormProps) => {
   const { toast } = useToast();
-  const [createBuilderCustomer, { isLoading: isCreating }] = useCreateBuilderCustomerMutation();
+  const { organization } = useOrganization();
+  const { data: projectsResponse, isLoading: projectsLoading } = useProjectsQuery();
+  const projects = projectsResponse?.data ?? [];
+  const [createBuilderCustomer] = useCreateBuilderCustomerMutation();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: initialData?.firstName || '',
@@ -50,45 +53,40 @@ const CustomerDetailsForm = ({ onNext, initialData, customerId, onFormDataChange
     city: initialData?.city || '',
     state: initialData?.state || '',
     zipCode: initialData?.zipCode || '',
+    projectId: initialData?.projectId || '',
     projectName: initialData?.projectName || '',
     settlementDate: initialData?.settlementDate || '',
-    notes: initialData?.notes || ''
+    notes: initialData?.notes || '',
+    price: initialData?.price || '',
+    numBedrooms: initialData?.numBedrooms || '',
+    numRooms: initialData?.numRooms || '',
+    totalBuiltUpArea: initialData?.totalBuiltUpArea || ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Fetch customer details when customerId is provided
-  const { data: customerDetailsData, isLoading: isLoadingCustomer } = useGetCustomerDetailsQuery(
-    user?.id && customerId
-      ? { builderId: user.id as string, customerId }
-      : skipToken
-  );
-
-  // Populate form fields when customer data is fetched
+  // Sync form when parent passes updated initialData (e.g. after fetching customer details from API)
   useEffect(() => {
-    if (customerDetailsData?.data?.customer) {
-      const customer = customerDetailsData.data.customer;
-      setFormData({
-        firstName: customer.firstName || '',
-        lastName: customer.lastName || '',
-        email: customer.email || '',
-        phone: customer.contact || '',
-        propertyAddress: customer.address || '',
-        city: customer.city || '',
-        state: customer.state || '',
-        zipCode: customer.zip || '',
-        projectName: customer.projectName || '',
-        settlementDate: customer.settlementDate || '',
-        notes: customer.notes || ''
-      });
-    }
-  }, [customerDetailsData]);
-
-  useEffect(() => {
-    if (onFormDataChange) {
-      onFormDataChange(formData);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData]);
+    if (!initialData || typeof initialData !== 'object') return;
+    setFormData(prev => ({
+      ...prev,
+      firstName: initialData.firstName ?? prev.firstName,
+      lastName: initialData.lastName ?? prev.lastName,
+      email: initialData.email ?? prev.email,
+      phone: initialData.phone ?? prev.phone,
+      propertyAddress: initialData.propertyAddress ?? prev.propertyAddress,
+      city: initialData.city ?? prev.city,
+      state: initialData.state ?? prev.state,
+      zipCode: initialData.zipCode ?? prev.zipCode,
+      projectId: initialData.projectId ?? prev.projectId,
+      projectName: initialData.projectName ?? prev.projectName,
+      settlementDate: initialData.settlementDate ?? prev.settlementDate,
+      notes: initialData.notes ?? prev.notes,
+      price: initialData.price ?? prev.price,
+      numBedrooms: initialData.numBedrooms ?? prev.numBedrooms,
+      numRooms: initialData.numRooms ?? prev.numRooms,
+      totalBuiltUpArea: initialData.totalBuiltUpArea ?? prev.totalBuiltUpArea
+    }));
+  }, [initialData]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -101,6 +99,29 @@ const CustomerDetailsForm = ({ onNext, initialData, customerId, onFormDataChange
     if (field === 'phone') {
       const formatted = formatAustralianPhone(value);
       setFormData(prev => ({ ...prev, [field]: formatted }));
+    }
+    
+    // Auto-populate address fields when a project is selected
+    if (field === 'projectId' && value && value !== 'none') {
+      const selectedProject = projects.find(p => p.id === value);
+      if (selectedProject) {
+        setFormData(prev => ({
+          ...prev,
+          projectId: value,
+          propertyAddress: selectedProject.address,
+          city: selectedProject.city,
+          state: selectedProject.state,
+          zipCode: selectedProject.postcode
+        }));
+        // Clear any address-related errors
+        setErrors(prev => ({
+          ...prev,
+          propertyAddress: '',
+          city: '',
+          state: '',
+          zipCode: ''
+        }));
+      }
     }
   };
 
@@ -139,71 +160,80 @@ const CustomerDetailsForm = ({ onNext, initialData, customerId, onFormDataChange
       });
       return;
     }
-
-    // If customerId exists, we're editing an existing customer
-    // In this case, we might need to update instead of create
-    // For now, we'll still create/update via the API
-    // The API should handle updates if customerId is provided in the future
     
-    // Get builderOrganizationId from user
-    const builderOrganizationId = user && 'builderOrganization' in user && user.builderOrganization
-      ? user.builderOrganization.id
-      : user && 'id' in user 
-      ? user.id 
-      : null;
+    const builderOrganizationId = organization?.id ?? (() => {
+      try {
+        const userData = localStorage.getItem('userData');
+        if (userData) {
+          const parsed = JSON.parse(userData);
+          const org = parsed?.userInfo?.builderOrganization ?? parsed?.builderOrganization ?? parsed?.builder_organization;
+          return org?.id ?? null;
+        }
+      } catch {
+        // ignore
+      }
+      return null;
+    })();
 
     if (!builderOrganizationId) {
       toast({
-        title: "Error",
-        description: "Organization ID is missing. Please log in again.",
+        title: "Organization required",
+        description: "No builder organization found. Please sign in again.",
         variant: "destructive"
       });
       return;
     }
-    
+
     setLoading(true);
     try {
-      // Map form data to API payload format
-      const customerData = {
-        ...(customerId && { id: customerId }),
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        contact: formData.phone,
-        address: formData.propertyAddress,
-        city: formData.city,
+      const selectedProject = projects.find(p => p.id === formData.projectId);
+      const numBedrooms = formData.numBedrooms ? Number(formData.numBedrooms) : undefined;
+      const numRooms = formData.numRooms ? Number(formData.numRooms) : undefined;
+      const price = formData.price ? Number(formData.price) : undefined;
+      const totalBuiltUpArea = formData.totalBuiltUpArea ? Number(formData.totalBuiltUpArea) : undefined;
+
+      const result = await createBuilderCustomer({
+        id: registrationId || initialData?.id || initialData?.registrationId || undefined,
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim(),
+        contact: formData.phone.trim(),
+        address: formData.propertyAddress.trim(),
+        city: formData.city.trim(),
         state: formData.state,
-        zip: formData.zipCode,
-        projectName: formData.projectName || undefined,
+        zip: formData.zipCode.trim(),
+        country: 'Australia',
+        projectId: formData.projectId || undefined,
+        projectName: selectedProject?.name || formData.projectName || undefined,
         settlementDate: formData.settlementDate || undefined,
-        notes: formData.notes || undefined,
-        builderOrganizationId: builderOrganizationId
-      };
-      
-      // If customerId exists, we're editing - but the API might still create
-      // This depends on your backend implementation
-      const response = await createBuilderCustomer(customerData).unwrap();
-      
+        notes: formData.notes?.trim() || undefined,
+        numBedrooms: numBedrooms !== undefined && !Number.isNaN(numBedrooms) ? numBedrooms : undefined,
+        numRooms: numRooms !== undefined && !Number.isNaN(numRooms) ? numRooms : undefined,
+        price: price !== undefined && !Number.isNaN(price) ? price : undefined,
+        totalBuiltUpArea: totalBuiltUpArea !== undefined && !Number.isNaN(totalBuiltUpArea) ? totalBuiltUpArea : undefined,
+        consentMethod: 'form',
+        consentReceived: true,
+        consentReceivedAt: new Date().toISOString(),
+        consentToken: undefined,
+        builderOrganizationId,
+      }).unwrap();
+
+      const customerId = result?.data?.id || registrationId;
+      if (!customerId) {
+        throw new Error('No customer id returned');
+      }
+
       toast({
-        title: customerId ? "Customer details updated" : "Customer details saved",
-        description: "Moving to item selection"
+        title: "Customer details saved",
+        description: result?.message ?? "Moving to item selection"
       });
-      
-      // Pass the customer data and response to the next step
-      // Use existing customerId if available, otherwise use the response ID
-      onNext({ 
-        ...formData, 
-        customerId: customerId || response.data?.id,
-        registrationId: customerId || response.data?.id // For backward compatibility
-      });
-    } catch (error) {
-      console.error('Error saving customer details:', error);
-      const errorMessage = error && typeof error === 'object' && 'data' in error 
-        ? (error.data as { message?: string })?.message 
-        : undefined;
+
+      onNext({ ...formData, registrationId: customerId });
+    } catch (error: unknown) {
+      const err = error as { data?: unknown; message?: string };
       toast({
         title: "Error saving customer details",
-        description: errorMessage || "Failed to save customer details. Please try again.",
+        description: err?.data != null ? String(err.data) : err?.message ?? 'Failed to create customer',
         variant: "destructive"
       });
     } finally {
@@ -352,14 +382,36 @@ const CustomerDetailsForm = ({ onNext, initialData, customerId, onFormDataChange
                 {errors.zipCode && <p className="text-sm text-destructive">{errors.zipCode}</p>}
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="projectName">Project/Community Name</Label>
+                <Label htmlFor="projectId">Link to Project (Optional)</Label>
+                <Select 
+                  value={formData.projectId} 
+                  onValueChange={(value) => handleInputChange('projectId', value === 'none' ? '' : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={projectsLoading ? "Loading projects..." : "Select a project"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No project</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="price">Property Price (Optional)</Label>
                 <Input
-                  id="projectName"
-                  value={formData.projectName}
-                  onChange={(e) => handleInputChange('projectName', e.target.value)}
-                  placeholder="e.g., Sunset Ridge Community"
+                  id="price"
+                  type="number"
+                  value={formData.price}
+                  onChange={(e) => handleInputChange('price', e.target.value)}
+                  placeholder="e.g., 750000"
+                  min="0"
+                  step="1000"
                 />
               </div>
               <div className="space-y-2">
@@ -369,6 +421,42 @@ const CustomerDetailsForm = ({ onNext, initialData, customerId, onFormDataChange
                   type="date"
                   value={formData.settlementDate}
                   onChange={(e) => handleInputChange('settlementDate', e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="numBedrooms">Number of Bedrooms</Label>
+                <Input
+                  id="numBedrooms"
+                  type="number"
+                  value={formData.numBedrooms}
+                  onChange={(e) => handleInputChange('numBedrooms', e.target.value)}
+                  placeholder="e.g., 4"
+                  min="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="numRooms">Number of Rooms</Label>
+                <Input
+                  id="numRooms"
+                  type="number"
+                  value={formData.numRooms}
+                  onChange={(e) => handleInputChange('numRooms', e.target.value)}
+                  placeholder="e.g., 8"
+                  min="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="totalBuiltUpArea">Total Built Up Area (sqm)</Label>
+                <Input
+                  id="totalBuiltUpArea"
+                  type="number"
+                  value={formData.totalBuiltUpArea}
+                  onChange={(e) => handleInputChange('totalBuiltUpArea', e.target.value)}
+                  placeholder="e.g., 250"
+                  min="0"
+                  step="0.01"
                 />
               </div>
             </div>
@@ -386,8 +474,8 @@ const CustomerDetailsForm = ({ onNext, initialData, customerId, onFormDataChange
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" size="lg" className="min-w-[150px]" disabled={loading || isCreating || isLoadingCustomer}>
-            {(loading || isCreating || isLoadingCustomer) ? 'Loading...' : 'Continue to Items'}
+          <Button type="submit" size="lg" className="min-w-[150px]" disabled={loading}>
+            {loading ? 'Saving...' : 'Continue to Items'}
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         </div>

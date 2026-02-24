@@ -274,18 +274,35 @@ const AwaitingAction = () => {
       return;
     }
 
-    const userId =
-      user && typeof user === "object" && "id" in user && typeof (user as { id?: unknown }).id === "string"
-        ? (user as { id: string }).id
-        : null;
-    const commentedBy =
-      user &&
-      typeof user === "object" &&
-      "builderOrganization" in user &&
-      (user as { builderOrganization?: { id?: unknown } }).builderOrganization?.id &&
-      typeof (user as { builderOrganization: { id: unknown } }).builderOrganization.id === "string"
-        ? (user as { builderOrganization: { id: string } }).builderOrganization.id
-        : null;
+    // Prefer builder JWT payload (localStorage) since Supabase user may be null in builder flow
+    let userId: string | null = null;
+    let commentedBy: string | null = null;
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        userId = parsed.userInfo?.id ?? parsed?.id ?? null;
+        commentedBy =
+          parsed.userInfo?.builderOrganization?.id ??
+          parsed.builderOrganization?.id ??
+          parsed.builder_organization?.id ??
+          null;
+      } catch {
+        // ignore
+      }
+    }
+    if ((!userId || !commentedBy) && user && typeof user === "object") {
+      if ("id" in user && typeof (user as { id?: unknown }).id === "string") {
+        userId = (user as { id: string }).id;
+      }
+      if (
+        "builderOrganization" in user &&
+        (user as { builderOrganization?: { id?: unknown } }).builderOrganization?.id &&
+        typeof (user as { builderOrganization: { id: unknown } }).builderOrganization.id === "string"
+      ) {
+        commentedBy = (user as { builderOrganization: { id: string } }).builderOrganization.id;
+      }
+    }
 
     if (!userId || !commentedBy) {
       toast({

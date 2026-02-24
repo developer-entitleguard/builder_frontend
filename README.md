@@ -64,25 +64,6 @@ This project is built with:
 
 Simply open [Lovable](https://lovable.dev/projects/a9d326b1-c7ee-47fe-863c-489ae7985d24) and click on Share -> Publish.
 
-## Environment configuration (staging and production)
-
-This project uses Vite modes with per-environment variables. Create these files in the project root during builds:
-
-```
-.env.staging
-VITE_API_BASE_URL=https://builders-staging.entitleguard.com
-
-.env.production
-VITE_API_BASE_URL=https://builders.entitleguard.com
-```
-
-Build commands:
-
-- Staging: `npm run build:staging`
-- Production: `npm run build:prod`
-
-At runtime, API base URL is resolved from `VITE_API_BASE_URL` in non-dev, and from the Vite dev proxy in development.
-
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!

@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useCreateBuilderCustomerMutation } from "@/lib/api/services/builderCustomer";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
@@ -21,91 +21,51 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useCreateCustomerEntitlementMutation, useGetCustomerDetailsQuery } from "@/store/api";
 
-// Type definitions
-interface CustomerFormData {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  phone?: string;
-  propertyAddress?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  projectName?: string;
-  settlementDate?: string;
-  notes?: string;
-  customerId?: string;
+// Builder login: allow onboarding when JWT is in localStorage (no Supabase user required)
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!(parsed?.jwt);
+  } catch {
+    return false;
+  }
+};
+
+// User/org id for registrations: Supabase user id or builder auth id (org id used as builder id for API)
+const getBuilderId = (): string | null => {
+  const userData = localStorage.getItem("userData");
+  if (userData) {
+    try {
+      const parsed = JSON.parse(userData);
+      const orgId = parsed?.userInfo?.builderOrganization?.id ?? parsed?.builderOrganization?.id ?? parsed?.builder_organization?.id;
+      const userId = parsed?.userInfo?.id ?? parsed?.id;
+      return orgId ?? userId ?? null;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+};
+
+type CustomerFormData = {
   registrationId?: string;
-}
-
-// RegistrationItem type matching ItemsSelectionForm
-interface RegistrationItem {
-  id: string;
-  name: string;
-  category: string;
-  brand: string | null;
-  model: string | null;
-  make: string | null;
-  description: string | null;
-  price: number | null;
-  bom_id: string | null;
-  color?: string;
-  custom_notes?: string;
-  is_custom?: boolean;
-  serial_number?: string;
-  builderItemId?: string;
-  seller?: string;
-  quantity?: number;
+  email?: string;
   [key: string]: unknown;
-}
-
-interface ItemsFormData {
-  selected_items?: RegistrationItem[];
-  [key: string]: unknown;
-}
-
-interface OnboardingFormData {
-  customer?: CustomerFormData;
-  items?: ItemsFormData;
-  documents?: Record<string, unknown>;
-}
-
-interface RegistrationData {
-  builder_id: string;
-  status: string;
-  customer_name?: string;
-  customer_email?: string;
-  customer_phone?: string;
-  property_address?: string;
-  property_city?: string;
-  property_state?: string;
-  property_zip?: string;
-  project_name?: string;
-  settlement_date?: string | null;
-  notes?: string;
-  selected_items?: ItemsFormData;
-  documents_uploaded?: Record<string, unknown>;
-}
+};
 
 const Onboarding = () => {
   const { user } = useAuth();
+  const { organization } = useOrganization();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [createBuilderCustomer, { isLoading: isSaving }] = useCreateBuilderCustomerMutation();
-  
-  // Helper function to get step from URL
-  const getStepFromUrl = (params: URLSearchParams) => {
-    const stepParam = params.get('step');
-    const validSteps = ['overview', 'customer', 'items', 'review', 'send'];
-    return stepParam && validSteps.includes(stepParam) ? stepParam : 'customer';
-  };
-  
-  // Initialize currentStep from URL params, fallback to 'customer'
-  const [currentStep, setCurrentStep] = useState(() => getStepFromUrl(searchParams));
+  const [searchParams] = useSearchParams();
+  const [currentStep, setCurrentStep] = useState('customer');
   const [registrationId, setRegistrationId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<OnboardingFormData>({
+  const [formData, setFormData] = useState({
     customer: {},
     items: {},
     documents: {}
@@ -115,146 +75,180 @@ const Onboarding = () => {
   const [originalStatus, setOriginalStatus] = useState<string | null>(null);
   const [emailChangeDialogOpen, setEmailChangeDialogOpen] = useState(false);
   const [pendingCustomerData, setPendingCustomerData] = useState<CustomerFormData | null>(null);
-  
-  // Ref to track if we're updating URL from internal state change (to prevent loop)
-  const isInternalStepChange = useRef(false);
+
+  const isAuthenticated = !!user || hasBuilderAuth();
+  const effectiveUserId = user?.id ?? getBuilderId();
+  const builderId = organization?.id ?? getBuilderId();
+  const editingId = searchParams.get('id');
+
+  // Builder flow: load customer from API when opening with ?id= (customer id)
+  const { data: customerDetailsResponse, isLoading: isLoadingCustomer, error: customerError } = useGetCustomerDetailsQuery(
+    { builderId: builderId ?? '', customerId: editingId ?? '' },
+    { skip: !editingId || !builderId || !hasBuilderAuth() }
+  );
 
   useEffect(() => {
-    if (!user) {
+    if (!isAuthenticated) {
       navigate('/auth');
     }
-  }, [user, navigate]);
+  }, [isAuthenticated, navigate]);
 
-  // Check for existing registration ID in URL params
+  // Builder flow: when getCustomerDetails returns, pre-fill customer form (support camelCase or snake_case from API)
   useEffect(() => {
-    const editingId = searchParams.get('id');
-    if (editingId && user) {
-      setRegistrationId(editingId);
-      // Legacy Supabase-backed registrations are no longer loaded.
-      // We now rely on builder APIs and in-memory formData instead.
-      setLoading(false);
-    }
-  }, [searchParams, user]);
-  
-  // Sync step from URL when URL changes externally (e.g., browser back/forward)
-  useEffect(() => {
-    if (isInternalStepChange.current) {
-      isInternalStepChange.current = false;
-      return;
-    }
-    
-    const stepFromUrl = getStepFromUrl(searchParams);
-    if (stepFromUrl !== currentStep) {
-      setCurrentStep(stepFromUrl);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
-  
-  // Update URL when currentStep changes
-  useEffect(() => {
-    const currentStepParam = searchParams.get('step');
-    if (currentStepParam !== currentStep) {
-      isInternalStepChange.current = true;
-      const newSearchParams = new URLSearchParams(searchParams);
-      newSearchParams.set('step', currentStep);
-      setSearchParams(newSearchParams, { replace: true });
-    }
-  }, [currentStep, searchParams, setSearchParams]);
-
-  const loadExistingRegistration = async (id: string) => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('homeowner_registrations')
-        .select('*')
-        .eq('id', id)
-        .eq('builder_id', user?.id)
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') {
-          toast({
-            title: "Registration not found",
-            description: "This registration doesn't exist or you don't have access to it.",
-            variant: "destructive"
-          });
-          navigate('/dashboard');
-          return;
-        }
-        throw error;
+    if (!hasBuilderAuth() || !editingId || !customerDetailsResponse?.data?.customer) return;
+    const c = customerDetailsResponse.data.customer as unknown as Record<string, unknown>;
+    const get = (camel: string, snake?: string) =>
+      (c[camel] as string) ?? (snake && (c[snake] as string)) ?? '';
+    setFormData((prev) => ({
+      ...prev,
+      customer: {
+        firstName: get('firstName', 'first_name'),
+        lastName: get('lastName', 'last_name'),
+        email: get('email'),
+        phone: get('contact', 'phone'),
+        propertyAddress: get('address', 'property_address'),
+        city: get('city'),
+        state: get('state'),
+        zipCode: get('zip', 'zip_code'),
+        projectName: get('projectName', 'project_name'),
+        settlementDate: get('settlementDate', 'settlement_date'),
+        notes: get('notes')
       }
+    }));
+  }, [editingId, customerDetailsResponse]);
 
-      // Parse the existing data and populate form
-      setOriginalEmail(data.customer_email);
-      setOriginalStatus(data.status);
-      
-      const existingFormData: OnboardingFormData = {
-        customer: {
-          firstName: data.customer_name?.split(' ')[0] || '',
-          lastName: data.customer_name?.split(' ').slice(1).join(' ') || '',
-          email: data.customer_email || '',
-          phone: data.customer_phone || '',
-          propertyAddress: data.property_address || '',
-          city: data.property_city || '',
-          state: data.property_state || '',
-          zipCode: data.property_zip || '',
-          projectName: data.project_name || '',
-          settlementDate: data.settlement_date || '',
-          notes: data.notes || ''
-        },
-        items: (data.selected_items ? (Array.isArray(data.selected_items) ? { selected_items: data.selected_items as RegistrationItem[] } : {}) : {}) as ItemsFormData,
-        documents: (data.documents_uploaded ? (typeof data.documents_uploaded === 'object' ? data.documents_uploaded as Record<string, unknown> : {}) : {})
-      };
-
-      setFormData(existingFormData);
-
-      // Determine which step to start on based on data completeness
-      if (data.status === 'ready_for_review') {
-        setCurrentStep('review');
-      } else if (data.selected_items && Object.keys(data.selected_items).length > 0) {
-        setCurrentStep('documents');
-      } else if (data.customer_name && data.customer_email) {
-        setCurrentStep('items');
-      }
-
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+  // Builder flow: handle customer not found or API error
+  useEffect(() => {
+    if (!hasBuilderAuth() || !editingId) return;
+    if (customerError && !isLoadingCustomer) {
       toast({
-        title: "Error loading registration",
-        description: errorMessage,
+        title: "Registration not found",
+        description: "This registration doesn't exist or you don't have access to it.",
         variant: "destructive"
       });
       navigate('/dashboard');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [editingId, customerError, isLoadingCustomer, navigate, toast]);
+
+  const loadExistingRegistration = useCallback(
+    async (id: string) => {
+      if (!effectiveUserId) return;
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('homeowner_registrations')
+          .select('*')
+          .eq('id', id)
+          .eq('builder_id', effectiveUserId)
+          .single();
+
+        if (error) {
+          if ((error as { code?: string }).code === 'PGRST116') {
+            toast({
+              title: "Registration not found",
+              description: "This registration doesn't exist or you don't have access to it.",
+              variant: "destructive"
+            });
+            navigate('/dashboard');
+            return;
+          }
+          throw error;
+        }
+
+        // Parse the existing data and populate form
+        setOriginalEmail(data.customer_email);
+        setOriginalStatus(data.status);
+        
+        const existingFormData = {
+          customer: {
+            firstName: data.customer_name?.split(' ')[0] || '',
+            lastName: data.customer_name?.split(' ').slice(1).join(' ') || '',
+            email: data.customer_email || '',
+            phone: data.customer_phone || '',
+            propertyAddress: data.property_address || '',
+            city: data.property_city || '',
+            state: data.property_state || '',
+            zipCode: data.property_zip || '',
+            projectName: data.project_name || '',
+            settlementDate: data.settlement_date || '',
+            notes: data.notes || ''
+          },
+          items: { selected_items: Array.isArray(data.selected_items) ? data.selected_items : [] },
+          documents: data.documents_uploaded || {}
+        };
+
+        setFormData(existingFormData);
+
+        // Determine which step to start on based on data completeness
+        if (data.status === 'ready_for_review') {
+          setCurrentStep('review');
+        } else if (data.selected_items && Array.isArray(data.selected_items) && data.selected_items.length > 0) {
+          setCurrentStep('review');
+        } else if (data.customer_name && data.customer_email) {
+          setCurrentStep('items');
+        }
+      } catch (error: unknown) {
+        toast({
+          title: "Error loading registration",
+          description: error instanceof Error ? error.message : "Failed to load registration",
+          variant: "destructive"
+        });
+        navigate('/dashboard');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [effectiveUserId, navigate, toast]
+  );
+
+  // Set registrationId from URL when editing existing customer
+  useEffect(() => {
+    if (!editingId || !isAuthenticated) return;
+    setRegistrationId(editingId);
+    if (hasBuilderAuth()) {
+      // Builder flow: don't call Supabase; customer data comes from getCustomerDetailsQuery above
+      return;
+    }
+    if (effectiveUserId) {
+      loadExistingRegistration(editingId);
+    }
+  }, [editingId, isAuthenticated, effectiveUserId, loadExistingRegistration]);
 
   const handleStepClick = (stepId: string) => {
     setCurrentStep(stepId);
-    // Update URL immediately when step is clicked
-    const newSearchParams = new URLSearchParams(searchParams);
-    newSearchParams.set('step', stepId);
-    setSearchParams(newSearchParams, { replace: true });
   };
 
-  const saveRegistrationData = async (stepData: CustomerFormData | ItemsFormData | Record<string, unknown>, step: string) => {
-    if (!user) return;
+  const saveRegistrationData = async (stepData: unknown, step: string) => {
+    const orgId = organization?.id ?? getBuilderId();
+    if (!isAuthenticated || !effectiveUserId || !orgId) return;
 
     try {
       console.log('Onboarding - saveRegistrationData called:', { step, stepData });
-      const updatedFormData = { ...formData, [step]: stepData };
+      const updatedFormData = { ...formData, [step]: stepData as unknown };
       console.log('Onboarding - updatedFormData:', updatedFormData);
       setFormData(updatedFormData);
 
-      let registrationData: RegistrationData = {
-        builder_id: user.id,
+      let registrationData: Record<string, unknown> = {
+        builder_id: effectiveUserId,
+        organization_id: orgId,
         status: 'draft'
       };
 
       // Add customer data
       if (updatedFormData.customer) {
-        const customerData = updatedFormData.customer;
+        const customerData = updatedFormData.customer as {
+          firstName?: string;
+          lastName?: string;
+          email?: string;
+          phone?: string;
+          propertyAddress?: string;
+          city?: string;
+          state?: string;
+          zipCode?: string;
+          projectName?: string;
+          settlementDate?: string | null;
+          notes?: string;
+        };
         console.log('Onboarding - Processing customer data:', customerData);
         registrationData = {
           ...registrationData,
@@ -274,14 +268,16 @@ const Onboarding = () => {
         console.log('Onboarding - Mapped registration data:', registrationData);
       }
 
-      // Add items data
+      // Add items data - extract the array from the nested structure
       if (updatedFormData.items) {
-        registrationData.selected_items = updatedFormData.items;
+        const itemsData = updatedFormData.items as { selected_items?: unknown };
+        (registrationData as { selected_items?: unknown }).selected_items =
+          itemsData.selected_items ?? updatedFormData.items;
       }
 
       // Add documents data
       if (updatedFormData.documents) {
-        registrationData.documents_uploaded = updatedFormData.documents as Record<string, unknown>;
+        (registrationData as { documents_uploaded?: unknown }).documents_uploaded = updatedFormData.documents;
       }
 
       // Update status based on current step
@@ -291,29 +287,11 @@ const Onboarding = () => {
         registrationData.status = 'documents_pending';
       }
 
-      // Prepare data for Supabase with proper types
-      const supabaseData = {
-        builder_id: registrationData.builder_id,
-        status: registrationData.status,
-        customer_name: registrationData.customer_name || '',
-        customer_email: registrationData.customer_email || '',
-        customer_phone: registrationData.customer_phone || '',
-        property_address: registrationData.property_address || '',
-        property_city: registrationData.property_city || '',
-        property_state: registrationData.property_state || '',
-        property_zip: registrationData.property_zip || '',
-        project_name: registrationData.project_name || '',
-        settlement_date: registrationData.settlement_date || null,
-        notes: registrationData.notes || '',
-        selected_items: registrationData.selected_items ? JSON.parse(JSON.stringify(registrationData.selected_items)) : null,
-        documents_uploaded: registrationData.documents_uploaded ? JSON.parse(JSON.stringify(registrationData.documents_uploaded)) : null
-      };
-
       if (registrationId) {
         // Update existing registration
         const { error } = await supabase
           .from('homeowner_registrations')
-          .update(supabaseData)
+          .update(registrationData as never)
           .eq('id', registrationId);
 
         if (error) throw error;
@@ -321,7 +299,7 @@ const Onboarding = () => {
         // Create new registration
         const { data, error } = await supabase
           .from('homeowner_registrations')
-          .insert(supabaseData)
+          .insert(registrationData as never)
           .select()
           .single();
 
@@ -329,10 +307,9 @@ const Onboarding = () => {
         setRegistrationId(data.id);
       }
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({
         title: "Error saving data",
-        description: errorMessage,
+        description: error instanceof Error ? error.message : "Failed to save data",
         variant: "destructive"
       });
     }
@@ -353,10 +330,6 @@ const Onboarding = () => {
     handleNextStep();
   };
 
-  const handleCustomerFormDataChange = useCallback((data: Partial<CustomerFormData>) => {
-    setFormData(prev => ({ ...prev, customer: data as CustomerFormData }));
-  }, []);
-
   const confirmEmailChange = async () => {
     if (!pendingCustomerData) return;
     
@@ -369,129 +342,34 @@ const Onboarding = () => {
     handleNextStep();
   };
 
-  const handleItemsNext = async (itemsData: { selected_items: RegistrationItem[] }) => {
-    // Extract registrationId if it exists in the data (though it shouldn't be in FormData)
-    const registrationIdFromData = (itemsData as { selected_items: RegistrationItem[]; registrationId?: string }).registrationId;
-    if (registrationIdFromData) {
-      setRegistrationId(registrationIdFromData);
+  const handleItemsNext = async (itemsData: unknown) => {
+    // Extract the actual items array from the nested structure
+    let items: unknown = itemsData;
+    if (itemsData && typeof itemsData === 'object' && 'selected_items' in (itemsData as Record<string, unknown>)) {
+      items = (itemsData as { selected_items: unknown }).selected_items;
     }
-    setFormData(prev => ({ ...prev, items: itemsData as ItemsFormData }));
-    // Go directly to review page, skipping documents
-    setCurrentStep('review');
-    // Update URL when moving to review step
-    const newSearchParams = new URLSearchParams(searchParams);
-    newSearchParams.set('step', 'review');
-    setSearchParams(newSearchParams, { replace: true });
+    setFormData(prev => ({ ...prev, items: { selected_items: items } }));
+    handleNextStep();
   };
 
-  const handleDocumentsNext = async (documentsData: Record<string, unknown>) => {
+  const handleDocumentsNext = async (documentsData: unknown) => {
     await saveRegistrationData(documentsData, 'documents');
     handleNextStep();
   };
 
   const handleSaveAndExit = async () => {
-    try {
-      // If we're on the customer step and have customer data, save it via API first
-      if (currentStep === 'customer' && formData.customer) {
-        const customerData = formData.customer;
-        
-        const shouldSave = registrationId || customerData.firstName || customerData.email;
-        if (shouldSave) {
-          // Get builderOrganizationId from user
-          const builderOrganizationId = user && 'builderOrganization' in user && user.builderOrganization
-            ? user.builderOrganization.id
-            : user && 'id' in user 
-            ? user.id 
-            : null;
-
-          if (!builderOrganizationId) {
-            toast({
-              title: "Error",
-              description: "Organization ID is missing. Please log in again.",
-              variant: "destructive"
-            });
-            return;
-          }
-
-          // Map form data to API payload format
-          const apiPayload = {
-            ...(registrationId && { id: registrationId }),
-            firstName: customerData.firstName || '',
-            lastName: customerData.lastName || '',
-            email: customerData.email || '',
-            contact: customerData.phone || '',
-            address: customerData.propertyAddress || '',
-            city: customerData.city || '',
-            state: customerData.state || '',
-            zip: customerData.zipCode || '',
-            projectName: customerData.projectName || undefined,
-            settlementDate: customerData.settlementDate || undefined,
-            notes: customerData.notes || undefined,
-            builderOrganizationId: builderOrganizationId
-          };
-
-          // Call the API to save customer data
-          const response = await createBuilderCustomer(apiPayload).unwrap();
-          
-          // Update registrationId if we got one from the response
-          if (response.data?.id) {
-            setRegistrationId(response.data.id);
-            // Update formData with the registrationId
-            setFormData(prev => ({
-              ...prev,
-              customer: {
-                ...prev.customer,
-                customerId: response.data.id,
-                registrationId: response.data.id
-              }
-            }));
-          }
-
-          toast({
-            title: "Registration saved",
-            description: "Customer details have been saved. You can continue this registration later from your dashboard."
-          });
-        } else {
-          toast({
-            title: "No data to save",
-            description: "Please fill in at least some customer information before saving.",
-            variant: "default"
-          });
-        }
-      } else {
-        // For other steps, just show the message
-        toast({
-          title: "Registration saved",
-          description: "You can continue this registration later from your dashboard."
-        });
-      }
-      
-      // Navigate to dashboard
-      navigate('/dashboard');
-    } catch (error) {
-      console.error('Error saving registration:', error);
-      const errorMessage = error && typeof error === 'object' && 'data' in error 
-        ? (error.data as { message?: string })?.message 
-        : undefined;
-      toast({
-        title: "Error saving registration",
-        description: errorMessage || "Failed to save registration. Please try again.",
-        variant: "destructive"
-      });
-      // Don't navigate on error so user can retry
-    }
+    toast({
+      title: "Registration saved",
+      description: "You can continue this registration later from your dashboard."
+    });
+    navigate('/dashboard');
   };
 
   const handleNextStep = () => {
     const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex < steps.length - 1) {
-      const nextStep = steps[currentIndex + 1];
-      setCurrentStep(nextStep);
-      // Update URL when moving to next step
-      const newSearchParams = new URLSearchParams(searchParams);
-      newSearchParams.set('step', nextStep);
-      setSearchParams(newSearchParams, { replace: true });
+      setCurrentStep(steps[currentIndex + 1]);
     }
   };
 
@@ -499,77 +377,78 @@ const Onboarding = () => {
     const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex > 0) {
-      const prevStep = steps[currentIndex - 1];
-      setCurrentStep(prevStep);
-      // Update URL when moving to previous step
-      const newSearchParams = new URLSearchParams(searchParams);
-      newSearchParams.set('step', prevStep);
-      setSearchParams(newSearchParams, { replace: true });
+      setCurrentStep(steps[currentIndex - 1]);
     }
   };
 
-  const handleSendEntitlement = () => {
+  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
 
-    toast({
-      title: "Entitlement sent!",
-      description: "The warranty entitlement has been sent to the homeowner."
-    });
+  const handleSendEntitlement = async () => {
+    if (!registrationId) return;
 
-    handleNextStep();
+    try {
+      // Builder flow: call API (matches old project: /api/create/customerentitlement/:builderCustomerId)
+      if (hasBuilderAuth()) {
+        await createCustomerEntitlement({ builderCustomerId: registrationId }).unwrap();
+      } else {
+        const { error } = await supabase
+          .from('homeowner_registrations')
+          .update({
+            status: 'sent',
+            entitlement_sent_at: new Date().toISOString()
+          })
+          .eq('id', registrationId);
+        if (error) throw error;
+      }
+
+      toast({
+        title: "Entitlement sent!",
+        description: "The warranty entitlement has been sent to the homeowner."
+      });
+
+      handleNextStep();
+    } catch (error: unknown) {
+      const description =
+        error && typeof error === 'object' && 'data' in error
+          ? String((error as { data?: unknown }).data ?? 'Failed to send entitlement')
+          : error instanceof Error
+          ? error.message
+          : 'Failed to send entitlement';
+      toast({
+        title: "Error sending entitlement",
+        description,
+        variant: "destructive"
+      });
+    }
   };
 
   const renderCurrentStep = () => {
     switch (currentStep) {
-      case 'overview':
-        return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
       case 'customer':
         return (
-          <CustomerDetailsForm 
-            onNext={handleCustomerNext} 
-            initialData={formData.customer} 
-            customerId={registrationId || undefined}
-            onFormDataChange={handleCustomerFormDataChange}
+          <CustomerDetailsForm
+            onNext={handleCustomerNext}
+            initialData={formData.customer}
+            registrationId={registrationId}
           />
         );
-      case 'items': {
-        const bomId = searchParams.get('bomId');
-        return (
-          <ItemsSelectionForm 
-            onNext={handleItemsNext} 
-            initialData={formData.items} 
-            registrationId={registrationId} 
-            billMaterialId={bomId || undefined} 
-          />
-        );
-      }
+      case 'items':
+        return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} />;
       case 'review':
-        return (
-          <ReviewApprovalForm 
-            onNext={handleSendEntitlement} 
-            formData={formData} 
-            registrationId={registrationId} 
-          />
-        );
+        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} registrationId={registrationId} />;
       case 'send':
-        return (
-          <SendConfirmationForm 
-            customerId={
-              (formData.customer as CustomerFormData)?.customerId ||
-              registrationId ||
-              undefined
-            } 
-          />
-        );
+        return <SendConfirmationForm registrationId={registrationId} />;
       default:
         return <WorkflowSteps currentStep={currentStep} onStepClick={handleStepClick} />;
     }
   };
 
-  if (!user) {
+  if (!isAuthenticated) {
     return null;
   }
 
-  if (loading) {
+  const isEditingLoading = loading || (hasBuilderAuth() && !!editingId && isLoadingCustomer);
+  if (isEditingLoading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
@@ -596,11 +475,11 @@ const Onboarding = () => {
                 <p className="text-muted-foreground mt-1">Create comprehensive documentation packages for your homebuyers</p>
               </div>
               <div className="flex items-center space-x-4">
-                <Button variant="outline" onClick={handleSaveAndExit} disabled={isSaving}>
-                  {isSaving ? 'Saving...' : 'Save & Exit'}
+                <Button variant="outline" onClick={handleSaveAndExit}>
+                  Save & Exit
                 </Button>
                 <div className="text-sm text-muted-foreground">
-                  Step {['customer', 'items', 'review', 'send'].indexOf(currentStep) + 1} of 4
+                  Step {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) + 1} of 5
                 </div>
               </div>
             </div>
@@ -608,18 +487,18 @@ const Onboarding = () => {
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <div>
-                {['customer', 'items', 'review', 'send'].indexOf(currentStep) > 0 && (
+                {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) > 0 && (
                   <Button variant="outline" onClick={handlePreviousStep}>
                     Previous
                   </Button>
                 )}
               </div>
               <div className="flex space-x-2">
-                {['customer', 'items', 'review', 'send'].map((step, index) => (
+                {['customer', 'items', 'documents', 'review', 'send'].map((step, index) => (
                   <div
                     key={step}
                     className={`w-3 h-3 rounded-full ${
-                      ['customer', 'items', 'review', 'send'].indexOf(currentStep) >= index
+                      ['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) >= index
                         ? 'bg-primary'
                         : 'bg-muted'
                     }`}

@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useOrganization } from "@/hooks/useOrganization";
 import type { BuilderQuery } from "@/lib/api/services/query";
 import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
 import { useUpdateQueryMutation, useAddQueryCommentMutation, useLazyGetQueryByIdQuery } from "@/lib/api/services/query";
@@ -142,6 +143,7 @@ const mockHistory: CaseHistory[] = [
 
 const PendingQueries = () => {
   const { user } = useAuth();
+  const { organization } = useOrganization();
   const navigate = useNavigate();
   const location = useLocation();
   const [queryData, setQueryData] = useState<BuilderQuery | null>(null);
@@ -151,9 +153,19 @@ const PendingQueries = () => {
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [comment, setComment] = useState<string>("");
 
-  const builderId = user && 'builderOrganization' in user 
-    ? user.builderOrganization.id 
-    : null;
+  const builderId = useMemo(() => {
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        if (parsed.userInfo?.builderOrganization?.id) return parsed.userInfo.builderOrganization.id;
+        if (parsed.builderOrganization?.id) return parsed.builderOrganization.id;
+      } catch {
+        // ignore
+      }
+    }
+    return organization?.id ?? null;
+  }, [organization?.id]);
 
   // Fetch vendors from API
   const { data: vendorsData, isLoading: isLoadingVendors } = useGetBuilderVendorsQuery(
@@ -364,11 +376,24 @@ const PendingQueries = () => {
       return;
     }
 
-    // Get user ID and builder organization ID
-    const userId = user && 'id' in user ? user.id : null;
-    const commentedBy = user && 'builderOrganization' in user 
-      ? user.builderOrganization.id 
-      : null;
+    // Get user ID and commentedBy (builder org id or user id) from localStorage (builder flow) or user (Supabase)
+    let userId: string | null = null;
+    let commentedBy: string | null = null;
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        userId = parsed.userInfo?.id ?? parsed?.id ?? null;
+        commentedBy = parsed.userInfo?.builderOrganization?.id ?? parsed.builderOrganization?.id ?? null;
+      } catch {
+        // ignore
+      }
+    }
+    if ((!userId || !commentedBy) && user && typeof user === "object") {
+      if ("id" in user && typeof (user as { id: string }).id === "string") userId = (user as { id: string }).id;
+      if ("builderOrganization" in user && (user as { builderOrganization?: { id?: string } }).builderOrganization?.id)
+        commentedBy = (user as { builderOrganization: { id: string } }).builderOrganization.id;
+    }
 
     if (!userId || !commentedBy) {
       toast({

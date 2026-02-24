@@ -1,19 +1,26 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useRegistrations } from "@/hooks/useRegistrations";
 import { useToast } from "@/hooks/use-toast";
-import { useCheckExistingCustomerItemMapQuery, useGetBillOfMaterialsQuery, useLazyGetBuilderItemsByBOMQuery } from "@/store/api/items";
-import { useGetCustomerDetailsQuery, useLazyGetCustomerDetailsQuery } from "@/lib/api/services/customerDetails";
-import { skipToken } from "@reduxjs/toolkit/query";
-import { getApiBaseUrl } from "@/lib/config";
-import { useUpdateBuilderCustomerMapMutation } from "@/lib/api/services/builderCustomer";
+import {
+  useGetBillOfMaterialsQuery,
+  useGetBillMaterialsQuery,
+  useGetBuilderItemsByBOMQuery,
+  useUpdateBuilderCustomerMapMutation,
+  useLazyCheckExistingCustomerItemMapQuery,
+  useGetCustomerDetailsQuery,
+  useDeleteItemFileMutation,
+} from "@/store/api";
+import { useOrganization } from "@/hooks/useOrganization";
 import { 
   Home, 
   Lightbulb, 
@@ -23,7 +30,6 @@ import {
   Trash2,
   Plus,
   Edit2,
-  Save,
   FileText,
   X
 } from "lucide-react";
@@ -38,6 +44,8 @@ interface BuilderItem {
   description: string | null;
   price: number | null;
   bom_id: string | null;
+  warranty_years?: number | null;
+  manual_url?: string | null;
 }
 
 interface RegistrationItem extends BuilderItem {
@@ -45,101 +53,77 @@ interface RegistrationItem extends BuilderItem {
   custom_notes?: string;
   is_custom?: boolean;
   serial_number?: string;
-  builderItemId?: string;
-  seller?: string;
   warranty_documents?: Array<{
-    id?: string;
     name: string;
     url: string;
     path: string;
+    fileId?: string; // id for DELETE /api/itemfile/{id}
   }>;
   manual_documents?: Array<{
-    id?: string;
     name: string;
     url: string;
     path: string;
+    fileId?: string;
   }>;
 }
 
 interface BillOfMaterials {
   id: string;
-  bomName: string;
-  projectName: string | null;
+  name: string;
+  project_name: string | null;
 }
-
-interface FormData {
-  selected_items: RegistrationItem[];
-}
-
-type CustomerItemMapEntry = {
-  id: string;
-  billOfMaterials?: { id: string; bomName?: string; projectName?: string };
-  builderItem: null;
-  name: string | null;
-  category: string | null;
-  seller: string | null;
-  serialNumber: string | null;
-  make: string | null;
-  model: string | null;
-  brand: string | null;
-  color: string | null;
-  notes: string | null;
-  files: unknown;
-  builderCustomerItemFiles?: Array<{
-    id: string;
-    type: string;
-    files: {
-      id: string;
-      name: string;
-      type: string;
-      fileType: string;
-      filePath: string;
-    };
-  }>;
-};
 
 interface ItemsSelectionFormProps {
-  onNext: (data: FormData) => void;
+  onNext: (data: unknown) => void;
   initialData?: {
     selected_items?: RegistrationItem[];
-    [key: string]: unknown;
   };
   registrationId?: string;
-  billMaterialId?: string;
 }
 
-const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialId }: ItemsSelectionFormProps) => {
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!(parsed?.jwt);
+  } catch {
+    return false;
+  }
+};
+
+const getBuilderId = (): string | null => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return null;
+    const parsed = JSON.parse(userData);
+    const orgId = parsed?.userInfo?.builderOrganization?.id ?? parsed?.builderOrganization?.id ?? parsed?.builder_organization?.id;
+    return orgId ?? parsed?.userInfo?.id ?? parsed?.id ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelectionFormProps) => {
   const { user } = useAuth();
+  const { organization } = useOrganization();
+  const { updateRegistration } = useRegistrations();
   const { toast } = useToast();
+  const isAuthenticated = !!user || hasBuilderAuth();
   const [updateBuilderCustomerMap] = useUpdateBuilderCustomerMapMutation();
-  // Initialize selectedBomId from billMaterialId prop if available
-  const [selectedBomId, setSelectedBomId] = useState<string>(billMaterialId || "");
+  const [deleteItemFile] = useDeleteItemFileMutation();
+
+  const [selectedBomId, setSelectedBomId] = useState<string>("");
   const [selectedItems, setSelectedItems] = useState<RegistrationItem[]>(
     Array.isArray(initialData?.selected_items) ? initialData.selected_items : []
   );
-
-  // Restore selectedBomId from billMaterialId prop or initialData when component mounts or props change
-  useEffect(() => {
-    // Priority: billMaterialId prop > initialData items
-    if (billMaterialId) {
-      setSelectedBomId(billMaterialId);
-    } else if (initialData?.selected_items && Array.isArray(initialData.selected_items) && initialData.selected_items.length > 0) {
-      // Get bom_id from the first item (all items should have the same bom_id)
-      const firstItem = initialData.selected_items[0] as RegistrationItem;
-      if (firstItem?.bom_id) {
-        setSelectedBomId(firstItem.bom_id);
-      }
-    }
-  }, [initialData, billMaterialId]);
   const [saving, setSaving] = useState(false);
+  const [savingItemId, setSavingItemId] = useState<string | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showCustomItemModal, setShowCustomItemModal] = useState(false);
-  const [showMappedWarning, setShowMappedWarning] = useState(false);
-  const [pendingBomId, setPendingBomId] = useState<string | null>(null);
-  const [warningLoading, setWarningLoading] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
-  const [pendingFiles, setPendingFiles] = useState<Record<string, { warranty: File[]; manual: File[] }>>({});
-  const fileInputRefs = useRef<Record<string, { warranty: HTMLInputElement | null; manual: HTMLInputElement | null }>>({});
+  // Pending File objects to send with updateBuilderCustomerMap on Save (builder flow)
+  const [pendingItemFiles, setPendingItemFiles] = useState<Record<string, { warranty?: File; manual?: File }>>({});
   const [newCustomItem, setNewCustomItem] = useState<RegistrationItem>({
     id: '',
     name: '',
@@ -154,247 +138,144 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
     custom_notes: '',
     is_custom: true,
     serial_number: '',
-    builderItemId: '',
     warranty_documents: [],
     manual_documents: []
   });
 
-  // Fetch BOMs from API
-  const { 
-    data: bomsData, 
-    isLoading: loading, 
-    error: bomsError 
-  } = useGetBillOfMaterialsQuery(undefined, {
-    refetchOnMountOrArgChange: true
+  // BOM list from API (matches old project: /api/getbillofmaterials)
+  const { data: bomsResponse, isLoading: loadingBoms } = useGetBillOfMaterialsQuery(undefined, {
+    skip: !isAuthenticated,
   });
+  const boms: BillOfMaterials[] = (bomsResponse?.data ?? []).map((b) => ({
+    id: b.id,
+    name: b.bomName,
+    project_name: b.projectName ?? null,
+  }));
 
-  // Transform API response to component format
-  const boms: BillOfMaterials[] = bomsData?.data || [];
+  // Bill materials (items) for selected BOM from API (matches old project: /api/getbillmaterials)
+  const { data: billMaterialsResponse } = useGetBillMaterialsQuery(selectedBomId, {
+    skip: !selectedBomId,
+  });
+  const billMaterials = billMaterialsResponse?.data ?? [];
 
-  // Show error toast if BOMs API call fails
-  useEffect(() => {
-    if (bomsError) {
-      toast({
-        title: "Error fetching BOMs",
-        description: "Failed to load Bill of Materials. Please try again.",
-        variant: "destructive"
-      });
+
+  const { data: builderItemsByBOMResponse } = useGetBuilderItemsByBOMQuery(
+    selectedBomId && registrationId
+      ? { billMaterialId: selectedBomId, customerId: registrationId }
+      : // RTK Query will skip when arg is null
+        (null as unknown as { billMaterialId: string; customerId: string }),
+    {
+      skip: !selectedBomId || !registrationId,
     }
-  }, [bomsError, toast]);
-
-  const { 
-    data: existingItemsData, 
-    isLoading: isLoadingItems,
-    error: existingItemsError,
-    refetch: refetchItems
-  } = useCheckExistingCustomerItemMapQuery(registrationId || '', {
-    skip: !registrationId
-  });
-  const [triggerGetBuilderItems, { isFetching: isFetchingBomItems }] = useLazyGetBuilderItemsByBOMQuery();
-  const [triggerGetCustomerDetails] = useLazyGetCustomerDetailsQuery();
-  const { data: customerDetailsData } = useGetCustomerDetailsQuery(
-    user?.id && registrationId
-      ? { builderId: user.id as string, customerId: registrationId }
-      : skipToken
   );
 
+  const builderId = organization?.id ?? getBuilderId();
+  // Customer details API: /api/customerdetails?builderId=...&customerId=...
+  const { data: customerDetailsResponse } = useGetCustomerDetailsQuery(
+    { builderId: builderId ?? '', customerId: registrationId ?? '' },
+    { skip: !registrationId || !builderId }
+  );
+  // Existing customer item map: /api/check/customeritemmap/existing?customerId=... (trigger when registrationId is set)
+  const [fetchExistingMap, { data: existingMapResponse }] = useLazyCheckExistingCustomerItemMapQuery();
+  const existingMapData = useMemo(() => existingMapResponse?.data ?? [], [existingMapResponse?.data]);
+
+  // When editing an existing customer that already has a BOM assigned in customerDetails,
+  // pre-select that BOM in the dropdown so the UI reflects the actual BOM.
   useEffect(() => {
-    if (selectedBomId || !customerDetailsData?.data?.customer?.billOfMaterials?.id) return;
-    setSelectedBomId(customerDetailsData.data.customer.billOfMaterials.id);
-  }, [selectedBomId, customerDetailsData]);
+    const customerBomId =
+      customerDetailsResponse?.data?.customer?.billOfMaterials?.id ??
+      (customerDetailsResponse?.data?.customer as unknown as { bill_of_materials?: { id?: string } })?.bill_of_materials
+        ?.id ??
+      null;
+    if (!selectedBomId && customerBomId) {
+      setSelectedBomId(customerBomId);
+    }
+  }, [customerDetailsResponse, selectedBomId]);
 
   useEffect(() => {
-    if (selectedBomId || !registrationId) return;
-    const mappedBomId =
-      existingItemsData?.data?.find(
-        (item: CustomerItemMapEntry) => item.billOfMaterials?.id
-      )?.billOfMaterials?.id;
-
-    if (mappedBomId) {
-      setSelectedBomId(mappedBomId);
+    if (registrationId && registrationId.trim() !== '') {
+      fetchExistingMap(registrationId);
     }
-  }, [selectedBomId, registrationId, existingItemsData]);
+  }, [registrationId, fetchExistingMap]);
 
-
-  useEffect(() => {
-    if (existingItemsData && registrationId) {
-      try {
-        const items = existingItemsData.data || [];
-
-        if (items.length === 0) {
-          setSelectedItems([]);
-          return;
-        }
-
-        const transformedItems: RegistrationItem[] = items
-          .filter((item) => item && item.id)
-          .map((item: CustomerItemMapEntry) => {
-            const warranty_documents =
-              item.builderCustomerItemFiles
-                ?.filter((f) => f.type === 'warranty' && f.files)
-                .map((f) => ({
-                  id: f.id,
-                  name: f.files.name,
-                  url: f.files.filePath,
-                  path: f.files.filePath,
-                })) || [];
-
-            const manual_documents =
-              item.builderCustomerItemFiles
-                ?.filter((f) => f.type === 'Manual' && f.files)
-                .map((f) => ({
-                  id: f.id,
-                  name: f.files.name,
-                  url: f.files.filePath,
-                  path: f.files.filePath,
-                })) || [];
-
-            // Use item.name and item.category directly since builderItem is now null
-            const displayName = item.name || (() => {
-              const nameParts = [item.brand, item.model, item.make].filter(Boolean);
-              return nameParts.length > 0 
-                ? nameParts.join(' ') 
-                : (item.serialNumber ? `Item ${item.serialNumber}` : 'Custom Item');
-            })();
-
-            const category = item.category || 'Other';
-
-            return {
-              id: item.id,
-              name: displayName,
-              category: category,
-              brand: item.brand || null,
-              model: item.model || null,
-              make: item.make || null,
-              description: null,
-              price: null,
-              bom_id: selectedBomId || item.billOfMaterials?.id || null,
-              color: item.color || null,
-              custom_notes: item.notes || null,
-              serial_number: item.serialNumber || null,
-              builderItemId: null,
-              seller: item.seller || null,
-              warranty_documents,
-              manual_documents,
-              is_custom: true
-            } as RegistrationItem;
-          });
-
-        setSelectedItems(transformedItems);
-      } catch (error) {
-        console.error('Error processing existing items data:', error);
-        toast({
-          title: "Error processing items",
-          description: "Failed to process items from existing map. Please try again.",
-          variant: "destructive"
-        });
-        setSelectedItems([]);
-      }
-    } else if (existingItemsData && existingItemsData.data && existingItemsData.data.length === 0) {
-      setSelectedItems([]);
-    }
-  }, [existingItemsData, selectedBomId, registrationId, toast]);
-
-  // Show error toast if items API call fails
-  useEffect(() => {
-    if (existingItemsError) {
-      const message =
-        existingItemsError && typeof existingItemsError === 'object' && 'data' in existingItemsError
-          ? String((existingItemsError as { data?: { message?: string } }).data?.message || 'Failed to load items')
-          : 'Failed to load items';
-      toast({
-        title: "Error loading items",
-        description: message,
-        variant: "destructive"
-      });
-    }
-  }, [existingItemsError, toast]);
-
-  const handleBOMSelect = async (bomId: string) => {
-    if (!registrationId) {
-      toast({
-        title: "Registration ID required",
-        description: "Please complete the customer details step first.",
-        variant: "destructive"
-      });
-      return;
-    }
-    if (existingItemsData?.data && existingItemsData.data.length > 0) {
-      setPendingBomId(bomId);
-      setShowMappedWarning(true);
-      return;
-    }
-
-    try {
-      await triggerGetBuilderItems(
-        { billMaterialId: bomId, customerId: registrationId },
-        true
-      ).unwrap();
-      await refetchItems();
-      setSelectedBomId(bomId);
-      toast({
-        title: "BOM selected",
-        description: "Items have been loaded from the selected BOM."
-      });
-    } catch (error) {
-      const message =
-        error && typeof error === 'object' && 'data' in error
-          ? String((error as { data?: { message?: string } }).data?.message || 'Failed to load BOM items')
-          : 'Failed to load BOM items';
-      toast({
-        title: "Unable to load BOM items",
-        description: message,
-        variant: "destructive"
-      });
-    }
+  type MapFile = { id: string; type: string; files: { id: string; name: string; filePath: string } };
+  type ExistingMapEntry = {
+    id: string;
+    name: string | null;
+    category: string | null;
+    seller?: string | null;
+    serialNumber?: string | null;
+    make?: string | null;
+    model?: string | null;
+    brand?: string | null;
+    color?: string | null;
+    notes?: string | null;
+    builderCustomerItemFiles?: MapFile[];
   };
+
+  // When we have registrationId and existing map data from /api/check/customeritemmap/existing, show that data in the items section
+  useEffect(() => {
+    if (!registrationId || existingMapData.length === 0) return;
+    const items: RegistrationItem[] = (existingMapData as ExistingMapEntry[]).map((m) => {
+      const warranty_documents: { name: string; url: string; path: string; fileId?: string }[] = [];
+      const manual_documents: { name: string; url: string; path: string; fileId?: string }[] = [];
+      (m.builderCustomerItemFiles ?? []).forEach((f: MapFile) => {
+        const doc = {
+          name: f.files?.name ?? 'file',
+          url: '',
+          path: f.files?.filePath ?? f.files?.id ?? '',
+          fileId: f.id,
+        };
+        if (f.type === 'warranty') warranty_documents.push(doc);
+        else if (f.type === 'Manual') manual_documents.push(doc);
+      });
+      return {
+        id: m.id,
+        name: m.name ?? '',
+        category: m.category ?? 'Other',
+        brand: m.brand ?? '',
+        model: m.model ?? '',
+        make: m.make ?? '',
+        description: '',
+        price: null,
+        bom_id: null,
+        color: m.color ?? '',
+        custom_notes: m.notes ?? '',
+        is_custom: false,
+        serial_number: m.serialNumber ?? '',
+        warranty_documents,
+        manual_documents,
+      };
+    });
+    setSelectedItems(items);
+  }, [registrationId, existingMapData]);
+
+  // NOTE: We intentionally do NOT populate the items list from /api/getbillmaterials.
+  // The items section is driven solely by /api/check/customeritemmap/existing so that
+  // it always reflects the customer's mapped items, not raw BOM materials.
+
+  const loading = loadingBoms;
+
+  const handleBOMSelect = (bomId: string) => {
+    setSelectedBomId(bomId);
+  };
+
+  // After /api/getbuilderitems/bybom has run successfully for the selected BOM,
+  // fetch the existing customer item map so the mapped items are shown.
+  useEffect(() => {
+    if (!registrationId || !selectedBomId) return;
+    if (!builderItemsByBOMResponse?.success) return;
+    fetchExistingMap(registrationId);
+  }, [registrationId, selectedBomId, builderItemsByBOMResponse, fetchExistingMap]);
 
   const handleRemoveItem = (itemId: string) => {
-    setSelectedItems(prev => prev.filter(item => item.id !== itemId));
-  };
-
-  const handleConfirmBomChange = async () => {
-    if (!pendingBomId || !registrationId) {
-      setShowMappedWarning(false);
-      setPendingBomId(null);
-      return;
-    }
-    setWarningLoading(true);
-    try {
-      await triggerGetBuilderItems({
-        billMaterialId: pendingBomId,
-        customerId: registrationId
-      }, true).unwrap();
-
-      await refetchItems();
-
-      if (user?.id) {
-        await triggerGetCustomerDetails({
-          builderId: user.id as string,
-          customerId: registrationId
-        }, true).unwrap();
-      }
-
-      setSelectedBomId(pendingBomId);
-      toast({
-        title: "BOM updated",
-        description: "Items have been refreshed for the selected BOM."
-      });
-    } catch (error) {
-      const message =
-        error && typeof error === 'object' && 'data' in error
-          ? String((error as { data?: { message?: string } }).data?.message || 'Failed to load BOM items')
-          : 'Failed to load BOM items';
-      toast({
-        title: "Unable to switch BOM",
-        description: message,
-        variant: "destructive"
-      });
-    } finally {
-      setWarningLoading(false);
-      setShowMappedWarning(false);
-      setPendingBomId(null);
-    }
+    setPendingItemFiles((prev) => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+    setSelectedItems((prev) => prev.filter((i) => i.id !== itemId));
+    toast({ title: "Item removed", description: "The item has been removed from the list." });
   };
 
   const handleUpdateItem = (itemId: string, field: string, value: string) => {
@@ -403,297 +284,151 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
     ));
   };
 
-  const handleFileSelect = (itemId: string, files: FileList | null, documentType: 'warranty' | 'manual', inputElement: HTMLInputElement | null) => {
-    if (!files || files.length === 0) return;
-
-    const fileArray = Array.from(files);
-    setPendingFiles(prev => ({
-      ...prev,
-      [itemId]: {
-        warranty: documentType === 'warranty' 
-          ? [...(prev[itemId]?.warranty || []), ...fileArray]
-          : (prev[itemId]?.warranty || []),
-        manual: documentType === 'manual'
-          ? [...(prev[itemId]?.manual || []), ...fileArray]
-          : (prev[itemId]?.manual || [])
-      }
-    }));
-
-    // Clear the input value so it doesn't show file count
-    if (inputElement) {
-      inputElement.value = '';
-    }
-
-    toast({
-      title: `${fileArray.length} file${fileArray.length > 1 ? 's' : ''} selected`,
-      description: `${documentType === 'warranty' ? 'Warranty' : 'Manual'} file${fileArray.length > 1 ? 's' : ''} will be uploaded when you save`,
-    });
-  };
-
-  const handleRemovePendingFile = (itemId: string, fileIndex: number, documentType: 'warranty' | 'manual') => {
-    setPendingFiles(prev => {
-      const itemFiles = prev[itemId];
-      if (!itemFiles) return prev;
-
-      const newFiles = {
-        ...prev,
-        [itemId]: {
-          warranty: documentType === 'warranty' 
-            ? itemFiles.warranty.filter((_, idx) => idx !== fileIndex)
-            : itemFiles.warranty,
-          manual: documentType === 'manual'
-            ? itemFiles.manual.filter((_, idx) => idx !== fileIndex)
-            : itemFiles.manual
-        }
-      };
-
-      // Remove item entry if both arrays are empty
-      if (newFiles[itemId].warranty.length === 0 && newFiles[itemId].manual.length === 0) {
-        delete newFiles[itemId];
-      }
-
-      return newFiles;
-    });
-
-    // Clear the input value when all files are removed
-    const inputRef = fileInputRefs.current[itemId]?.[documentType];
-    if (inputRef) {
-      inputRef.value = '';
-    }
-  };
-
   const handleFileUpload = async (itemId: string, file: File, documentType: 'warranty' | 'manual') => {
-    if (!user || !registrationId) return;
+    if (!registrationId) return;
 
     const uploadKey = `${itemId}_${documentType}`;
-    setUploadingFiles(prev => ({ ...prev, [uploadKey]: true }));
+    setUploadingFiles((prev) => ({ ...prev, [uploadKey]: true }));
 
-    try {
-      // Get JWT token from localStorage
-      const userData = localStorage.getItem('userData');
-      let authToken = '';
-      if (userData) {
-        try {
-          const parsedData = JSON.parse(userData);
-          if (parsedData.jwt) {
-            authToken = parsedData.jwt;
-          }
-        } catch (error) {
-          console.warn('Failed to parse userData:', error);
-        }
-      }
-
-      // Create FormData for file upload
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('itemId', itemId);
-      formData.append('registrationId', registrationId);
-      formData.append('documentType', documentType);
-
-      // Get API base URL
-      const apiBaseUrl = getApiBaseUrl();
-      const url = import.meta.env.DEV
-        ? `/api/upload/item-document`
-        : `${apiBaseUrl}/api/upload/item-document`;
-
-      // Upload file to API
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: authToken ? `Bearer ${authToken}` : '',
+    const isBuilderFlow = hasBuilderAuth() && registrationId;
+    if (isBuilderFlow) {
+      setPendingItemFiles((prev) => ({
+        ...prev,
+        [itemId]: {
+          ...prev[itemId],
+          [documentType]: file,
         },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Failed to upload document: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      const fileUrl = result.url || result.data?.url || '';
-      const filePath = result.path || result.data?.path || '';
-
-      setSelectedItems(prev => prev.map(item => {
-        if (item.id === itemId) {
-          if (documentType === 'warranty') {
-            const warranty_documents = item.warranty_documents || [];
-            return {
-              ...item,
-              warranty_documents: [...warranty_documents, {
-                name: file.name,
-                url: fileUrl,
-                path: filePath
-              }]
-            };
-          } else {
-            const manual_documents = item.manual_documents || [];
-            return {
-              ...item,
-              manual_documents: [...manual_documents, {
-                name: file.name,
-                url: fileUrl,
-                path: filePath
-              }]
-            };
-          }
-        }
-        return item;
       }));
-
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : "Failed to upload document" };
-    } finally {
-      setUploadingFiles(prev => ({ ...prev, [uploadKey]: false }));
+      setSelectedItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== itemId) return item;
+          const doc = { name: file.name, url: '', path: `pending_${file.name}` };
+          if (documentType === 'warranty') {
+            return { ...item, warranty_documents: [...(item.warranty_documents || []), doc] };
+          }
+          return { ...item, manual_documents: [...(item.manual_documents || []), doc] };
+        })
+      );
+      setUploadingFiles((prev) => ({ ...prev, [uploadKey]: false }));
+      toast({
+        title: `${documentType === 'warranty' ? 'Warranty' : 'Manual'} added`,
+        description: "Click Save to upload this file.",
+      });
+      return;
     }
-  };
 
-  const uploadPendingFiles = async (itemId: string) => {
-    const itemPendingFiles = pendingFiles[itemId];
-    if (!itemPendingFiles) return;
-
-    const allFiles = [
-      ...itemPendingFiles.warranty.map(f => ({ file: f, type: 'warranty' as const })),
-      ...itemPendingFiles.manual.map(f => ({ file: f, type: 'manual' as const }))
-    ];
-
-    if (allFiles.length === 0) return;
-
-    const uploadKey = `${itemId}_upload`;
-    setUploadingFiles(prev => ({ ...prev, [uploadKey]: true }));
+    if (!user) {
+      setUploadingFiles((prev) => ({ ...prev, [uploadKey]: false }));
+      return;
+    }
 
     try {
-      const uploadPromises = allFiles.map(({ file, type }) => 
-        handleFileUpload(itemId, file, type)
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}_${documentType}.${fileExt}`;
+      const filePath = `${user.id}/${registrationId}/${itemId}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('item-documents')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('item-documents')
+        .getPublicUrl(filePath);
+
+      setSelectedItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== itemId) return item;
+          const doc = { name: file.name, url: publicUrl, path: filePath };
+          if (documentType === 'warranty') {
+            return { ...item, warranty_documents: [...(item.warranty_documents || []), doc] };
+          }
+          return { ...item, manual_documents: [...(item.manual_documents || []), doc] };
+        })
       );
 
-      const results = await Promise.all(uploadPromises);
-      const failed = results.filter(r => !r.success);
-
-      if (failed.length > 0) {
-        toast({
-          title: "Some uploads failed",
-          description: `${failed.length} of ${allFiles.length} file${allFiles.length > 1 ? 's' : ''} failed to upload`,
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Files uploaded",
-          description: `All ${allFiles.length} file${allFiles.length > 1 ? 's' : ''} uploaded successfully`,
-        });
-      }
-
-      // Clear pending files for this item
-      setPendingFiles(prev => {
-        const newFiles = { ...prev };
-        delete newFiles[itemId];
-        return newFiles;
+      toast({
+        title: `${documentType === 'warranty' ? 'Warranty' : 'Manual'} uploaded`,
+        description: "The document has been uploaded successfully",
       });
-
-      // Clear file inputs after upload
-      if (fileInputRefs.current[itemId]) {
-        if (fileInputRefs.current[itemId].warranty) {
-          fileInputRefs.current[itemId].warranty.value = '';
-        }
-        if (fileInputRefs.current[itemId].manual) {
-          fileInputRefs.current[itemId].manual.value = '';
-        }
-      }
-    } catch (error) {
+    } catch (error: unknown) {
       toast({
         title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to upload files",
-        variant: "destructive"
+        description: error instanceof Error ? error.message : "Upload failed",
+        variant: "destructive",
       });
     } finally {
-      setUploadingFiles(prev => ({ ...prev, [uploadKey]: false }));
+      setUploadingFiles((prev) => ({ ...prev, [uploadKey]: false }));
     }
   };
 
-  const handleRemoveDocument = async (itemId: string, documentId: string, documentType: 'warranty' | 'manual') => {
-    // Remove from local state immediately (optimistic update)
-    setSelectedItems(prev => prev.map(item => {
-      if (item.id === itemId) {
-        if (documentType === 'warranty') {
-          const filtered = (item.warranty_documents || []).filter(doc => {
-            // Remove document if id, path, url, or name matches
-            return doc.id !== documentId &&
-                   doc.path !== documentId && 
-                   doc.url !== documentId && 
-                   doc.name !== documentId;
-          });
-          return {
-            ...item,
-            warranty_documents: filtered
-          };
-        } else {
-          const filtered = (item.manual_documents || []).filter(doc => {
-            // Remove document if id, path, url, or name matches
-            return doc.id !== documentId &&
-                   doc.path !== documentId && 
-                   doc.url !== documentId && 
-                   doc.name !== documentId;
-          });
-          return {
-            ...item,
-            manual_documents: filtered
-          };
-        }
-      }
-      return item;
-    }));
+  const handleRemoveDocument = async (
+    itemId: string,
+    doc: { path: string; fileId?: string },
+    documentType: 'warranty' | 'manual'
+  ) => {
+    const documentPath = doc.path;
 
-    try {
-      // Get JWT token from localStorage
-      const userData = localStorage.getItem('userData');
-      let authToken = '';
-      if (userData) {
-        try {
-          const parsedData = JSON.parse(userData);
-          if (parsedData.jwt) {
-            authToken = parsedData.jwt;
+    if (documentPath.startsWith('pending_')) {
+      setPendingItemFiles((prev) => {
+        const next = { ...prev };
+        if (next[itemId]) {
+          next[itemId] = { ...next[itemId], [documentType]: undefined };
+          if (!next[itemId].warranty && !next[itemId].manual) delete next[itemId];
+        }
+        return next;
+      });
+      setSelectedItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== itemId) return item;
+          if (documentType === 'warranty') {
+            return { ...item, warranty_documents: (item.warranty_documents || []).filter((d) => d.path !== documentPath) };
           }
-        } catch (error) {
-          console.warn('Failed to parse userData:', error);
-        }
-      }
-
-      // Get API base URL
-      const apiBaseUrl = getApiBaseUrl();
-      const url = import.meta.env.DEV
-        ? `/api/itemfile/${documentId}`
-        : `${apiBaseUrl}/api/itemfile/${documentId}`;
-
-      // Remove file via API
-      const response = await fetch(url, {
-        method: 'DELETE',
-        headers: {
-          Authorization: authToken ? `Bearer ${authToken}` : '',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        // If API call fails, we've already removed it from UI, so just show a warning
-        toast({
-          title: "Document removed from list",
-          description: "Note: File may still exist on server",
-          variant: "default"
-        });
-      } else {
-        toast({
-          title: "Document removed",
-          description: "The document has been removed successfully",
-        });
-      }
-    } catch (error) {
-      // Already removed from UI, just show info
-      toast({
-        title: "Document removed from list",
-        description: "The document has been removed from the list",
-      });
+          return { ...item, manual_documents: (item.manual_documents || []).filter((d) => d.path !== documentPath) };
+        })
+      );
+      toast({ title: "Document removed", description: "The document has been removed." });
+      return;
     }
+
+    if (doc.fileId) {
+      try {
+        await deleteItemFile(doc.fileId).unwrap();
+        if (registrationId) fetchExistingMap(registrationId);
+      } catch (err: unknown) {
+        const message = err && typeof err === "object" && "data" in err ? (err as { data?: string }).data : (err as Error)?.message;
+        toast({
+          title: "Error deleting file",
+          description: String(message ?? "Failed to delete file"),
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      try {
+        const { error } = await supabase.storage.from('item-documents').remove([documentPath]);
+        if (error) throw error;
+      } catch (error: unknown) {
+        toast({
+          title: "Remove failed",
+          description: error instanceof Error ? error.message : "Remove failed",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    setSelectedItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        if (documentType === 'warranty') {
+          return { ...item, warranty_documents: (item.warranty_documents || []).filter((d) => d.path !== documentPath) };
+        }
+        return { ...item, manual_documents: (item.manual_documents || []).filter((d) => d.path !== documentPath) };
+      })
+    );
+    toast({ title: "Document removed", description: "The document has been removed successfully." });
   };
 
   const handleOpenCustomItemModal = () => {
@@ -727,71 +462,99 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
       return;
     }
 
+    if (registrationId && selectedBomId) {
+      setSaving(true);
+      try {
+        await updateBuilderCustomerMap({
+          builderCustomerId: registrationId,
+          builderItemId: newCustomItem.id,
+          billMaterialId: selectedBomId,
+          name: newCustomItem.name.trim(),
+          category: newCustomItem.category || undefined,
+          make: newCustomItem.make?.trim() || undefined,
+          brand: newCustomItem.brand?.trim() || undefined,
+          model: newCustomItem.model?.trim() || undefined,
+          color: newCustomItem.color?.trim() || undefined,
+          serialNumber: newCustomItem.serial_number?.trim() || undefined,
+          notes: newCustomItem.custom_notes?.trim() || undefined,
+        }).unwrap();
+        setSelectedItems(prev => [...prev, newCustomItem]);
+        setShowCustomItemModal(false);
+        toast({
+          title: "Custom item added",
+          description: "The item has been saved and added to the selection.",
+        });
+      } catch (err: unknown) {
+        const message = err && typeof err === "object" && "data" in err ? (err as { data?: string }).data : (err as Error)?.message;
+        toast({
+          title: "Error adding item",
+          description: String(message ?? "Failed to add item"),
+          variant: "destructive",
+        });
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      setSelectedItems(prev => [...prev, newCustomItem]);
+      setShowCustomItemModal(false);
+      toast({
+        title: "Custom item added",
+        description: "The custom item has been added to the selection.",
+      });
+    }
+  };
+
+  const handleSaveItemEdit = async (item: RegistrationItem) => {
     if (!registrationId || !selectedBomId) {
       toast({
-        title: "Missing required information",
-        description: "Please select a BOM and ensure registration ID is available",
+        title: "Cannot save",
+        description: "Customer and BOM must be set to save item details.",
         variant: "destructive"
       });
       return;
     }
-
+    setSavingItemId(item.id);
     try {
-      // Call the API without id field (for creating new custom item)
-      const result = await updateBuilderCustomerMap({
+      const pending = pendingItemFiles[item.id];
+      const builderItemFilesDtos: Array<{ type: 'warranty' | 'Manual'; file: File }> = [];
+      if (pending?.warranty) builderItemFilesDtos.push({ type: 'warranty', file: pending.warranty });
+      if (pending?.manual) builderItemFilesDtos.push({ type: 'Manual', file: pending.manual });
+
+      await updateBuilderCustomerMap({
         builderCustomerId: registrationId,
-        builderItemId: newCustomItem.builderItemId || '',
-        billMaterialId: selectedBomId,
-        seller: newCustomItem.seller,
-        serialNumber: newCustomItem.serial_number,
-        notes: newCustomItem.custom_notes,
-        color: newCustomItem.color,
-        model: newCustomItem.model || undefined,
-        brand: newCustomItem.brand || undefined,
-        make: newCustomItem.make || undefined,
-        name: newCustomItem.name || undefined,
-        category: newCustomItem.category || undefined,
-        builderItemFilesDtos: undefined, // No files for new custom item
+        builderItemId: item.id,
+        billMaterialId: item.bom_id ?? selectedBomId,
+        make: item.make || undefined,
+        brand: item.brand || undefined,
+        model: item.model || undefined,
+        color: item.color || undefined,
+        serialNumber: item.serial_number || undefined,
+        notes: item.custom_notes || undefined,
+        name: item.name || undefined,
+        category: item.category || undefined,
+        ...(builderItemFilesDtos.length > 0 && { builderItemFilesDtos }),
       }).unwrap();
 
-      // Close modal first
-      setShowCustomItemModal(false);
-      
-      // Reset custom item form
-      setNewCustomItem({
-        id: '',
-        name: '',
-        category: 'Other',
-        brand: '',
-        model: '',
-        make: '',
-        description: '',
-        price: null,
-        bom_id: null,
-        color: '',
-        custom_notes: '',
-        is_custom: true,
-        serial_number: '',
-        builderItemId: '',
-        warranty_documents: [],
-        manual_documents: []
+      setPendingItemFiles((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
       });
-      
-      // Refetch items to get the updated list with the new item from API
-      await refetchItems();
-
+      setEditingItemId(null);
+      if (registrationId) fetchExistingMap(registrationId);
       toast({
-        title: "Custom item added",
-        description: result.message || "The custom item has been added successfully",
+        title: "Item saved",
+        description: "Item details and files have been saved successfully.",
       });
-    } catch (error) {
+    } catch (error: unknown) {
+      const err = error as { data?: string; message?: string };
       toast({
-        title: "Failed to add custom item",
-        description: error && typeof error === 'object' && 'data' in error 
-          ? String((error.data as { message?: string })?.message || "Failed to add custom item")
-          : "Failed to add custom item",
-        variant: "destructive"
+        title: "Error saving item",
+        description: err?.data ?? err?.message ?? "Failed to save item",
+        variant: "destructive",
       });
+    } finally {
+      setSavingItemId(null);
     }
   };
 
@@ -817,8 +580,32 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
   }, {} as Record<string, RegistrationItem[]>);
 
   const handleNext = async () => {
-    // Navigate to next page directly without calling Supabase
-    onNext({ selected_items: selectedItems });
+    if (!registrationId) {
+      onNext({ selected_items: selectedItems });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await updateRegistration(registrationId, {
+        selected_items: selectedItems
+      });
+      
+      toast({
+        title: "Items saved",
+        description: "Your item selection has been saved successfully",
+      });
+      
+      onNext({ selected_items: selectedItems });
+    } catch (error: unknown) {
+      toast({
+        title: "Error saving items",
+        description: error instanceof Error ? error.message : "Failed to save items",
+        variant: "destructive"
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -849,68 +636,17 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                   <SelectValue placeholder="Select a Bill of Materials" />
                 </SelectTrigger>
                 <SelectContent className="bg-background z-50">
-                  {loading ? (
-                    <SelectItem value="loading" disabled>
-                      Loading BOMs...
+                  {boms.map((bom) => (
+                    <SelectItem key={bom.id} value={bom.id}>
+                      {bom.name} {bom.project_name && `(${bom.project_name})`}
                     </SelectItem>
-                  ) : bomsError ? (
-                    <SelectItem value="error" disabled>
-                      Error loading BOMs
-                    </SelectItem>
-                  ) : boms.length === 0 ? (
-                    <SelectItem value="empty" disabled>
-                      No BOMs available
-                    </SelectItem>
-                  ) : (
-                    boms.map((bom) => (
-                      <SelectItem key={bom.id} value={bom.id}>
-                        {bom.bomName} {bom.projectName && `(${bom.projectName})`}
-                      </SelectItem>
-                    ))
-                  )}
+                  ))}
                 </SelectContent>
               </Select>
             </CardContent>
           </Card>
 
-          {selectedBomId && !registrationId && (
-            <Card>
-              <CardContent className="py-8">
-                <p className="text-center text-muted-foreground">
-                  Please complete the customer details step first to load items from BOM.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Show message when no BOM is mapped for customer */}
-          {!isLoadingItems && 
-           existingItemsData?.success && 
-           existingItemsData?.message === "No Bom is mapped for customer" && 
-           (!existingItemsData?.data || existingItemsData.data === null || existingItemsData.data.length === 0) && (
-            <Card>
-              <CardContent className="py-8">
-                <div className="text-center space-y-2">
-                  <p className="text-muted-foreground">
-                    {existingItemsData.message || "No BOM is mapped for this customer."}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Please select a Bill of Materials above to get started.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {(isLoadingItems || isFetchingBomItems) && selectedBomId && registrationId && (
-            <Card>
-              <CardContent className="py-8">
-                <p className="text-center text-muted-foreground">Loading items from BOM...</p>
-              </CardContent>
-            </Card>
-          )}
-
-          {!isLoadingItems && selectedItems.length > 0 && (
+          {selectedItems.length > 0 && (
             <>
               <Card>
                 <CardHeader>
@@ -956,86 +692,9 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={async () => {
-                                          if (isEditing) {
-                                            // Save: call API to update builder customer map
-                                            if (!registrationId || !selectedBomId) {
-                                              toast({
-                                                title: "Missing required information",
-                                                description: "Registration ID and BOM ID are required to save changes",
-                                                variant: "destructive"
-                                              });
-                                              return;
-                                            }
-
-                                            try {
-                                              const itemPendingFiles = pendingFiles[item.id];
-                                              const warrantyFiles = itemPendingFiles?.warranty || [];
-                                              const manualFiles = itemPendingFiles?.manual || [];
-                                              
-                                              // Prepare files array
-                                              const builderItemFilesDtos = [
-                                                ...warrantyFiles.map(file => ({ type: 'warranty' as const, file })),
-                                                ...manualFiles.map(file => ({ type: 'Manual' as const, file }))
-                                              ];
-
-                                              // For custom items, builderItemId might be null/empty, use empty string
-                                              // For regular items, use the builderItemId
-                                              const builderItemId = item.is_custom 
-                                                ? (item.builderItemId || '') 
-                                                : (item.builderItemId || '');
-
-                                              // Call the API to update the item
-                                              await updateBuilderCustomerMap({
-                                                id: item.id,
-                                                builderCustomerId: registrationId,
-                                                builderItemId: builderItemId,
-                                                billMaterialId: selectedBomId,
-                                                seller: item.seller || undefined,
-                                                serialNumber: item.serial_number || undefined,
-                                                notes: item.custom_notes || undefined,
-                                                color: item.color || undefined,
-                                                model: item.model || undefined,
-                                                brand: item.brand || undefined,
-                                                make: item.make || undefined,
-                                                name: item.name || undefined,
-                                                category: item.category || undefined,
-                                                builderItemFilesDtos: builderItemFilesDtos.length > 0 ? builderItemFilesDtos : undefined,
-                                              }).unwrap();
-
-                                              // Clear pending files after successful API call
-                                              setPendingFiles(prev => {
-                                                const newFiles = { ...prev };
-                                                delete newFiles[item.id];
-                                                return newFiles;
-                                              });
-
-                                              // Refresh items from server
-                                              await refetchItems();
-
-                                              toast({
-                                                title: "Item updated",
-                                                description: "Item details and files have been saved successfully",
-                                              });
-
-                                              setEditingItemId(null);
-                                            } catch (error) {
-                                              console.error('Error updating item:', error);
-                                              toast({
-                                                title: "Update failed",
-                                                description: error && typeof error === 'object' && 'data' in error 
-                                                  ? String((error.data as { message?: string })?.message || "Failed to update item")
-                                                  : "Failed to update item",
-                                                variant: "destructive"
-                                              });
-                                            }
-                                          } else {
-                                            // Enter edit mode
-                                            setEditingItemId(item.id);
-                                          }
-                                        }}
+                                        onClick={() => setEditingItemId(isEditing ? null : item.id)}
                                       >
-                                        {isEditing ? <Save className="h-4 w-4" /> : <Edit2 className="h-4 w-4" />}
+                                        <Edit2 className="h-4 w-4" />
                                       </Button>
                                       <Button
                                         variant="ghost"
@@ -1109,62 +768,33 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                                           <Input
                                             id={`warranty-${item.id}`}
                                             type="file"
-                                            multiple
-                                            accept="image/*,.pdf"
-                                            ref={(el) => {
-                                              if (!fileInputRefs.current[item.id]) {
-                                                fileInputRefs.current[item.id] = { warranty: null, manual: null };
-                                              }
-                                              fileInputRefs.current[item.id].warranty = el;
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) handleFileUpload(item.id, file, 'warranty');
                                             }}
-                                            onChange={(e) => handleFileSelect(item.id, e.target.files, 'warranty', e.target)}
+                                            disabled={uploadingFiles[`${item.id}_warranty`]}
                                             className="flex-1"
                                           />
+                                          {uploadingFiles[`${item.id}_warranty`] && (
+                                            <span className="text-sm text-muted-foreground">Uploading...</span>
+                                          )}
                                         </div>
-                                        {pendingFiles[item.id]?.warranty && pendingFiles[item.id].warranty.length > 0 && (
+                                        {item.warranty_documents && item.warranty_documents.length > 0 && (
                                           <div className="mt-2 space-y-1">
-                                            <p className="text-xs text-muted-foreground mb-1">Pending upload:</p>
-                                            {pendingFiles[item.id].warranty.map((file, idx) => (
+                                            {item.warranty_documents.map((doc, idx) => (
                                               <div key={idx} className="flex items-center gap-2 text-sm">
                                                 <FileText className="h-4 w-4" />
-                                                <span className="flex-1 min-w-0 truncate break-all">{file.name}</span>
+                                                <span className="flex-1">{doc.name}</span>
                                                 <Button
                                                   variant="ghost"
                                                   size="sm"
-                                                  onClick={() => handleRemovePendingFile(item.id, idx, 'warranty')}
+                                                  onClick={() => handleRemoveDocument(item.id, doc, 'warranty')}
                                                 >
                                                   <X className="h-3 w-3" />
                                                 </Button>
                                               </div>
                                             ))}
                                           </div>
-                                        )}
-                                        {item.warranty_documents && item.warranty_documents.length > 0 && (
-                                          <div className="mt-2 space-y-1">
-                                            {pendingFiles[item.id]?.warranty && pendingFiles[item.id].warranty.length > 0 && (
-                                              <p className="text-xs text-muted-foreground mb-1">Uploaded:</p>
-                                            )}
-                                            {item.warranty_documents.map((doc) => {
-                                              const docIdentifier = doc.id || doc.path || doc.url || doc.name;
-                                              return (
-                                                <div key={docIdentifier} className="flex items-center gap-2 text-sm">
-                                                  <FileText className="h-4 w-4" />
-                                                  <span className="flex-1 min-w-0 truncate break-all">{doc.name}</span>
-                                                  <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleRemoveDocument(item.id, docIdentifier, 'warranty')}
-                                                  >
-                                                    <X className="h-3 w-3" />
-                                                  </Button>
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        )}
-                                        {(!pendingFiles[item.id]?.warranty || pendingFiles[item.id].warranty.length === 0) &&
-                                         (!item.warranty_documents || item.warranty_documents.length === 0) && (
-                                          <p className="mt-2 text-xs text-muted-foreground">No files selected</p>
                                         )}
                                       </div>
                                       <div>
@@ -1173,29 +803,27 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                                           <Input
                                             id={`manual-${item.id}`}
                                             type="file"
-                                            multiple
-                                            accept="image/*,.pdf"
-                                            ref={(el) => {
-                                              if (!fileInputRefs.current[item.id]) {
-                                                fileInputRefs.current[item.id] = { warranty: null, manual: null };
-                                              }
-                                              fileInputRefs.current[item.id].manual = el;
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) handleFileUpload(item.id, file, 'manual');
                                             }}
-                                            onChange={(e) => handleFileSelect(item.id, e.target.files, 'manual', e.target)}
+                                            disabled={uploadingFiles[`${item.id}_manual`]}
                                             className="flex-1"
                                           />
+                                          {uploadingFiles[`${item.id}_manual`] && (
+                                            <span className="text-sm text-muted-foreground">Uploading...</span>
+                                          )}
                                         </div>
-                                        {pendingFiles[item.id]?.manual && pendingFiles[item.id].manual.length > 0 && (
+                                        {item.manual_documents && item.manual_documents.length > 0 && (
                                           <div className="mt-2 space-y-1">
-                                            <p className="text-xs text-muted-foreground mb-1">Pending upload:</p>
-                                            {pendingFiles[item.id].manual.map((file, idx) => (
+                                            {item.manual_documents.map((doc, idx) => (
                                               <div key={idx} className="flex items-center gap-2 text-sm">
                                                 <FileText className="h-4 w-4" />
-                                                <span className="flex-1 min-w-0 truncate break-all">{file.name}</span>
+                                                <span className="flex-1">{doc.name}</span>
                                                 <Button
                                                   variant="ghost"
                                                   size="sm"
-                                                  onClick={() => handleRemovePendingFile(item.id, idx, 'manual')}
+                                                  onClick={() => handleRemoveDocument(item.id, doc, 'manual')}
                                                 >
                                                   <X className="h-3 w-3" />
                                                 </Button>
@@ -1203,33 +831,23 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                                             ))}
                                           </div>
                                         )}
-                                        {item.manual_documents && item.manual_documents.length > 0 && (
-                                          <div className="mt-2 space-y-1">
-                                            {pendingFiles[item.id]?.manual && pendingFiles[item.id].manual.length > 0 && (
-                                              <p className="text-xs text-muted-foreground mb-1">Uploaded:</p>
-                                            )}
-                                            {item.manual_documents.map((doc) => {
-                                              const docIdentifier = doc.id || doc.path || doc.url || doc.name;
-                                              return (
-                                                <div key={docIdentifier} className="flex items-center gap-2 text-sm">
-                                                  <FileText className="h-4 w-4" />
-                                                  <span className="flex-1 min-w-0 truncate break-all">{doc.name}</span>
-                                                  <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleRemoveDocument(item.id, docIdentifier, 'manual')}
-                                                  >
-                                                    <X className="h-3 w-3" />
-                                                  </Button>
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        )}
-                                        {(!pendingFiles[item.id]?.manual || pendingFiles[item.id].manual.length === 0) &&
-                                         (!item.manual_documents || item.manual_documents.length === 0) && (
-                                          <p className="mt-2 text-xs text-muted-foreground">No files selected</p>
-                                        )}
+                                      </div>
+                                      <div className="col-span-2 flex justify-end gap-2 pt-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => setEditingItemId(null)}
+                                          disabled={savingItemId === item.id}
+                                        >
+                                          Cancel
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          onClick={() => handleSaveItemEdit(item)}
+                                          disabled={savingItemId === item.id}
+                                        >
+                                          {savingItemId === item.id ? "Saving..." : "Save"}
+                                        </Button>
                                       </div>
                                     </div>
                                   ) : (
@@ -1240,7 +858,16 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
                                         {item.model && <span>• Model: {item.model}</span>}
                                         {item.color && <span>• Color: {item.color}</span>}
                                         {item.serial_number && <span>• Serial: {item.serial_number}</span>}
+                                        {item.warranty_years && <span>• Warranty: {item.warranty_years} yr{item.warranty_years > 1 ? 's' : ''}</span>}
                                       </div>
+                                      {item.manual_url && (
+                                        <div className="text-xs text-muted-foreground">
+                                          <a href={item.manual_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
+                                            <FileText className="h-3 w-3" />
+                                            View BOM Manual
+                                          </a>
+                                        </div>
+                                      )}
                                       {item.custom_notes && (
                                         <div className="text-xs text-muted-foreground">
                                           Notes: {item.custom_notes}
@@ -1292,9 +919,6 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
         <DialogContent className="sm:max-w-[500px] bg-background">
           <DialogHeader>
             <DialogTitle>Add Custom Item</DialogTitle>
-            <DialogDescription>
-              Add a custom item that is not in the BOM. Fill in the details below.
-            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div>
@@ -1386,36 +1010,11 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, billMaterialI
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCustomItemModal(false)}>
+            <Button variant="outline" onClick={() => setShowCustomItemModal(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={handleSaveCustomItem}>
-              Add Item
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Warning modal when BOM is already mapped */}
-      <Dialog open={showMappedWarning} onOpenChange={setShowMappedWarning}>
-        <DialogContent className="sm:max-w-[420px] bg-background">
-          <DialogHeader>
-            <DialogTitle>Existing BOM Mapping</DialogTitle>
-            <DialogDescription>
-              {existingItemsData?.message || "BOM is already mapped for this customer. Do you want to replace it?"}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Selecting "Yes" will reload items from the chosen Bill of Materials.
-            </p>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setShowMappedWarning(false)} disabled={warningLoading}>
-              No
-            </Button>
-            <Button onClick={handleConfirmBomChange} disabled={warningLoading}>
-              {warningLoading ? "Loading..." : "Yes"}
+            <Button onClick={handleSaveCustomItem} disabled={saving}>
+              {saving ? "Adding..." : "Add Item"}
             </Button>
           </DialogFooter>
         </DialogContent>

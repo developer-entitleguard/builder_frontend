@@ -1,13 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { api } from './apiSlice';
-import type { 
-  BuilderItem, 
-  CreateBuilderItemRequest, 
+import type {
+  BuilderItem,
+  CreateBuilderItemRequest,
   UpdateBuilderItemRequest,
   PaginatedResponse,
   PaginationParams,
-  SearchParams
+  SearchParams,
 } from '@/lib/api/types.ts';
+import { getApiBaseUrl } from '@/lib/config';
+import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 
 export const itemsApi = api.injectEndpoints({
   endpoints: (build) => ({
@@ -30,27 +32,152 @@ export const itemsApi = api.injectEndpoints({
       providesTags: (result, error, id) => [{ type: 'Item', id }],
     }),
 
-    // Create item
+    // Create item (multipart/form-data, matches OLD /api/builder/item payload)
     createItem: build.mutation<BuilderItem, CreateBuilderItemRequest>({
-      query: (data) => ({
-        url: '/api/builder/item',
-        method: 'POST',
-        body: data,
-      }),
+      queryFn: async (data) => {
+        try {
+          const formData = new FormData();
+          formData.append('name', data.name);
+          formData.append('category', data.category);
+          if (data.make) formData.append('make', data.make);
+          if (data.brand) formData.append('brand', data.brand);
+          if (data.model) formData.append('model', data.model);
+          if (data.text) formData.append('text', data.text);
+          formData.append('note', data.note ?? '');
+          formData.append('price', data.price != null ? String(data.price) : '');
+          if (data.documentationUrl) formData.append('documentationUrl', data.documentationUrl);
+          if (data.purchaser) formData.append('purchaser', data.purchaser);
+          if (data.builderOrganizationId) {
+            formData.append('builderOrganizationId', data.builderOrganizationId);
+          }
+          if (data.billMaterialId) {
+            formData.append('billMaterialId', data.billMaterialId);
+          }
+
+          // JWT from localStorage
+          let authToken = '';
+          try {
+            const userData = localStorage.getItem('userData');
+            if (userData) {
+              const parsed = JSON.parse(userData);
+              if (parsed.jwt) authToken = parsed.jwt;
+            }
+          } catch {
+            // ignore
+          }
+
+          const base = getApiBaseUrl();
+          const url = base ? `${base}/api/builder/item` : '/api/builder/item';
+
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              Authorization: authToken ? `Bearer ${authToken}` : '',
+              // Do NOT set Content-Type; browser will set multipart boundary
+            },
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            return {
+              error: {
+                status: response.status,
+                data:
+                  (errorData as { message?: string })?.message ||
+                  `Failed to save item: ${response.statusText}`,
+              } as FetchBaseQueryError,
+            };
+          }
+
+          const result = await response.json();
+          return { data: result as BuilderItem };
+        } catch (error) {
+          return {
+            error: {
+              status: 'FETCH_ERROR',
+              error: String(error),
+            } as FetchBaseQueryError,
+          };
+        }
+      },
       invalidatesTags: ['Item'],
     }),
 
-    // Update item
-    updateItem: build.mutation<BuilderItem, { id: string; data: UpdateBuilderItemRequest }>({
-      query: ({ id, data }) => ({
-        url: '/api/builder/item',
-        method: 'POST',
-        body: { ...data, id },
-      }),
-      invalidatesTags: (result, error, { id }) => [
-        { type: 'Item', id },
-        'Item'
-      ],
+    // Update item (multipart/form-data, same endpoint as create)
+    updateItem: build.mutation<
+      BuilderItem,
+      { id: string; data: UpdateBuilderItemRequest & { builderOrganizationId?: string; billMaterialId?: string } }
+    >({
+      queryFn: async ({ id, data }) => {
+        try {
+          const formData = new FormData();
+          formData.append('id', id);
+          if (data.name) formData.append('name', data.name);
+          if (data.category) formData.append('category', data.category);
+          if (data.make) formData.append('make', data.make);
+          if (data.brand) formData.append('brand', data.brand);
+          if (data.model) formData.append('model', data.model);
+          if (data.text || data.description) {
+            formData.append('text', data.text ?? data.description ?? '');
+          }
+          if (data.note !== undefined) formData.append('note', data.note ?? '');
+          if (data.price != null) formData.append('price', String(data.price));
+          if (data.documentationUrl) formData.append('documentationUrl', data.documentationUrl);
+          if (data.purchaser) formData.append('purchaser', data.purchaser);
+          if (data.builderOrganizationId) {
+            formData.append('builderOrganizationId', data.builderOrganizationId);
+          }
+          if (data.billMaterialId) {
+            formData.append('billMaterialId', data.billMaterialId);
+          }
+
+          let authToken = '';
+          try {
+            const userData = localStorage.getItem('userData');
+            if (userData) {
+              const parsed = JSON.parse(userData);
+              if (parsed.jwt) authToken = parsed.jwt;
+            }
+          } catch {
+            // ignore
+          }
+
+          const base = getApiBaseUrl();
+          const url = base ? `${base}/api/builder/item` : '/api/builder/item';
+
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              Authorization: authToken ? `Bearer ${authToken}` : '',
+            },
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            return {
+              error: {
+                status: response.status,
+                data:
+                  (errorData as { message?: string })?.message ||
+                  `Failed to update item: ${response.statusText}`,
+              } as FetchBaseQueryError,
+            };
+          }
+
+          const result = await response.json();
+          return { data: result as BuilderItem };
+        } catch (error) {
+          return {
+            error: {
+              status: 'FETCH_ERROR',
+              error: String(error),
+            } as FetchBaseQueryError,
+          };
+        }
+      },
+      invalidatesTags: (result, error, { id }) => [{ type: 'Item', id }, 'Item'],
     }),
 
     // Delete item
@@ -293,6 +420,14 @@ export const itemsApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Item'],
     }),
+    // DELETE /api/itemfile/{id} - delete a single item file by id
+    deleteItemFile: build.mutation<{ success: boolean; message?: string }, string>({
+      query: (id) => ({
+        url: `/api/itemfile/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Item', 'CustomerDetails'],
+    }),
     checkExistingCustomerItemMap: build.query<{
       success: boolean;
       message: string;
@@ -355,5 +490,7 @@ export const {
   useLazyCheckBOMRestrictionsQuery,
   useAssignBOMMutation,
   useCheckExistingCustomerItemMapQuery,
+  useLazyCheckExistingCustomerItemMapQuery,
   useDeleteBuilderItemFilesMutation,
+  useDeleteItemFileMutation,
 } = itemsApi;

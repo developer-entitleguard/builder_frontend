@@ -1,4 +1,4 @@
-// Basic API types for RTK Query
+// Auth API types (match OLD project / Phase 3 backend)
 export interface SignUpRequest {
   email: string;
   password: string;
@@ -70,6 +70,7 @@ export interface ResetPasswordWithTokenRequest {
   password: string;
 }
 
+// Dashboard & stats
 export interface DashboardStats {
   total_registrations: number;
   pending_registrations: number;
@@ -95,10 +96,7 @@ export interface FilterOptions {
   statuses: string[];
   categories: string[];
   organizations: unknown[];
-  date_ranges: {
-    label: string;
-    value: string;
-  }[];
+  date_ranges: { label: string; value: string }[];
 }
 
 export interface BaseEntity {
@@ -134,6 +132,7 @@ export interface SearchParams {
   organization_id?: string;
 }
 
+// Builder items
 export interface BuilderItem extends BaseEntity {
   id: string;
   builderOrganizationId: string | null;
@@ -155,7 +154,7 @@ export interface BuilderItem extends BaseEntity {
 }
 
 export interface CreateBuilderItemRequest {
-  id?: string; // Optional ID for updates
+  id?: string;
   name: string;
   category: string;
   brand?: string;
@@ -164,6 +163,7 @@ export interface CreateBuilderItemRequest {
   documentationUrl?: string;
   purchaser?: string;
   builderOrganizationId?: string;
+  billMaterialId?: string;
   status?: string;
   text?: string;
   note?: string | null;
@@ -177,8 +177,16 @@ export interface UpdateBuilderItemRequest {
   price?: number;
   unit?: string;
   is_active?: boolean;
+  make?: string;
+  brand?: string;
+  model?: string;
+  text?: string;
+  note?: string | null;
+  documentationUrl?: string;
+  purchaser?: string;
 }
 
+// Registrations
 export interface HomeownerRegistration extends BaseEntity {
   homeowner_name: string;
   homeowner_email: string;
@@ -223,6 +231,7 @@ export interface UpdateRegistrationRequest {
   entitlement_sent_at?: string;
 }
 
+// Users
 export interface User extends BaseEntity {
   email: string;
   company_name: string;
@@ -238,6 +247,7 @@ export interface UpdateUserRequest {
   phone?: string;
 }
 
+// Builder user / org / vendor
 export interface BuilderUser {
   id: string;
   firstName: string;
@@ -266,6 +276,22 @@ export interface CreateBuilderUserRequest {
   builderOrganizationId: string;
 }
 
+export interface UpdateBuilderUserRequest {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName?: string;
+  contact?: string;
+  role: string;
+  builderOrganizationId: string;
+}
+
+export interface BuilderUserResponse {
+  success: boolean;
+  message: string;
+  data: BuilderUser[];
+}
+
 export interface BuilderOrganization {
   id: string;
   name: string;
@@ -291,22 +317,6 @@ export interface BuilderOrganizationResponse {
   success: boolean;
   message: string;
   data?: BuilderOrganization;
-}
-
-export interface UpdateBuilderUserRequest {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName?: string;
-  contact?: string;
-  role: string;
-  builderOrganizationId: string;
-}
-
-export interface BuilderUserResponse {
-  success: boolean;
-  message: string;
-  data: BuilderUser[];
 }
 
 export interface Vendor extends BaseEntity {
@@ -344,6 +354,7 @@ export interface VendorResponse {
   data: Vendor[];
 }
 
+// Builder customer & customer details
 export interface BuilderCustomer {
   id: string;
   firstName: string;
@@ -357,11 +368,7 @@ export interface BuilderCustomer {
   projectName?: string;
   settlementDate?: string;
   notes?: string;
-  billOfMaterials?: {
-    id: string;
-    bomName?: string;
-    projectName?: string;
-  };
+  billOfMaterials?: { id: string; bomName?: string; projectName?: string };
   builderOrganization: {
     id: string;
     name: string;
@@ -384,9 +391,19 @@ export interface CreateBuilderCustomerRequest {
   city: string;
   state: string;
   zip: string;
+  country?: string;
+  projectId?: string;
   projectName?: string;
   settlementDate?: string;
   notes?: string;
+  numBedrooms?: number;
+  numRooms?: number;
+  price?: number;
+  totalBuiltUpArea?: number;
+  consentMethod?: string;
+  consentReceived?: boolean;
+  consentReceivedAt?: string;
+  consentToken?: string;
   builderOrganizationId: string;
 }
 

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useOrganization } from '@/hooks/useOrganization';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
+import { useGetCustomerDetailsQuery, useCreateCustomerEntitlementMutation, useDeleteBuilderCustomerMutation } from '@/store/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -19,7 +21,9 @@ import {
   Building,
   Package,
   FileText,
-  Trash2
+  Trash2,
+  DollarSign,
+  KeyRound
 } from 'lucide-react';
 import Header from '@/components/Header';
 import {
@@ -51,24 +55,109 @@ interface RegistrationData {
   created_at: string;
   updated_at: string;
   entitlement_sent_at: string | null;
+  price: number | null;
+  num_bedrooms: number | null;
+  num_rooms: number | null;
+  total_built_up_area: number | null;
 }
+
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem('userData');
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!(parsed?.jwt);
+  } catch {
+    return false;
+  }
+};
+
+const getBuilderId = (): string | null => {
+  try {
+    const userData = localStorage.getItem('userData');
+    if (!userData) return null;
+    const parsed = JSON.parse(userData);
+    const orgId = parsed?.userInfo?.builderOrganization?.id ?? parsed?.builderOrganization?.id ?? parsed?.builder_organization?.id;
+    return orgId ?? parsed?.userInfo?.id ?? parsed?.id ?? null;
+  } catch {
+    return null;
+  }
+};
 
 const RegistrationDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { organization } = useOrganization();
   const { toast } = useToast();
   const [registration, setRegistration] = useState<RegistrationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
+
+  const builderId = organization?.id ?? getBuilderId();
+  const isBuilderFlow = !user && hasBuilderAuth();
+  const { data: customerDetailsResponse, isLoading: loadingFromApi } = useGetCustomerDetailsQuery(
+    { builderId: builderId ?? '', customerId: id ?? '' },
+    { skip: !id || !builderId || !isBuilderFlow }
+  );
+  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
+  const [deleteBuilderCustomer] = useDeleteBuilderCustomerMutation();
 
   useEffect(() => {
-    if (!user || !id) {
+    if (!id) {
       navigate('/dashboard');
       return;
     }
-    fetchRegistration();
-  }, [user, id, navigate]);
+    if (user) {
+      fetchRegistration();
+    } else if (!isBuilderFlow) {
+      setLoading(false);
+      if (!hasBuilderAuth()) navigate('/dashboard');
+    }
+  }, [user, id, navigate, isBuilderFlow]);
+
+  useEffect(() => {
+    if (!isBuilderFlow || !customerDetailsResponse?.data?.customer) return;
+    const c = customerDetailsResponse.data.customer;
+    setRegistration({
+      id: c.id,
+      customer_name: `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim(),
+      customer_email: c.email ?? '',
+      customer_phone: c.contact ?? null,
+      property_address: c.address ?? '',
+      property_city: c.city ?? '',
+      property_state: c.state ?? '',
+      property_zip: c.zip ?? '',
+      project_name: c.projectName ?? null,
+      settlement_date: c.settlementDate ?? null,
+      notes: c.notes ?? null,
+      status: 'draft',
+      selected_items: (customerDetailsResponse.data as any).mappedItems ?? [],
+      documents_uploaded: {},
+      created_at: '',
+      updated_at: '',
+      entitlement_sent_at: null,
+      price: null,
+      num_bedrooms: null,
+      num_rooms: null,
+      total_built_up_area: null,
+    });
+    setLoading(false);
+  }, [isBuilderFlow, customerDetailsResponse]);
+
+  useEffect(() => {
+    if (isBuilderFlow && !loadingFromApi && !customerDetailsResponse?.data?.customer && builderId && id) {
+      toast({
+        title: "Registration not found",
+        description: "This registration doesn't exist or you don't have access to it.",
+        variant: "destructive"
+      });
+      navigate('/dashboard');
+    } else if (isBuilderFlow && !loadingFromApi) {
+      setLoading(false);
+    }
+  }, [isBuilderFlow, loadingFromApi, customerDetailsResponse, builderId, id, toast, navigate]);
 
   const fetchRegistration = async () => {
     if (!user || !id) return;
@@ -113,12 +202,15 @@ const RegistrationDetail = () => {
       documents_pending: { label: 'Documents Pending', variant: 'outline' as const },
       ready_for_review: { label: 'Ready for Review', variant: 'default' as const },
       sent: { label: 'Sent', variant: 'default' as const },
-      delivered: { label: 'Delivered', variant: 'default' as const }
+      delivered: { label: 'Delivered', variant: 'default' as const },
+      handed_over: { label: 'Handed Over', variant: 'default' as const }
     };
     
     const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.draft;
-    return <Badge variant={config.variant}>{config.label}</Badge>;
+    return <Badge variant={config.variant} className={status === 'handed_over' ? 'bg-green-600 text-white' : ''}>{config.label}</Badge>;
   };
+
+  const isHandedOver = registration?.status === 'handed_over';
 
   const handleContinueOnboarding = () => {
     // Navigate to onboarding with the registration ID to continue editing
@@ -129,25 +221,57 @@ const RegistrationDetail = () => {
     if (!registration) return;
 
     try {
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .update({ 
-          status: 'sent',
-          entitlement_sent_at: new Date().toISOString()
-        })
-        .eq('id', registration.id);
-
-      if (error) throw error;
+      if (isBuilderFlow) {
+        await createCustomerEntitlement({ builderCustomerId: registration.id }).unwrap();
+      } else {
+        const { error } = await supabase
+          .from('homeowner_registrations')
+          .update({
+            status: 'sent',
+            entitlement_sent_at: new Date().toISOString()
+          })
+          .eq('id', registration.id);
+        if (error) throw error;
+      }
 
       toast({
         title: "Entitlement sent!",
         description: "The warranty entitlement has been sent to the homeowner."
       });
 
-      fetchRegistration(); // Refresh data
+      if (user) fetchRegistration();
     } catch (error: any) {
       toast({
         title: "Error sending entitlement",
+        description: error?.data ?? error?.message ?? 'Failed to send entitlement',
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleMarkHandedOver = async () => {
+    if (!registration) return;
+
+    try {
+      const { error } = await supabase
+        .from('homeowner_registrations')
+        .update({ 
+          status: 'handed_over'
+        })
+        .eq('id', registration.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Property handed over",
+        description: "The property has been marked as handed over. This registration is now read-only."
+      });
+
+      setHandoverDialogOpen(false);
+      fetchRegistration();
+    } catch (error: any) {
+      toast({
+        title: "Error updating status",
         description: error.message,
         variant: "destructive"
       });
@@ -158,16 +282,19 @@ const RegistrationDetail = () => {
     if (!registration) return;
 
     try {
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .delete()
-        .eq('id', registration.id);
-
-      if (error) throw error;
+      if (isBuilderFlow) {
+        await deleteBuilderCustomer(registration.id).unwrap();
+      } else {
+        const { error } = await supabase
+          .from('homeowner_registrations')
+          .delete()
+          .eq('id', registration.id);
+        if (error) throw error;
+      }
 
       toast({
         title: "Registration deleted",
-        description: registration.status === 'sent' 
+        description: registration.status === 'sent'
           ? "The property has been removed from the homeowner's entitlements."
           : "The registration has been deleted successfully."
       });
@@ -176,13 +303,15 @@ const RegistrationDetail = () => {
     } catch (error: any) {
       toast({
         title: "Error deleting registration",
-        description: error.message,
+        description: error?.data ?? error?.message ?? 'Failed to delete',
         variant: "destructive"
       });
     }
   };
 
-  if (loading) {
+  const isLoading = user ? loading : (isBuilderFlow ? loadingFromApi : false);
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
@@ -230,18 +359,31 @@ const RegistrationDetail = () => {
           </div>
           <div className="flex items-center space-x-4">
             {getStatusBadge(registration.status)}
-            <Button variant="outline" onClick={handleContinueOnboarding}>
-              <Edit className="h-4 w-4 mr-2" />
-              {registration.status === 'sent' ? 'Update Details' : 'Continue Editing'}
-            </Button>
-            <Button onClick={handleSendEntitlement}>
-              <Send className="h-4 w-4 mr-2" />
-              {registration.status === 'sent' ? 'Resend Entitlement' : 'Send Entitlement'}
-            </Button>
-            <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
-            </Button>
+            {!isHandedOver && (
+              <>
+                <Button variant="outline" onClick={handleContinueOnboarding}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  {registration.status === 'sent' ? 'Update Details' : 'Continue Editing'}
+                </Button>
+                <Button onClick={handleSendEntitlement}>
+                  <Send className="h-4 w-4 mr-2" />
+                  {registration.status === 'sent' ? 'Resend Entitlement' : 'Send Entitlement'}
+                </Button>
+                {registration.status === 'sent' && (
+                  <Button variant="secondary" onClick={() => setHandoverDialogOpen(true)}>
+                    <KeyRound className="h-4 w-4 mr-2" />
+                    Mark Handed Over
+                  </Button>
+                )}
+                <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              </>
+            )}
+            {isHandedOver && (
+              <p className="text-sm text-muted-foreground italic">This registration is read-only</p>
+            )}
           </div>
         </div>
 
@@ -318,6 +460,35 @@ const RegistrationDetail = () => {
                   </div>
                 </div>
               )}
+              {registration.price != null && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Property Price</p>
+                  <div className="flex items-center space-x-2">
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-sm">${registration.price.toLocaleString()}</p>
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-3 gap-4">
+                {registration.num_bedrooms != null && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Bedrooms</p>
+                    <p className="text-sm">{registration.num_bedrooms}</p>
+                  </div>
+                )}
+                {registration.num_rooms != null && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Rooms</p>
+                    <p className="text-sm">{registration.num_rooms}</p>
+                  </div>
+                )}
+                {registration.total_built_up_area != null && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Built Up Area</p>
+                    <p className="text-sm">{registration.total_built_up_area} sqm</p>
+                  </div>
+                )}
+              </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Created</p>
                 <p className="text-sm">{new Date(registration.created_at).toLocaleDateString()}</p>
@@ -340,16 +511,32 @@ const RegistrationDetail = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {registration.selected_items && Object.keys(registration.selected_items).length > 0 ? (
+              {registration.selected_items && Array.isArray(registration.selected_items) && registration.selected_items.length > 0 ? (
                 <div className="space-y-4">
-                  {Object.entries(registration.selected_items).map(([category, items]: [string, any]) => (
+                  {/* Group items by category */}
+                  {Object.entries(
+                    registration.selected_items.reduce((acc: Record<string, any[]>, item: any) => {
+                      const category = item.category || 'Other';
+                      if (!acc[category]) acc[category] = [];
+                      acc[category].push(item);
+                      return acc;
+                    }, {})
+                  ).map(([category, items]: [string, any[]]) => (
                     <div key={category}>
                       <h4 className="font-medium text-sm mb-2">{category}</h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        {Array.isArray(items) && items.map((item: string, index: number) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {item}
-                          </Badge>
+                      <div className="space-y-2">
+                        {items.map((item: any, index: number) => (
+                          <div key={item.id || index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{item.name}</p>
+                              {item.brand && <p className="text-xs text-muted-foreground">{item.brand} {item.model}</p>}
+                            </div>
+                            {item.warranty_years && (
+                              <Badge variant="outline" className="text-xs ml-2">
+                                {item.warranty_years}yr warranty
+                              </Badge>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -370,20 +557,69 @@ const RegistrationDetail = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {registration.documents_uploaded && Object.keys(registration.documents_uploaded).length > 0 ? (
-                <div className="space-y-2">
-                  {Object.entries(registration.documents_uploaded).map(([docType, files]: [string, any]) => (
-                    <div key={docType} className="flex items-center justify-between">
-                      <span className="text-sm">{docType}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {Array.isArray(files) ? files.length : 0} files
-                      </Badge>
+              {(() => {
+                // Collect documents from selected items
+                const allDocuments: { type: string; name: string; url: string }[] = [];
+                
+                if (registration.selected_items && Array.isArray(registration.selected_items)) {
+                  registration.selected_items.forEach((item: any) => {
+                    if (item.warranty_documents && Array.isArray(item.warranty_documents)) {
+                      item.warranty_documents.forEach((doc: any) => {
+                        allDocuments.push({ type: 'Warranty', name: `${item.name} - Warranty`, url: doc.url || doc });
+                      });
+                    }
+                    if (item.manual_documents && Array.isArray(item.manual_documents)) {
+                      item.manual_documents.forEach((doc: any) => {
+                        allDocuments.push({ type: 'Manual', name: `${item.name} - Manual`, url: doc.url || doc });
+                      });
+                    }
+                    if (item.manual_url) {
+                      allDocuments.push({ type: 'Manual', name: `${item.name} - Manual`, url: item.manual_url });
+                    }
+                    if (item.documentation_url) {
+                      allDocuments.push({ type: 'Documentation', name: `${item.name} - Documentation`, url: item.documentation_url });
+                    }
+                  });
+                }
+                
+                // Also check documents_uploaded object
+                if (registration.documents_uploaded && Object.keys(registration.documents_uploaded).length > 0) {
+                  Object.entries(registration.documents_uploaded).forEach(([docType, files]: [string, any]) => {
+                    if (Array.isArray(files)) {
+                      files.forEach((file: any) => {
+                        allDocuments.push({ type: docType, name: file.name || docType, url: file.url || file });
+                      });
+                    }
+                  });
+                }
+                
+                if (allDocuments.length > 0) {
+                  return (
+                    <div className="space-y-2">
+                      {allDocuments.map((doc, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <div className="flex-1">
+                            <p className="text-sm">{doc.name}</p>
+                            <Badge variant="outline" className="text-xs">{doc.type}</Badge>
+                          </div>
+                          {doc.url && (
+                            <a 
+                              href={doc.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline ml-2"
+                            >
+                              View
+                            </a>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-sm">No documents uploaded yet.</p>
-              )}
+                  );
+                }
+                
+                return <p className="text-muted-foreground text-sm">No documents uploaded yet.</p>;
+              })()}
             </CardContent>
           </Card>
         </div>
@@ -403,6 +639,23 @@ const RegistrationDetail = () => {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={handoverDialogOpen} onOpenChange={setHandoverDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark as Handed Over</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to mark this property as handed over? Once marked, this registration will become read-only and cannot be edited.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleMarkHandedOver}>
+              Confirm Handover
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

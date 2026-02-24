@@ -120,9 +120,9 @@ const ResetPassword = () => {
           <div className="flex items-center justify-center mb-4">
             <div className="p-1">
               <img 
-                src="/images/feature-home-1.jpg" 
+                src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
                 alt="Entitle Guard for Builders Logo" 
-                className="h-8 w-8 rounded-lg object-cover"
+                className="h-8 w-8 rounded-lg"
               />
             </div>
             <h1 className="text-2xl font-bold text-foreground">Entitle Guard for Builders</h1>

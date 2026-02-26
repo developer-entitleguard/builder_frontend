@@ -41,6 +41,20 @@ export interface BuilderPricingResponse {
   data: BuilderPricingEntry[];
 }
 
+export interface CreateProjectPricingResponse {
+  success: boolean;
+  message: string;
+  data: {
+    pricingId: string;
+  };
+}
+
+export interface GenerateProjectPricingResponse {
+  success: boolean;
+  message: string;
+  data?: unknown;
+}
+
 export interface BuilderPricingCostItemsResponse {
   success: boolean;
   message: string;
@@ -113,6 +127,31 @@ export const pricingApi = api.injectEndpoints({
       ],
     }),
 
+    // POST /api/builder/projects/:projectId/pricing
+    createProjectPricing: build.mutation<
+      CreateProjectPricingResponse,
+      { projectId: string }
+    >({
+      query: ({ projectId }) => ({
+        url: `/api/builder/projects/${projectId}/pricing`,
+        method: "POST",
+      }),
+    }),
+
+    // POST /api/builder/projects/:projectId/pricing/:pricingId/generate
+    generateProjectPricing: build.mutation<
+      GenerateProjectPricingResponse,
+      { projectId: string; pricingId: string }
+    >({
+      query: ({ projectId, pricingId }) => ({
+        url: `/api/builder/projects/${projectId}/pricing/${pricingId}/generate`,
+        method: "POST",
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: "ProjectPricing", id: projectId },
+      ],
+    }),
+
     // PUT /api/builder/pricing/:pricingId/cost-items/:id
     updatePricingCostItem: build.mutation<
       BuilderPricingCostItemResponse,
@@ -139,4 +178,6 @@ export const {
   useGetPricingCostItemByIdQuery,
   useCreatePricingCostItemsMutation,
   useUpdatePricingCostItemMutation,
+  useCreateProjectPricingMutation,
+  useGenerateProjectPricingMutation,
 } = pricingApi;

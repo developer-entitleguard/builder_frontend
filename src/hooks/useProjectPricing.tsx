@@ -10,6 +10,8 @@ import {
   useLazyGetPricingCostItemsQuery,
   useCreatePricingCostItemsMutation,
   useUpdatePricingCostItemMutation,
+  useCreateProjectPricingMutation,
+  useGenerateProjectPricingMutation,
 } from "@/store/api/pricing";
 import type {
   BuilderPricingEntry,
@@ -133,6 +135,8 @@ export const useProjectPricing = (projectId: string | undefined) => {
   const [fetchBuilderCostItems] = useLazyGetPricingCostItemsQuery();
   const [createPricingCostItems] = useCreatePricingCostItemsMutation();
   const [updatePricingCostItem] = useUpdatePricingCostItemMutation();
+  const [createProjectPricing] = useCreateProjectPricingMutation();
+  const [generateProjectPricing] = useGenerateProjectPricingMutation();
 
   const fetchPricing = useCallback(async () => {
     if (!projectId) return;
@@ -249,71 +253,52 @@ export const useProjectPricing = (projectId: string | undefined) => {
     if (isBuilder) {
       try {
         setGenerating(true);
+
+        // Step 1: POST /api/builder/projects/{projectId}/pricing → get pricingId
+        const createResult = await createProjectPricing({ projectId }).unwrap();
+        if (!createResult?.success || !createResult?.data?.pricingId) {
+          throw new Error(createResult?.message ?? "Failed to create pricing record");
+        }
+        const pricingId = createResult.data.pricingId;
+
+        // Step 2: POST /api/builder/projects/{projectId}/pricing/{pricingId}/generate
+        await generateProjectPricing({ projectId, pricingId }).unwrap();
+
+        // Fetch the freshly generated pricing and cost items
         const result = await fetchBuilderPricing({ projectId }).unwrap();
         if (result?.success && Array.isArray(result.data)) {
-          const latest =
-            result.data.length > 0
-              ? result.data[result.data.length - 1]
-              : undefined;
+          const latest = result.data.length > 0
+            ? result.data[result.data.length - 1]
+            : undefined;
           const { pricing: p } = mapBuilderPricingToState(latest);
           setPricing(p);
 
           if (latest?.id) {
-            try {
-              const costItemsResult = await fetchBuilderCostItems({
-                pricingId: latest.id,
-              }).unwrap();
-              if (
-                costItemsResult?.success &&
-                Array.isArray(costItemsResult.data)
-              ) {
-                const items = costItemsResult.data.map((c, idx) =>
-                  mapBuilderCostItemToState(c, latest.id!, idx)
-                );
-                setCostItems(items);
-                const total =
-                  p?.final_price ??
-                  items.reduce((s, i) => s + Number(i.total_cost), 0);
-                toast({
-                  title: "Pricing loaded",
-                  description: items.length
-                    ? `${items.length} cost items, total $${total.toLocaleString()}`
-                    : "No pricing entries yet.",
-                });
-              } else {
-                setCostItems([]);
-                toast({
-                  title: "No pricing data",
-                  description: "No cost items returned.",
-                });
-              }
-            } catch (e) {
-              setCostItems([]);
+            const costItemsResult = await fetchBuilderCostItems({
+              pricingId: latest.id,
+            }).unwrap();
+            if (costItemsResult?.success && Array.isArray(costItemsResult.data)) {
+              const items = costItemsResult.data.map((c, idx) =>
+                mapBuilderCostItemToState(c, latest.id!, idx)
+              );
+              setCostItems(items);
+              const total = p?.final_price ?? items.reduce((s, i) => s + Number(i.total_cost), 0);
               toast({
-                title: "Error loading pricing",
-                description:
-                  e instanceof Error ? e.message : "Failed to load cost items",
-                variant: "destructive",
+                title: "Pricing generated",
+                description: `${items.length} cost items · Total $${total.toLocaleString()}`,
               });
-              return false;
+            } else {
+              setCostItems([]);
             }
           } else {
             setCostItems([]);
           }
-          return true;
         }
-        setPricing(null);
-        setCostItems([]);
-        toast({
-          title: "No pricing data",
-          description: result?.message ?? "No pricing entries returned.",
-        });
         return true;
       } catch (e) {
         toast({
-          title: "Error loading pricing",
-          description:
-            e instanceof Error ? e.message : "Failed to load pricing",
+          title: "Error generating pricing",
+          description: e instanceof Error ? e.message : "Failed to generate pricing",
           variant: "destructive",
         });
         return false;

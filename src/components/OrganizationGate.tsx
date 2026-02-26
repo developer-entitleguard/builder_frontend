@@ -6,6 +6,17 @@ import OrganizationSelector from "@/components/OrganizationSelector";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2 } from "lucide-react";
 
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    return !!(parsed?.jwt);
+  } catch {
+    return false;
+  }
+};
+
 interface OrganizationGateProps {
   children: React.ReactNode;
 }
@@ -55,8 +66,8 @@ const OrganizationGate = ({ children }: OrganizationGateProps) => {
     );
   }
 
-  // If not authenticated after loading, render nothing (ProtectedRoute handles redirect to /auth)
-  if (!user) {
+  // If not authenticated after loading (neither Supabase nor builder JWT), render nothing
+  if (!user && !hasBuilderAuth()) {
     return null;
   }
 

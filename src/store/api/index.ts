@@ -15,6 +15,7 @@ import './builderVendor';
 import './bomUpload';
 import './query';
 import './projects';
+import './projectOptions';
 import './status';
 import './activities';
 import './pricing';
@@ -75,6 +76,7 @@ export {
 
 // Projects
 export * from './projects';
+export * from './projectOptions';
 
 // Status
 export * from './status';

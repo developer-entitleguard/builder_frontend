@@ -277,7 +277,7 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
     currentOrganization,
     currentRole,
     loading,
-    hasAccess: organizations.length > 0 || isSuperAdmin,
+    hasAccess: !!user || organizations.length > 0 || isSuperAdmin,
     hasMultipleOrgs: organizations.length > 1,
     setCurrentOrganization,
     isAdmin: effectiveIsAdmin,

@@ -142,6 +142,8 @@ const ProjectDetail = () => {
       actual_end_date: p.actualEndDate,
       status: mapStatusLocal(p.status),
       description: p.description,
+      bal_rating: p.balRatingId ?? null,
+      topography_type: p.topographyTypeId ?? null,
       activities_visible_to_homeowner: p.activitiesVisibleToHomeowner,
       created_at: p.createdAt,
       updated_at: p.createdAt,
@@ -169,6 +171,8 @@ const ProjectDetail = () => {
       target_end_date: project.target_end_date,
       status: project.status,
       description: project.description,
+      bal_rating: project.bal_rating,
+      topography_type: project.topography_type,
       activities_visible_to_homeowner: project.activities_visible_to_homeowner,
     };
 
@@ -188,6 +192,8 @@ const ProjectDetail = () => {
         target_end_date: finalData.target_end_date ?? null,
         status: finalData.status ?? project.status,
         description: finalData.description ?? null,
+        bal_rating: finalData.bal_rating ?? null,
+        topography_type: finalData.topography_type ?? null,
         activities_visible_to_homeowner:
           finalData.activities_visible_to_homeowner ??
           project.activities_visible_to_homeowner,

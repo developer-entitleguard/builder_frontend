@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Project, PropertyType, ProjectStatus, CreateProjectData } from "@/hooks/useProjects";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
+import { useGetTopographyTypesQuery, useGetBalRatingsQuery } from "@/store/api/projectOptions";
 import { 
   Home,
   Building2,
@@ -64,6 +65,14 @@ const mapProjectStatusToApiName = (status: ProjectStatus): string => {
 
 export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditProjectDialogProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { data: statusResponse } = useGetStatusesByModuleQuery({ module: "PROJECT" });
+  const projectStatuses = useMemo(() => statusResponse?.data ?? [], [statusResponse?.data]);
+
+  const { data: balRatingsResponse } = useGetBalRatingsQuery();
+  const balRatings = balRatingsResponse?.data ?? [];
+
+  const { data: topographyTypesResponse } = useGetTopographyTypesQuery();
+  const topographyTypes = topographyTypesResponse?.data ?? [];
   const [formData, setFormData] = useState<Partial<CreateProjectData>>({
     name: project.name,
     address: project.address,
@@ -74,11 +83,10 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
     start_date: project.start_date,
     target_end_date: project.target_end_date,
     status: project.status,
-    description: project.description
+    description: project.description,
+    bal_rating: project.bal_rating,
+    topography_type: project.topography_type
   });
-
-  const { data: statusResponse } = useGetStatusesByModuleQuery({ module: "PROJECT" });
-  const projectStatuses = statusResponse?.data ?? [];
 
   useEffect(() => {
     if (open) {
@@ -92,7 +100,9 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
         start_date: project.start_date,
         target_end_date: project.target_end_date,
         status: project.status,
-        description: project.description
+        description: project.description,
+        bal_rating: project.bal_rating,
+        topography_type: project.topography_type
       });
     }
   }, [open, project]);
@@ -279,6 +289,52 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
             </div>
           </div>
           
+          {/* BAL Rating & Topography */}
+                 <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="edit-bal_rating">BAL Rating</Label>
+              <Select
+                value={formData.bal_rating || ''}
+                onValueChange={v => updateField('bal_rating', v || null)}
+                disabled={balRatings.length === 0}
+              >
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder={balRatings.length === 0 ? "Loading..." : "Select BAL rating"}>
+                    {formData.bal_rating
+                      ? (balRatings.find(r => r.id === formData.bal_rating)?.balRatingText ?? "Select BAL rating")
+                      : "Select BAL rating"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {balRatings.map(r => (
+                    <SelectItem key={r.id} value={r.id}>{r.balRatingText}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="edit-topography_type">Topography Type</Label>
+              <Select
+                value={formData.topography_type || ''}
+                onValueChange={v => updateField('topography_type', v || null)}
+                disabled={topographyTypes.length === 0}
+              >
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder={topographyTypes.length === 0 ? "Loading..." : "Select topography"}>
+                    {formData.topography_type
+                      ? (topographyTypes.find(t => t.id === formData.topography_type)?.topographyTypeText ?? "Select topography")
+                      : "Select topography"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {topographyTypes.map(t => (
+                    <SelectItem key={t.id} value={t.id}>{t.topographyTypeText}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           {/* Description */}
           <div>
             <Label htmlFor="edit-description">Description / Notes</Label>

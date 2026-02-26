@@ -27,6 +27,8 @@ export interface Project {
   actual_end_date: string | null;
   status: ProjectStatus;
   description: string | null;
+  bal_rating: string | null;
+  topography_type: string | null;
   activities_visible_to_homeowner: boolean;
   created_at: string;
   updated_at: string;
@@ -45,6 +47,8 @@ export interface CreateProjectData {
   statusId?: string | null;
   status?: ProjectStatus;
   description?: string | null;
+  bal_rating?: string | null;
+  topography_type?: string | null;
   activities_visible_to_homeowner?: boolean;
 }
 
@@ -130,6 +134,8 @@ export const useProjects = () => {
       actual_end_date: p.actualEndDate,
       status: mapStatus(p.status),
       description: p.description,
+      bal_rating: p.balRatingId ?? null,
+      topography_type: p.topographyTypeId ?? null,
       activities_visible_to_homeowner: p.activitiesVisibleToHomeowner,
       created_at: p.createdAt,
       updated_at: p.createdAt,
@@ -166,6 +172,8 @@ export const useProjects = () => {
         actual_end_date: apiProject.actualEndDate,
         status: mapStatus(apiProject.status),
         description: apiProject.description,
+        bal_rating: apiProject.balRatingId ?? null,
+        topography_type: apiProject.topographyTypeId ?? null,
         activities_visible_to_homeowner: apiProject.activitiesVisibleToHomeowner,
         created_at: apiProject.createdAt,
         updated_at: apiProject.createdAt,
@@ -185,6 +193,7 @@ export const useProjects = () => {
       const body = {
         activitiesVisibleToHomeowner: data.activities_visible_to_homeowner ?? true,
         address: data.address,
+        balRatingId: data.bal_rating ?? null,
         city: data.city,
         description: data.description ?? "",
         name: data.name,
@@ -194,6 +203,7 @@ export const useProjects = () => {
         state: data.state,
         statusId: data.statusId ?? data.status ?? "",
         targetEndDate: data.target_end_date ?? "",
+        topographyTypeId: data.topography_type ?? null,
       };
       const result = await createProjectMutation(body).unwrap();
       if (!result?.success) {
@@ -229,6 +239,7 @@ export const useProjects = () => {
       const body = {
         activitiesVisibleToHomeowner: data.activities_visible_to_homeowner ?? true,
         address: data.address,
+        balRatingId: data.bal_rating ?? null,
         city: data.city,
         description: data.description ?? "",
         name: data.name,
@@ -238,6 +249,7 @@ export const useProjects = () => {
         state: data.state,
         statusId: data.statusId ?? data.status ?? "planning",
         targetEndDate: data.target_end_date ?? "",
+        topographyTypeId: data.topography_type ?? null,
       };
 
       const result = await updateProjectMutation({ id, body }).unwrap();

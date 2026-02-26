@@ -13,6 +13,10 @@ export interface BuilderProjectApi {
   actualEndDate: string | null;
   status: string;
   description: string | null;
+  balRatingId: string | null;
+  balRatingText: string | null;
+  topographyTypeId: string | null;
+  topographyTypeText: string | null;
   activitiesVisibleToHomeowner: boolean;
   createdAt: string;
 }
@@ -32,6 +36,7 @@ export interface BuilderProjectResponse {
 export interface CreateBuilderProjectBody {
   activitiesVisibleToHomeowner: boolean;
   address: string;
+  balRatingId?: string | null;
   city: string;
   description: string;
   name: string;
@@ -41,6 +46,7 @@ export interface CreateBuilderProjectBody {
   state: string;
   statusId: string;
   targetEndDate: string;
+  topographyTypeId?: string | null;
 }
 
 export type UpdateBuilderProjectBody = CreateBuilderProjectBody;

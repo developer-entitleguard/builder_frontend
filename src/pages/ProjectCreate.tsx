@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useProjects, PropertyType, CreateProjectData } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
+import { useGetTopographyTypesQuery, useGetBalRatingsQuery } from "@/store/api/projectOptions";
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -80,11 +81,19 @@ const ProjectCreate = () => {
     start_date: null,
     target_end_date: null,
     statusId: null,
-    description: null
+    description: null,
+    bal_rating: null,
+    topography_type: null
   });
 
   const { data: statusResponse } = useGetStatusesByModuleQuery({ module: 'PROJECT' });
   const projectStatuses = statusResponse?.data ?? [];
+
+  const { data: balRatingsResponse } = useGetBalRatingsQuery();
+  const balRatings = balRatingsResponse?.data ?? [];
+
+  const { data: topographyTypesResponse } = useGetTopographyTypesQuery();
+  const topographyTypes = topographyTypesResponse?.data ?? [];
 
   useEffect(() => {
     if (!authLoading && !user && !hasBuilderAuth()) {
@@ -304,6 +313,43 @@ const ProjectCreate = () => {
         </Select>
       </div>
       
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="bal_rating">BAL Rating</Label>
+          <Select
+            value={formData.bal_rating || ''}
+            onValueChange={v => updateField('bal_rating', v || null)}
+            disabled={balRatings.length === 0}
+          >
+            <SelectTrigger className="mt-1.5">
+              <SelectValue placeholder={balRatings.length === 0 ? "Loading..." : "Select BAL rating"} />
+            </SelectTrigger>
+            <SelectContent>
+              {balRatings.map(r => (
+                <SelectItem key={r.id} value={r.id}>{r.balRatingText}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="topography_type">Topography Type</Label>
+          <Select
+            value={formData.topography_type || ''}
+            onValueChange={v => updateField('topography_type', v || null)}
+            disabled={topographyTypes.length === 0}
+          >
+            <SelectTrigger className="mt-1.5">
+              <SelectValue placeholder={topographyTypes.length === 0 ? "Loading..." : "Select topography"} />
+            </SelectTrigger>
+            <SelectContent>
+              {topographyTypes.map(t => (
+                <SelectItem key={t.id} value={t.id}>{t.topographyTypeText}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div>
         <Label htmlFor="description">Description / Notes (optional)</Label>
         <Textarea

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useAuth } from "@/hooks/useAuth";
 import NoOrganizationAccess from "@/components/NoOrganizationAccess";
 import OrganizationSelector from "@/components/OrganizationSelector";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,7 @@ interface OrganizationGateProps {
 const OrganizationGate = ({ children }: OrganizationGateProps) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const { 
     loading, 
     hasAccess, 
@@ -54,8 +56,8 @@ const OrganizationGate = ({ children }: OrganizationGateProps) => {
     );
   }
 
-  // No access to any organization (and not superadmin)
-  if (!hasAccess) {
+  // No access to any organization (and not superadmin, and not a plain authenticated user)
+  if (!hasAccess && !user) {
     return <NoOrganizationAccess />;
   }
 

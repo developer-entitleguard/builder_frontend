@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useAuth } from "@/hooks/useAuth";
-import NoOrganizationAccess from "@/components/NoOrganizationAccess";
 import OrganizationSelector from "@/components/OrganizationSelector";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2 } from "lucide-react";
@@ -14,10 +13,9 @@ interface OrganizationGateProps {
 const OrganizationGate = ({ children }: OrganizationGateProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { 
     loading, 
-    hasAccess, 
     hasMultipleOrgs, 
     currentOrganization,
     isSuperAdmin,
@@ -31,10 +29,11 @@ const OrganizationGate = ({ children }: OrganizationGateProps) => {
     }
   }, [loading, isSuperAdmin, effectiveOrganization, location.pathname, navigate]);
 
-  if (loading) {
+  // Wait for both auth and org to finish loading before making any access decisions
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground">Loading organization...</div>
+        <div className="text-muted-foreground">Loading...</div>
       </div>
     );
   }
@@ -56,9 +55,9 @@ const OrganizationGate = ({ children }: OrganizationGateProps) => {
     );
   }
 
-  // No access to any organization (and not superadmin, and not a plain authenticated user)
-  if (!hasAccess && !user) {
-    return <NoOrganizationAccess />;
+  // If not authenticated after loading, render nothing (ProtectedRoute handles redirect to /auth)
+  if (!user) {
+    return null;
   }
 
   // Has multiple orgs but none selected yet

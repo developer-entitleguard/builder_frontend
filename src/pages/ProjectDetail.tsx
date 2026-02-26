@@ -10,6 +10,7 @@ import { useActivityCategories } from "@/hooks/useActivityCategories";
 import { useApprovals } from "@/hooks/useApprovals";
 import { useAuth } from "@/hooks/useAuth";
 import { useProjectByIdQuery, type BuilderProjectApi } from "@/store/api/projects";
+import { useGetStatusesByModuleQuery } from "@/store/api/status";
 import { ActivityList } from "@/components/projects/ActivityList";
 import { ApprovalsList } from "@/components/projects/ApprovalsList";
 import { ProjectRegistrations } from "@/components/projects/ProjectRegistrations";
@@ -82,7 +83,7 @@ const mapPropertyTypeLocal = (value: string): PropertyType => {
 };
 
 const mapStatusLocal = (value: string): ProjectStatus => {
-  const key = value.toLowerCase();
+  const key = value.toLowerCase().replace(/\s+/g, "");
   switch (key) {
     case "planning":
       return "planning";
@@ -119,6 +120,9 @@ const ProjectDetail = () => {
     isLoading: projectLoading,
   } = useProjectByIdQuery({ id: id! });
 
+  const { data: statusResponse } = useGetStatusesByModuleQuery({ module: "PROJECT" });
+  const projectStatuses = statusResponse?.data ?? [];
+
   useEffect(() => {
     if (!authLoading && !user && !hasBuilderAuth()) {
       navigate('/auth');
@@ -154,6 +158,16 @@ const ProjectDetail = () => {
     setLoading(false);
   }, [projectResponse, id, fetchActivities, fetchApprovals]);
 
+  // Resolve the current project's statusId from the statuses API
+  const resolveStatusId = (): string | null => {
+    if (!project) return null;
+    const normalizedStatus = project.status.toLowerCase().replace(/[\s_]/g, "");
+    const match = projectStatuses.find(
+      s => s.name.toLowerCase().replace(/[\s_]/g, "") === normalizedStatus
+    );
+    return match?.id ?? null;
+  };
+
   const handleSaveProject = async (
     id: string,
     changes: Partial<CreateProjectData>
@@ -170,6 +184,7 @@ const ProjectDetail = () => {
       start_date: project.start_date,
       target_end_date: project.target_end_date,
       status: project.status,
+      statusId: resolveStatusId(),
       description: project.description,
       bal_rating: project.bal_rating,
       topography_type: project.topography_type,
@@ -180,6 +195,10 @@ const ProjectDetail = () => {
     const success = await updateProject(id, finalData);
 
     if (success) {
+      const newStatus = finalData.status ?? project.status;
+      const newStatusId = finalData.statusId ??
+        projectStatuses.find(s => s.name.toLowerCase().replace(/[\s_]/g, "") === newStatus.toLowerCase().replace(/[\s_]/g, ""))?.id ??
+        null;
       setProject({
         ...project,
         name: finalData.name,
@@ -190,7 +209,8 @@ const ProjectDetail = () => {
         property_type: finalData.property_type,
         start_date: finalData.start_date ?? null,
         target_end_date: finalData.target_end_date ?? null,
-        status: finalData.status ?? project.status,
+        status: newStatus,
+        statusId: newStatusId,
         description: finalData.description ?? null,
         bal_rating: finalData.bal_rating ?? null,
         topography_type: finalData.topography_type ?? null,

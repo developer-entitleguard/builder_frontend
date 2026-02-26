@@ -26,6 +26,7 @@ export interface Project {
   target_end_date: string | null;
   actual_end_date: string | null;
   status: ProjectStatus;
+  statusId?: string | null;
   description: string | null;
   bal_rating: string | null;
   topography_type: string | null;

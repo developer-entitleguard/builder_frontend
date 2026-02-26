@@ -53,9 +53,9 @@ const mapProjectStatusToApiName = (status: ProjectStatus): string => {
     case "planning":
       return "PLANNING";
     case "in_progress":
-      return "INPROGRESS";
+      return "IN PROGRESS";
     case "on_hold":
-      return "ONHOLD";
+      return "ON HOLD";
     case "completed":
       return "COMPLETED";
     case "cancelled":
@@ -100,6 +100,7 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
         start_date: project.start_date,
         target_end_date: project.target_end_date,
         status: project.status,
+        statusId: null, // reset so the useEffect below re-matches from API
         description: project.description,
         bal_rating: project.bal_rating,
         topography_type: project.topography_type
@@ -251,7 +252,11 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
                 disabled={projectStatuses.length === 0}
               >
                 <SelectTrigger className="mt-1.5">
-                  <SelectValue placeholder={projectStatuses.length === 0 ? "Loading statuses..." : "Select status"} />
+                  <SelectValue placeholder={projectStatuses.length === 0 ? "Loading statuses..." : "Select status"}>
+                    {formData.statusId
+                      ? (projectStatuses.find(s => s.id === formData.statusId)?.name ?? "Select status")
+                      : "Select status"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {projectStatuses.map((s) => (

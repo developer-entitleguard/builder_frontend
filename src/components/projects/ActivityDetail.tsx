@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Activity, ActivityStatus, ActivityUpdate, CreateActivityData } from "@/hooks/useActivities";
 import { useGetActivityByIdQuery, useGetActivityUpdatesQuery, usePostActivityUpdateMutation, useUpdateActivityMutation } from "@/store/api/activities";
+import { useDeleteActivityCategoryMutation } from "@/store/api/activityCategories";
+import { useToast } from "@/hooks/use-toast";
 import { CreateApprovalData } from "@/hooks/useApprovals";
 import { RequestApprovalDialog } from "./RequestApprovalDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -192,10 +194,12 @@ export const ActivityDetail = ({
   onRequestApproval,
   activityApprovals,
 }: ActivityDetailProps) => {
+  const { toast } = useToast();
   const isBuilder = hasBuilderAuth();
 
   const [updateActivityMutation] = useUpdateActivityMutation();
   const [postActivityUpdateMutation] = usePostActivityUpdateMutation();
+  const [deleteActivityCategory] = useDeleteActivityCategoryMutation();
 
   // Call builder GET /api/builder/projects/{projectId}/activities/{id} when in builder mode
   useGetActivityByIdQuery(
@@ -361,8 +365,26 @@ export const ActivityDetail = ({
   };
 
   const handleDelete = async () => {
-    await onDeleteActivity(activity.id);
-    onBack();
+    try {
+      if (isBuilder) {
+        await deleteActivityCategory({ projectId, id: activity.id }).unwrap();
+        setDeleteDialogOpen(false);
+        onBack();
+      } else {
+        await onDeleteActivity(activity.id);
+        setDeleteDialogOpen(false);
+        onBack();
+      }
+    } catch (error: unknown) {
+      const message = error && typeof error === "object" && "data" in error
+        ? String((error as { data?: unknown }).data ?? "Failed to delete activity")
+        : error instanceof Error ? error.message : "Failed to delete activity";
+      toast({
+        title: "Error deleting activity",
+        description: message,
+        variant: "destructive",
+      });
+    }
   };
 
   return (

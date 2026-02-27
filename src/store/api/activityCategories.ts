@@ -76,6 +76,20 @@ export const activityCategoriesApi = api.injectEndpoints({
         { type: "ActivityCategories", id: projectId },
       ],
     }),
+
+    // DELETE /api/builder/projects/:projectId/activity_categories/:id
+    deleteActivityCategory: build.mutation<
+      { success: boolean; message?: string },
+      { projectId: string; id: string }
+    >({
+      query: ({ projectId, id }) => ({
+        url: `/api/builder/projects/${projectId}/activity_categories/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: "ActivityCategories", id: projectId },
+      ],
+    }),
   }),
 });
 
@@ -83,5 +97,6 @@ export const {
   useGetActivityCategoriesByProjectQuery,
   useCreateActivityCategoryMutation,
   useUpdateActivityCategoryMutation,
+  useDeleteActivityCategoryMutation,
 } = activityCategoriesApi;
 

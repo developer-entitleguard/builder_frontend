@@ -53,6 +53,7 @@ interface RegistrationItem extends BuilderItem {
   custom_notes?: string;
   is_custom?: boolean;
   serial_number?: string;
+  seller?: string;
   warranty_documents?: Array<{
     name: string;
     url: string;
@@ -198,57 +199,88 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
     }
   }, [registrationId, fetchExistingMap]);
 
-  type MapFile = { id: string; type: string; files: { id: string; name: string; filePath: string } };
-  type ExistingMapEntry = {
-    id: string;
-    name: string | null;
-    category: string | null;
-    seller?: string | null;
-    serialNumber?: string | null;
-    make?: string | null;
-    model?: string | null;
-    brand?: string | null;
-    color?: string | null;
-    notes?: string | null;
+  type MapFile = { id: string; type: string; files: { id?: string; name?: string; fileName?: string; filePath?: string; fileUrl?: string } };
+  type ExistingMapEntry = Record<string, unknown> & {
+    id?: string;
+    builderCustomerMapId?: string;
+    builder_customer_map_id?: string;
     builderCustomerItemFiles?: MapFile[];
+    builder_customer_item_files?: MapFile[];
   };
 
-  // When we have registrationId and existing map data from /api/check/customeritemmap/existing, show that data in the items section
+  const getStr = (obj: Record<string, unknown>, camel: string, snake?: string): string => {
+    const v = obj[camel] ?? (snake && obj[snake]);
+    if (v == null) return '';
+    return typeof v === 'string' ? v : String(v);
+  };
+
+
   useEffect(() => {
     if (!registrationId || existingMapData.length === 0) return;
-    const items: RegistrationItem[] = (existingMapData as ExistingMapEntry[]).map((m) => {
+    const raw = existingMapData as ExistingMapEntry[];
+    const dtosByMapId = new Map<string, { name?: string | null; make?: string | null; brand?: string | null; model?: string | null; category?: string | null; note?: string | null; fileResponseDto?: Array<{ id: string; fileName: string; fileUrl: string }> }>();
+    const customerDtos = customerDetailsResponse?.data?.dtos;
+    if (Array.isArray(customerDtos)) {
+      for (const cat of customerDtos) {
+        const items = cat?.items ?? [];
+        for (const it of items) {
+          const o = it as unknown as Record<string, unknown>;
+          const mapId = o.builderCustomerMapId ?? o.builder_customer_map_id ?? null;
+          if (mapId && typeof mapId === 'string') dtosByMapId.set(mapId, o as { name?: string | null; make?: string | null; brand?: string | null; model?: string | null; category?: string | null; note?: string | null; fileResponseDto?: Array<{ id: string; fileName: string; fileUrl: string }> });
+        }
+      }
+    }
+    const items: RegistrationItem[] = raw.map((m) => {
+      const id = (m.id ?? m.builderCustomerMapId ?? m.builder_customer_map_id ?? '') as string;
+      const files = (m.builderCustomerItemFiles ?? m.builder_customer_item_files ?? []) as MapFile[];
       const warranty_documents: { name: string; url: string; path: string; fileId?: string }[] = [];
       const manual_documents: { name: string; url: string; path: string; fileId?: string }[] = [];
-      (m.builderCustomerItemFiles ?? []).forEach((f: MapFile) => {
+      files.forEach((f: MapFile) => {
+        const fileObj = f.files as { name?: string; fileName?: string; filePath?: string; fileUrl?: string; id?: string } | undefined;
         const doc = {
-          name: f.files?.name ?? 'file',
-          url: '',
-          path: f.files?.filePath ?? f.files?.id ?? '',
+          name: fileObj?.name ?? fileObj?.fileName ?? 'file',
+          url: fileObj?.fileUrl ?? '',
+          path: fileObj?.filePath ?? fileObj?.id ?? '',
           fileId: f.id,
         };
-        if (f.type === 'warranty') warranty_documents.push(doc);
-        else if (f.type === 'Manual') manual_documents.push(doc);
+        const typeLower = (f.type ?? '').toLowerCase();
+        if (typeLower === 'warranty') warranty_documents.push(doc);
+        else if (typeLower === 'manual') manual_documents.push(doc);
       });
+      const dto = dtosByMapId.get(id);
+      const name = dto?.name != null && dto.name !== '' ? String(dto.name) : getStr(m, 'name');
+      const category = dto?.category != null && dto.category !== '' ? String(dto.category) : getStr(m, 'category') || 'Other';
+      const make = dto?.make != null && dto.make !== '' ? String(dto.make) : getStr(m, 'make');
+      const brand = dto?.brand != null && dto.brand !== '' ? String(dto.brand) : getStr(m, 'brand');
+      const model = dto?.model != null && dto.model !== '' ? String(dto.model) : getStr(m, 'model');
+      const notes = (dto?.note != null && dto.note !== '' ? String(dto.note) : getStr(m, 'notes', 'note')) as string;
+      if (dto?.fileResponseDto?.length) {
+        for (const f of dto.fileResponseDto) {
+          const doc = { name: f.fileName, url: f.fileUrl, path: f.fileUrl, fileId: f.id };
+          manual_documents.push(doc);
+        }
+      }
       return {
-        id: m.id,
-        name: m.name ?? '',
-        category: m.category ?? 'Other',
-        brand: m.brand ?? '',
-        model: m.model ?? '',
-        make: m.make ?? '',
+        id,
+        name: name || 'Unnamed item',
+        category,
+        brand,
+        model,
+        make,
         description: '',
         price: null,
         bom_id: null,
-        color: m.color ?? '',
-        custom_notes: m.notes ?? '',
+        color: getStr(m, 'color'),
+        custom_notes: notes,
         is_custom: false,
-        serial_number: m.serialNumber ?? '',
+        serial_number: getStr(m, 'serialNumber', 'serial_number'),
+        seller: getStr(m, 'seller') || undefined,
         warranty_documents,
         manual_documents,
       };
     });
     setSelectedItems(items);
-  }, [registrationId, existingMapData]);
+  }, [registrationId, existingMapData, customerDetailsResponse?.data?.dtos]);
 
   // NOTE: We intentionally do NOT populate the items list from /api/getbillmaterials.
   // The items section is driven solely by /api/check/customeritemmap/existing so that
@@ -521,6 +553,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
       if (pending?.manual) builderItemFilesDtos.push({ type: 'Manual', file: pending.manual });
 
       await updateBuilderCustomerMap({
+        id: item.id,
         builderCustomerId: registrationId,
         builderItemId: item.id,
         billMaterialId: item.bom_id ?? selectedBomId,

@@ -9,6 +9,8 @@ import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 export interface BuilderItemFileDto {
   type: 'warranty' | 'Manual';
   file: File;
+  /** Optional existing file id when updating (Swagger: builderItemFilesDtos[i].id) */
+  id?: string;
 }
 
 export interface UpdateBuilderCustomerMapRequest {
@@ -80,6 +82,7 @@ export const builderCustomerApi = api.injectEndpoints({
             data.builderItemFilesDtos.forEach((fileDto, index) => {
               formData.append(`builderItemFilesDtos[${index}].type`, fileDto.type);
               formData.append(`builderItemFilesDtos[${index}].file`, fileDto.file);
+              if (fileDto.id) formData.append(`builderItemFilesDtos[${index}].id`, fileDto.id);
             });
           }
           let authToken = '';

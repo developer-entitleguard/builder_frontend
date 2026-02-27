@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
-import CustomerDetailsForm from "@/components/CustomerDetailsForm";
+import CustomerDetailsForm, { type CustomerDetailsFormData } from "@/components/CustomerDetailsForm";
 import ItemsSelectionForm from "@/components/ItemsSelectionForm";
 import ReviewApprovalForm from "@/components/ReviewApprovalForm";
 import SendConfirmationForm from "@/components/SendConfirmationForm";
@@ -51,11 +51,7 @@ const getBuilderId = (): string | null => {
   return null;
 };
 
-type CustomerFormData = {
-  registrationId?: string;
-  email?: string;
-  [key: string]: unknown;
-};
+type CustomerFormData = CustomerDetailsFormData & { registrationId?: string };
 
 const Onboarding = () => {
   const { user } = useAuth();
@@ -99,6 +95,14 @@ const Onboarding = () => {
     const c = customerDetailsResponse.data.customer as unknown as Record<string, unknown>;
     const get = (camel: string, snake?: string) =>
       (c[camel] as string) ?? (snake && (c[snake] as string)) ?? '';
+    const getNum = (camel: string, snake?: string): string => {
+      const v = c[camel] ?? (snake && c[snake]);
+      if (v == null) return '';
+      if (typeof v === 'number' && !Number.isNaN(v)) return String(v);
+      if (typeof v === 'string') return v;
+      return '';
+    };
+    const project = c.project as { id?: string; name?: string } | undefined;
     setFormData((prev) => ({
       ...prev,
       customer: {
@@ -110,9 +114,14 @@ const Onboarding = () => {
         city: get('city'),
         state: get('state'),
         zipCode: get('zip', 'zip_code'),
-        projectName: get('projectName', 'project_name'),
+        projectId: project?.id ?? get('projectId', 'project_id'),
+        projectName: project?.name ?? get('projectName', 'project_name'),
         settlementDate: get('settlementDate', 'settlement_date'),
-        notes: get('notes')
+        notes: get('notes'),
+        price: getNum('price'),
+        numBedrooms: getNum('numBedrooms', 'num_bedrooms'),
+        numRooms: getNum('numRooms', 'num_rooms'),
+        totalBuiltUpArea: getNum('totalBuiltUpArea', 'total_built_up_area'),
       }
     }));
   }, [editingId, customerDetailsResponse]);

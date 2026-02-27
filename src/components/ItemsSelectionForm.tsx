@@ -80,6 +80,8 @@ interface ItemsSelectionFormProps {
     selected_items?: RegistrationItem[];
   };
   registrationId?: string;
+  /** When set (e.g. builder flow), called before continuing to review. Should call /api/builder/customer. Returns true if save succeeded. */
+  onSaveCustomerBeforeContinue?: () => Promise<boolean>;
 }
 
 const hasBuilderAuth = (): boolean => {
@@ -105,7 +107,7 @@ const getBuilderId = (): string | null => {
   }
 };
 
-const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelectionFormProps) => {
+const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustomerBeforeContinue }: ItemsSelectionFormProps) => {
   const { user } = useAuth();
   const { organization } = useOrganization();
   const { updateRegistration } = useRegistrations();
@@ -613,6 +615,23 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId }: ItemsSelect
   }, {} as Record<string, RegistrationItem[]>);
 
   const handleNext = async () => {
+    if (onSaveCustomerBeforeContinue) {
+      setSaving(true);
+      try {
+        const ok = await onSaveCustomerBeforeContinue();
+        if (!ok) {
+          toast({
+            title: "Error saving customer",
+            description: "Could not save customer details. Please try again.",
+            variant: "destructive"
+          });
+          return;
+        }
+      } finally {
+        setSaving(false);
+      }
+    }
+
     if (!registrationId) {
       onNext({ selected_items: selectedItems });
       return;

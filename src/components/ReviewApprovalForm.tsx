@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { User, Home, FileText, Building, CheckCircle, MessageSquare, Loader2, Lock, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCreateCustomerEntitlementMutation } from "@/store/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,53 +19,44 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+type ReviewCustomerData = Record<string, unknown>;
+
+type ReviewItem = {
+  id?: string;
+  name?: string | null;
+  category?: string | null;
+  brand?: string | null;
+  model?: string | null;
+};
+
+type ReviewFormData = {
+  customer?: ReviewCustomerData;
+  items?: { selected_items?: unknown };
+  documents?: Record<string, unknown>;
+};
+
 interface ReviewApprovalFormProps {
   onNext: () => void;
-  formData?: any;
+  formData?: ReviewFormData;
   registrationId?: string | null;
+  /** When true, form calls POST /api/create/customerentitlement/:builderCustomerId when Send to Homeowner is clicked */
+  useBuilderEntitlementApi?: boolean;
 }
 
-const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApprovalFormProps) => {
+const ReviewApprovalForm = ({ onNext, formData, registrationId, useBuilderEntitlementApi }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
+  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
+  const [sendingEntitlement, setSendingEntitlement] = useState(false);
   const [approved, setApproved] = useState(false);
   const [consentConfirmed, setConsentConfirmed] = useState(false);
   const [consentLocked, setConsentLocked] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<any[]>([]);
+  const [selectedItems, setSelectedItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [requestingConsent, setRequestingConsent] = useState(false);
   const [consentDialogOpen, setConsentDialogOpen] = useState(false);
   const [consentUrl, setConsentUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    const items = formData?.items?.selected_items;
-    console.log('ReviewApprovalForm - items from formData:', items);
-
-    if (Array.isArray(items) && items.length > 0) {
-      // selected_items can be either an array of UUIDs OR an array of item objects
-      const firstItem = items[0];
-      if (typeof firstItem === "string") {
-        console.log('ReviewApprovalForm - items are UUIDs, fetching from DB');
-        fetchSelectedItems(items as string[]);
-      } else if (typeof firstItem === "object" && firstItem !== null) {
-        console.log('ReviewApprovalForm - items are objects, using directly:', items.length, 'items');
-        setSelectedItems(items as any[]);
-        setLoading(false);
-      } else {
-        console.log('ReviewApprovalForm - unknown item type:', typeof firstItem);
-        setLoading(false);
-      }
-    } else {
-      console.log('ReviewApprovalForm - no items found in formData');
-      setLoading(false);
-    }
-
-    // Check if consent was already received via customer link
-    if (registrationId) {
-      checkExistingConsent();
-    }
-  }, [formData, registrationId]);
-
-  const checkExistingConsent = async () => {
+  const checkExistingConsent = useCallback(async () => {
     if (!registrationId) return;
 
     try {
@@ -83,12 +75,12 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
           setConsentLocked(true);
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking consent:', error);
     }
-  };
+  }, [registrationId]);
 
-  const fetchSelectedItems = async (itemIds: string[]) => {
+  const fetchSelectedItems = useCallback(async (itemIds: string[]) => {
     if (!Array.isArray(itemIds) || itemIds.length === 0) {
       setLoading(false);
       return;
@@ -113,17 +105,72 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
         .in('id', uuidIds);
 
       if (error) throw error;
-      setSelectedItems(data || []);
-    } catch (error: any) {
+      setSelectedItems((data as unknown as ReviewItem[]) || []);
+    } catch (error: unknown) {
       toast({
         title: "Error fetching selected items",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to fetch selected items",
         variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    const items = formData?.items?.selected_items;
+    console.log('ReviewApprovalForm - items from formData:', items);
+
+    if (Array.isArray(items) && items.length > 0) {
+      // selected_items can be either an array of UUIDs OR an array of item objects
+      const firstItem = items[0];
+      if (typeof firstItem === "string") {
+        console.log('ReviewApprovalForm - items are UUIDs, fetching from DB');
+        fetchSelectedItems(items as string[]);
+      } else if (typeof firstItem === "object" && firstItem !== null) {
+        console.log('ReviewApprovalForm - items are objects, using directly:', items.length, 'items');
+        setSelectedItems(
+          (items as unknown[]).map((it) => {
+            const obj = it as Record<string, unknown>;
+            return {
+              id: typeof obj.id === "string" ? obj.id : undefined,
+              name: typeof obj.name === "string" ? obj.name : (obj.name == null ? null : String(obj.name)),
+              category:
+                typeof obj.category === "string"
+                  ? obj.category
+                  : obj.category == null
+                    ? null
+                    : String(obj.category),
+              brand:
+                typeof obj.brand === "string"
+                  ? obj.brand
+                  : obj.brand == null
+                    ? null
+                    : String(obj.brand),
+              model:
+                typeof obj.model === "string"
+                  ? obj.model
+                  : obj.model == null
+                    ? null
+                    : String(obj.model),
+            } satisfies ReviewItem;
+          })
+        );
+        setLoading(false);
+      } else {
+        console.log('ReviewApprovalForm - unknown item type:', typeof firstItem);
+        setLoading(false);
+      }
+    } else {
+      console.log('ReviewApprovalForm - no items found in formData');
+      setLoading(false);
+    }
+
+    // Check if consent was already received via customer link
+    if (registrationId) {
+      checkExistingConsent();
+    }
+  }, [formData, registrationId, checkExistingConsent, fetchSelectedItems]);
 
   const handleConsentChange = async (checked: boolean) => {
     if (consentLocked) return;
@@ -141,7 +188,7 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
             consent_method: 'builder_confirmed',
           })
           .eq('id', registrationId);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error saving consent:', error);
       }
     }
@@ -183,10 +230,10 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
           variant: data.emailError ? "destructive" : "default"
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error requesting consent",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to request consent",
         variant: "destructive"
       });
     } finally {
@@ -204,19 +251,80 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
     }
   };
 
-  const customerData = formData?.customer || {};
-  const uploadedDocs = formData?.documents || {};
+  const handleSendToHomeowner = async () => {
+    if (useBuilderEntitlementApi && registrationId) {
+      setSendingEntitlement(true);
+      try {
+        await createCustomerEntitlement({ builderCustomerId: registrationId }).unwrap();
+        toast({
+          title: "Entitlement sent!",
+          description: "The warranty entitlement has been sent to the homeowner.",
+        });
+        onNext();
+      } catch (error: unknown) {
+        const description =
+          error && typeof error === "object" && "data" in error
+            ? String((error as { data?: unknown }).data ?? "Failed to send entitlement")
+            : error instanceof Error
+              ? error.message
+              : "Failed to send entitlement";
+        toast({
+          title: "Error sending entitlement",
+          description,
+          variant: "destructive",
+        });
+      } finally {
+        setSendingEntitlement(false);
+      }
+    } else {
+      onNext();
+    }
+  };
+
+  const customerData: ReviewCustomerData = formData?.customer || {};
+  const uploadedDocs: Record<string, unknown> = formData?.documents || {};
+
+  const readString = (obj: Record<string, unknown>, ...keys: string[]): string | undefined => {
+    for (const key of keys) {
+      const v = obj[key];
+      if (typeof v === 'string' && v.trim() !== '') return v;
+      if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+    }
+    return undefined;
+  };
+
+  const firstName = readString(customerData, 'firstName', 'first_name');
+  const lastName = readString(customerData, 'lastName', 'last_name');
+  const customerName =
+    readString(customerData, 'customer_name') ??
+    (firstName && lastName ? `${firstName} ${lastName}` : undefined);
+  const customerEmail = readString(customerData, 'customer_email', 'email');
+  const customerPhone = readString(customerData, 'customer_phone', 'phone', 'contact');
+  const settlementDate = readString(customerData, 'settlement_date', 'settlementDate');
+
+  const propertyAddress = readString(customerData, 'property_address', 'propertyAddress', 'address');
+  const propertyCity = readString(customerData, 'property_city', 'city');
+  const propertyState = readString(customerData, 'property_state', 'state');
+  const propertyZip = readString(customerData, 'property_zip', 'zipCode', 'zip');
+  const propertyFull =
+    propertyAddress && propertyCity && propertyState
+      ? `${propertyAddress}, ${propertyCity}, ${propertyState} ${propertyZip ?? ''}`.trim()
+      : undefined;
 
   // Count total uploaded documents
   const getTotalDocuments = () => {
-    return Object.values(uploadedDocs).reduce((total: number, docs: any) => total + (Array.isArray(docs) ? docs.length : 0), 0);
+    return Object.values(uploadedDocs).reduce(
+      (total: number, docs: unknown) => total + (Array.isArray(docs) ? docs.length : 0),
+      0
+    );
   };
 
-  const groupedItems = selectedItems.reduce((acc, item) => {
-    if (!acc[item.category]) acc[item.category] = [];
-    acc[item.category].push(item);
+  const groupedItems = selectedItems.reduce((acc: Record<string, ReviewItem[]>, item) => {
+    const category = item.category ?? 'Other';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(item);
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {});
 
   if (loading) {
     return (
@@ -250,28 +358,25 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="font-medium">Name</p>
-              <p className="text-muted-foreground">{customerData.customer_name || customerData.firstName && customerData.lastName ? `${customerData.firstName} ${customerData.lastName}` : 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerName ?? 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Email</p>
-              <p className="text-muted-foreground">{customerData.customer_email || customerData.email || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerEmail ?? 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Phone</p>
-              <p className="text-muted-foreground">{customerData.customer_phone || customerData.phone || 'Not provided'}</p>
+              <p className="text-muted-foreground">{customerPhone ?? 'Not provided'}</p>
             </div>
             <div>
               <p className="font-medium">Settlement Date</p>
-              <p className="text-muted-foreground">{customerData.settlement_date || customerData.settlementDate || 'Not provided'}</p>
+              <p className="text-muted-foreground">{settlementDate ?? 'Not provided'}</p>
             </div>
           </div>
           <div>
             <p className="font-medium">Property Address</p>
             <p className="text-muted-foreground">
-              {(customerData.property_address || customerData.propertyAddress) && (customerData.property_city || customerData.city) && (customerData.property_state || customerData.state) 
-                ? `${customerData.property_address || customerData.propertyAddress}, ${customerData.property_city || customerData.city}, ${customerData.property_state || customerData.state} ${customerData.property_zip || customerData.zipCode || ''}`
-                : 'Not provided'
-              }
+              {propertyFull ?? 'Not provided'}
             </p>
           </div>
         </CardContent>
@@ -306,17 +411,19 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
                 <div key={category}>
                   <h4 className="font-semibold mb-3">{category}</h4>
                   <div className="space-y-2">
-                    {(items as any[]).map((item, index) => {
-                      const itemKey = `${category}-${item.name}`;
-                      const itemDocs = (uploadedDocs as any)[itemKey] || [];
-                      const hasDocuments = Array.isArray(itemDocs) && itemDocs.length > 0;
+                    {items.map((item, index) => {
+                      const itemName = item.name ?? 'Item';
+                      const itemKey = `${category}-${itemName}`;
+                      const docsValue = uploadedDocs[itemKey];
+                      const itemDocs = Array.isArray(docsValue) ? docsValue : [];
+                      const hasDocuments = itemDocs.length > 0;
                       
                       return (
                         <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                           <div className="flex items-center space-x-3">
                             <FileText className="w-4 h-4 text-muted-foreground" />
                             <div>
-                              <p className="font-medium">{item.name}</p>
+                              <p className="font-medium">{itemName}</p>
                               {(item.brand || item.model) && (
                                 <p className="text-sm text-muted-foreground">
                                   {[item.brand, item.model].filter(Boolean).join(' - ')}
@@ -324,7 +431,7 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
                               )}
                               {hasDocuments && (
                                 <p className="text-xs text-green-600">
-                                  {(itemDocs as any[]).length} document{(itemDocs as any[]).length !== 1 ? 's' : ''} uploaded
+                                  {itemDocs.length} document{itemDocs.length !== 1 ? 's' : ''} uploaded
                                 </p>
                               )}
                             </div>
@@ -469,11 +576,11 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId }: ReviewApproval
           {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} • {getTotalDocuments() as number} document{(getTotalDocuments() as number) !== 1 ? 's' : ''} • Ready to send
         </p>
         <Button 
-          onClick={onNext}
-          disabled={!canSubmit}
+          onClick={handleSendToHomeowner}
+          disabled={!canSubmit || sendingEntitlement}
           className="min-w-[160px]"
         >
-          {!consentConfirmed ? 'Get Customer Consent' : 'Send to Homeowner'}
+          {sendingEntitlement ? "Sending..." : !consentConfirmed ? "Get Customer Consent" : "Send to Homeowner"}
         </Button>
       </div>
 

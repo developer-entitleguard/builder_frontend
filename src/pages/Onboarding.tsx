@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import WorkflowSteps from "@/components/WorkflowSteps";
-import CustomerDetailsForm, { type CustomerDetailsFormData } from "@/components/CustomerDetailsForm";
+import CustomerDetailsForm, { type CustomerDetailsFormData, type CustomerDetailsFormRef } from "@/components/CustomerDetailsForm";
 import ItemsSelectionForm from "@/components/ItemsSelectionForm";
 import ReviewApprovalForm from "@/components/ReviewApprovalForm";
 import SendConfirmationForm from "@/components/SendConfirmationForm";
@@ -21,7 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useCreateCustomerEntitlementMutation, useGetCustomerDetailsQuery } from "@/store/api";
+import { useCreateCustomerEntitlementMutation, useGetCustomerDetailsQuery, useCreateBuilderCustomerMutation } from "@/store/api";
 
 // Builder login: allow onboarding when JWT is in localStorage (no Supabase user required)
 const hasBuilderAuth = (): boolean => {
@@ -71,6 +71,7 @@ const Onboarding = () => {
   const [originalStatus, setOriginalStatus] = useState<string | null>(null);
   const [emailChangeDialogOpen, setEmailChangeDialogOpen] = useState(false);
   const [pendingCustomerData, setPendingCustomerData] = useState<CustomerFormData | null>(null);
+  const customerFormRef = useRef<CustomerDetailsFormRef>(null);
 
   const isAuthenticated = !!user || hasBuilderAuth();
   const effectiveUserId = user?.id ?? getBuilderId();
@@ -367,6 +368,43 @@ const Onboarding = () => {
   };
 
   const handleSaveAndExit = async () => {
+    if (currentStep === 'customer') {
+      await customerFormRef.current?.saveAndExit();
+      return;
+    }
+    if (currentStep === 'items' && hasBuilderAuth()) {
+      const ok = await saveCustomerFromFormData();
+      if (!ok) {
+        toast({
+          title: "Error saving",
+          description: "Could not save customer. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+    if (currentStep === 'review' && hasBuilderAuth() && registrationId) {
+      try {
+        await createCustomerEntitlement({ builderCustomerId: registrationId }).unwrap();
+        toast({
+          title: "Entitlement created",
+          description: "Customer entitlement has been created. You can continue later from your dashboard."
+        });
+        navigate('/dashboard');
+        return;
+      } catch (error: unknown) {
+        const description =
+          error && typeof error === "object" && "data" in error
+            ? String((error as { data?: unknown }).data ?? "Failed to create entitlement")
+            : error instanceof Error ? error.message : "Failed to create entitlement";
+        toast({
+          title: "Error creating entitlement",
+          description,
+          variant: "destructive"
+        });
+        return;
+      }
+    }
     toast({
       title: "Registration saved",
       description: "You can continue this registration later from your dashboard."
@@ -391,6 +429,48 @@ const Onboarding = () => {
   };
 
   const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
+  const [createBuilderCustomer] = useCreateBuilderCustomerMutation();
+
+  const saveCustomerFromFormData = useCallback(async (): Promise<boolean> => {
+    if (!hasBuilderAuth()) return true;
+    const customer = formData.customer as Partial<CustomerFormData>;
+    const builderOrganizationId = organization?.id ?? getBuilderId();
+    if (!builderOrganizationId) return false;
+    const numBedrooms = customer.numBedrooms ? Number(customer.numBedrooms) : undefined;
+    const numRooms = customer.numRooms ? Number(customer.numRooms) : undefined;
+    const price = customer.price ? Number(customer.price) : undefined;
+    const totalBuiltUpArea = customer.totalBuiltUpArea ? Number(customer.totalBuiltUpArea) : undefined;
+    try {
+      await createBuilderCustomer({
+        id: registrationId ?? customer.registrationId ?? undefined,
+        firstName: (customer.firstName ?? '').trim(),
+        lastName: (customer.lastName ?? '').trim(),
+        email: (customer.email ?? '').trim(),
+        contact: (customer.phone ?? '').trim(),
+        address: (customer.propertyAddress ?? '').trim(),
+        city: (customer.city ?? '').trim(),
+        state: customer.state ?? '',
+        zip: (customer.zipCode ?? '').trim(),
+        country: 'Australia',
+        projectId: customer.projectId || undefined,
+        projectName: customer.projectName || undefined,
+        settlementDate: customer.settlementDate || undefined,
+        notes: customer.notes?.trim() || undefined,
+        numBedrooms: numBedrooms !== undefined && !Number.isNaN(numBedrooms) ? numBedrooms : undefined,
+        numRooms: numRooms !== undefined && !Number.isNaN(numRooms) ? numRooms : undefined,
+        price: price !== undefined && !Number.isNaN(price) ? price : undefined,
+        totalBuiltUpArea: totalBuiltUpArea !== undefined && !Number.isNaN(totalBuiltUpArea) ? totalBuiltUpArea : undefined,
+        consentMethod: 'form',
+        consentReceived: true,
+        consentReceivedAt: new Date().toISOString(),
+        consentToken: undefined,
+        builderOrganizationId,
+      }).unwrap();
+      return true;
+    } catch {
+      return false;
+    }
+  }, [formData.customer, registrationId, organization, createBuilderCustomer]);
 
   const handleSendEntitlement = async () => {
     if (!registrationId) return;
@@ -436,15 +516,37 @@ const Onboarding = () => {
       case 'customer':
         return (
           <CustomerDetailsForm
+            ref={customerFormRef}
             onNext={handleCustomerNext}
             initialData={formData.customer}
             registrationId={registrationId}
+            onSavedAndExit={() => {
+              toast({
+                title: "Registration saved",
+                description: "You can continue this registration later from your dashboard."
+              });
+              navigate('/dashboard');
+            }}
           />
         );
       case 'items':
-        return <ItemsSelectionForm onNext={handleItemsNext} initialData={formData.items} registrationId={registrationId} />;
+        return (
+          <ItemsSelectionForm
+            onNext={handleItemsNext}
+            initialData={formData.items}
+            registrationId={registrationId}
+            onSaveCustomerBeforeContinue={hasBuilderAuth() ? saveCustomerFromFormData : undefined}
+          />
+        );
       case 'review':
-        return <ReviewApprovalForm onNext={handleSendEntitlement} formData={formData} registrationId={registrationId} />;
+        return (
+          <ReviewApprovalForm
+            onNext={hasBuilderAuth() ? handleNextStep : handleSendEntitlement}
+            formData={formData}
+            registrationId={registrationId}
+            useBuilderEntitlementApi={hasBuilderAuth()}
+          />
+        );
       case 'send':
         return <SendConfirmationForm registrationId={registrationId} />;
       default:

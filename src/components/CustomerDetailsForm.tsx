@@ -110,7 +110,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
     }
     
     // Auto-populate address fields when a project is selected
-    if (field === 'projectId' && value && value !== 'none') {
+    if (field === 'projectId' && value) {
       const selectedProject = projects.find(p => p.id === value);
       if (selectedProject) {
         setFormData(prev => ({
@@ -151,6 +151,10 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
     
     if (!validateAustralianPostcode(formData.zipCode, formData.state)) {
       newErrors.zipCode = `Please enter a valid postcode for ${formData.state}`;
+    }
+
+    if (!formData.projectId) {
+      newErrors.projectId = 'Project is required';
     }
     
     setErrors(newErrors);
@@ -431,16 +435,15 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="projectId">Link to Project (Optional)</Label>
+                <Label htmlFor="projectId">Link to Project *</Label>
                 <Select 
                   value={formData.projectId} 
-                  onValueChange={(value) => handleInputChange('projectId', value === 'none' ? '' : value)}
+                  onValueChange={(value) => handleInputChange('projectId', value)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={errors.projectId ? 'border-destructive' : ''}>
                     <SelectValue placeholder={projectsLoading ? "Loading projects..." : "Select a project"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No project</SelectItem>
                     {projects.map((project) => (
                       <SelectItem key={project.id} value={project.id}>
                         {project.name}
@@ -448,6 +451,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.projectId && <p className="text-sm text-destructive">{errors.projectId}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="price">Property Price (Optional)</Label>

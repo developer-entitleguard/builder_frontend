@@ -7,7 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { User, Home, FileText, Building, CheckCircle, MessageSquare, Loader2, Lock, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useCreateCustomerEntitlementMutation } from "@/store/api";
+import { useOrganization } from "@/hooks/useOrganization";
+import { useCreateCustomerEntitlementMutation, useGetCustomerDetailsQuery } from "@/store/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +28,7 @@ type ReviewItem = {
   category?: string | null;
   brand?: string | null;
   model?: string | null;
+  documentCount?: number | null;
 };
 
 type ReviewFormData = {
@@ -43,8 +45,30 @@ interface ReviewApprovalFormProps {
   useBuilderEntitlementApi?: boolean;
 }
 
+const getBuilderId = (): string | null => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return null;
+    const parsed = JSON.parse(userData);
+    const orgId = parsed?.userInfo?.builderOrganization?.id ?? parsed?.builderOrganization?.id ?? parsed?.builder_organization?.id;
+    return orgId ?? parsed?.userInfo?.id ?? parsed?.id ?? null;
+  } catch {
+    return null;
+  }
+};
+
 const ReviewApprovalForm = ({ onNext, formData, registrationId, useBuilderEntitlementApi }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
+  const { organization } = useOrganization();
+  const builderId = organization?.id ?? getBuilderId();
+  const { data: customerDetailsResponse } = useGetCustomerDetailsQuery(
+    { builderId: builderId ?? "", customerId: registrationId ?? "" },
+    { skip: !registrationId || !builderId }
+  );
+  const apiData = customerDetailsResponse?.data;
+  const totalItemsFromApi = apiData?.totalItems ?? null;
+  const totalDocumentsFromApi = apiData?.totalDocuments ?? null;
+
   const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
   const [sendingEntitlement, setSendingEntitlement] = useState(false);
   const [approved, setApproved] = useState(false);
@@ -153,6 +177,10 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId, useBuilderEntitl
                   : obj.model == null
                     ? null
                     : String(obj.model),
+              documentCount:
+                typeof obj.documentCount === "number" && Number.isFinite(obj.documentCount)
+                  ? obj.documentCount
+                  : null,
             } satisfies ReviewItem;
           })
         );
@@ -312,10 +340,18 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId, useBuilderEntitl
       : undefined;
 
   // Count total uploaded documents
-  const getTotalDocuments = () => {
-    return Object.values(uploadedDocs).reduce(
-      (total: number, docs: unknown) => total + (Array.isArray(docs) ? docs.length : 0),
+  const getTotalDocuments = (): number => {
+    return Object.values(uploadedDocs).reduce<number>(
+      (total, docs) => total + (Array.isArray(docs) ? docs.length : 0),
       0
+    );
+  };
+
+  const getReadyToSendSummary = () => {
+    const items = totalItemsFromApi ?? selectedItems.length;
+    const docs = totalDocumentsFromApi ?? getTotalDocuments();
+    return (
+      <>{items} item{items !== 1 ? 's' : ''} • {docs} document{docs !== 1 ? 's' : ''} • Ready to send</>
     );
   };
 
@@ -437,11 +473,20 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId, useBuilderEntitl
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
-                            {hasDocuments ? (
-                              <Badge className="bg-green-100 text-green-800">Documents Ready</Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-yellow-600 border-yellow-600">No Documents</Badge>
-                            )}
+                            <Badge
+                              className={
+                                typeof item.documentCount === "number" && item.documentCount > 0
+                                  ? "bg-green-100 text-green-800"
+                                  : "text-yellow-600 border-yellow-600"
+                              }
+                              variant={
+                                typeof item.documentCount === "number" && item.documentCount > 0
+                                  ? "default"
+                                  : "outline"
+                              }
+                            >
+                              Documents ({typeof item.documentCount === "number" ? item.documentCount : 0})
+                            </Badge>
                           </div>
                         </div>
                       );
@@ -458,7 +503,7 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId, useBuilderEntitl
       )}
 
       {/* Documentation Status */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <FileText className="w-5 h-5" />
@@ -481,7 +526,7 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId, useBuilderEntitl
             {getTotalDocuments() as number} document{(getTotalDocuments() as number) !== 1 ? 's' : ''} ready for delivery
           </p>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Consent Confirmation */}
       <Card className="border-primary/50">
@@ -573,7 +618,7 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId, useBuilderEntitl
 
       <div className="flex justify-between items-center pt-6 border-t">
         <p className="text-sm text-muted-foreground">
-          {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} • {getTotalDocuments() as number} document{(getTotalDocuments() as number) !== 1 ? 's' : ''} • Ready to send
+          {getReadyToSendSummary()}
         </p>
         <Button 
           onClick={handleSendToHomeowner}

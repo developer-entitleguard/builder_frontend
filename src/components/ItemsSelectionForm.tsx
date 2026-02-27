@@ -9,7 +9,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useRegistrations } from "@/hooks/useRegistrations";
 import { useToast } from "@/hooks/use-toast";
 import {
   useGetBillOfMaterialsQuery,
@@ -54,6 +53,7 @@ interface RegistrationItem extends BuilderItem {
   is_custom?: boolean;
   serial_number?: string;
   seller?: string;
+  documentCount?: number | null;
   warranty_documents?: Array<{
     name: string;
     url: string;
@@ -110,7 +110,6 @@ const getBuilderId = (): string | null => {
 const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustomerBeforeContinue }: ItemsSelectionFormProps) => {
   const { user } = useAuth();
   const { organization } = useOrganization();
-  const { updateRegistration } = useRegistrations();
   const { toast } = useToast();
   const isAuthenticated = !!user || hasBuilderAuth();
   const [updateBuilderCustomerMap] = useUpdateBuilderCustomerMapMutation();
@@ -220,7 +219,19 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
   useEffect(() => {
     if (!registrationId || existingMapData.length === 0) return;
     const raw = existingMapData as ExistingMapEntry[];
-    const dtosByMapId = new Map<string, { name?: string | null; make?: string | null; brand?: string | null; model?: string | null; category?: string | null; note?: string | null; fileResponseDto?: Array<{ id: string; fileName: string; fileUrl: string }> }>();
+    const dtosByMapId = new Map<
+      string,
+      {
+        name?: string | null;
+        make?: string | null;
+        brand?: string | null;
+        model?: string | null;
+        category?: string | null;
+        note?: string | null;
+        documentCount?: number | null;
+        fileResponseDto?: Array<{ id: string; fileName: string; fileUrl: string }>;
+      }
+    >();
     const customerDtos = customerDetailsResponse?.data?.dtos;
     if (Array.isArray(customerDtos)) {
       for (const cat of customerDtos) {
@@ -228,7 +239,21 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
         for (const it of items) {
           const o = it as unknown as Record<string, unknown>;
           const mapId = o.builderCustomerMapId ?? o.builder_customer_map_id ?? null;
-          if (mapId && typeof mapId === 'string') dtosByMapId.set(mapId, o as { name?: string | null; make?: string | null; brand?: string | null; model?: string | null; category?: string | null; note?: string | null; fileResponseDto?: Array<{ id: string; fileName: string; fileUrl: string }> });
+          if (mapId && typeof mapId === 'string') {
+            dtosByMapId.set(
+              mapId,
+              o as {
+                name?: string | null;
+                make?: string | null;
+                brand?: string | null;
+                model?: string | null;
+                category?: string | null;
+                note?: string | null;
+                documentCount?: number | null;
+                fileResponseDto?: Array<{ id: string; fileName: string; fileUrl: string }>;
+              }
+            );
+          }
         }
       }
     }
@@ -277,6 +302,10 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
         is_custom: false,
         serial_number: getStr(m, 'serialNumber', 'serial_number'),
         seller: getStr(m, 'seller') || undefined,
+        documentCount:
+          typeof dto?.documentCount === 'number' && Number.isFinite(dto.documentCount)
+            ? dto.documentCount
+            : null,
         warranty_documents,
         manual_documents,
       };
@@ -632,32 +661,8 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
       }
     }
 
-    if (!registrationId) {
-      onNext({ selected_items: selectedItems });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await updateRegistration(registrationId, {
-        selected_items: selectedItems
-      });
-      
-      toast({
-        title: "Items saved",
-        description: "Your item selection has been saved successfully",
-      });
-      
-      onNext({ selected_items: selectedItems });
-    } catch (error: unknown) {
-      toast({
-        title: "Error saving items",
-        description: error instanceof Error ? error.message : "Failed to save items",
-        variant: "destructive"
-      });
-    } finally {
-      setSaving(false);
-    }
+    // Persisting items is handled at the Onboarding level via saveRegistrationData.
+    onNext({ selected_items: selectedItems });
   };
 
   return (

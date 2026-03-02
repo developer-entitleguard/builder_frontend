@@ -41,6 +41,22 @@ export interface BuilderPricingResponse {
   data: BuilderPricingEntry[];
 }
 
+export interface UpdateProjectPricingBody {
+  baseEstimatedCost: number;
+  bufferAmount: number;
+  bufferPercentage: number;
+  finalPrice: number;
+  marginAmount: number;
+  marginPercentage: number;
+  totalEstimatedCost: number;
+}
+
+export interface UpdateProjectPricingResponse {
+  success: boolean;
+  message: string;
+  data: BuilderPricingEntry;
+}
+
 export interface CreateProjectPricingResponse {
   success: boolean;
   message: string;
@@ -167,6 +183,22 @@ export const pricingApi = api.injectEndpoints({
         { type: "ProjectPricing", id: `cost-item-${id}` },
       ],
     }),
+
+    // PUT /api/builder/projects/:projectId/pricing/:id
+    updateProjectPricing: build.mutation<
+      UpdateProjectPricingResponse,
+      { projectId: string; id: string; body: UpdateProjectPricingBody }
+    >({
+      query: ({ projectId, id, body }) => ({
+        url: `/api/builder/projects/${projectId}/pricing/${id}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { projectId, id }) => [
+        { type: "ProjectPricing", id: projectId },
+        { type: "ProjectPricing", id },
+      ],
+    }),
   }),
 });
 
@@ -180,4 +212,5 @@ export const {
   useUpdatePricingCostItemMutation,
   useCreateProjectPricingMutation,
   useGenerateProjectPricingMutation,
+  useUpdateProjectPricingMutation,
 } = pricingApi;

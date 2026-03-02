@@ -63,6 +63,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { useUpdateProjectPricingMutation } from "@/store/api/pricing";
 
 interface ProjectPricingProps {
   project: Project;
@@ -89,6 +91,9 @@ export const ProjectPricing = ({ project, activities }: ProjectPricingProps) => 
     addCostItem,
     updateBufferMargin
   } = useProjectPricing(project.id);
+
+  const { toast } = useToast();
+  const [updateProjectPricing, { isLoading: savingPricing }] = useUpdateProjectPricingMutation();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<number>(0);
@@ -175,6 +180,38 @@ export const ProjectPricing = ({ project, activities }: ProjectPricingProps) => 
     if (!activityId) return null;
     const activity = activities.find(a => a.id === activityId);
     return activity?.name || null;
+  };
+
+  const handleSyncPricingToApi = async () => {
+    if (!pricing) return;
+
+    try {
+      await updateProjectPricing({
+        projectId: project.id,
+        id: pricing.id,
+        body: {
+          baseEstimatedCost: pricing.total_estimated_cost,
+          bufferAmount: pricing.buffer_amount,
+          bufferPercentage: pricing.buffer_percentage,
+          finalPrice: pricing.final_price,
+          marginAmount: pricing.margin_amount,
+          marginPercentage: pricing.margin_percentage,
+          totalEstimatedCost: pricing.total_estimated_cost,
+        },
+      }).unwrap();
+
+      toast({
+        title: "Pricing updated",
+        description: "Pricing summary has been synced to the builder API.",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update project pricing.";
+      toast({
+        title: "Error updating pricing",
+        description: message,
+        variant: "destructive",
+      });
+    }
   };
 
   if (loading) {
@@ -633,6 +670,16 @@ export const ProjectPricing = ({ project, activities }: ProjectPricingProps) => 
           </div>
         </CardContent>
       </Card>
+      
+      <div className="flex justify-end">
+        <Button 
+          variant="default" 
+          onClick={handleSyncPricingToApi}
+          disabled={savingPricing || !pricing}
+        >
+          {savingPricing ? "Saving..." : "Save Pricing"}
+        </Button>
+      </div>
 
       {/* Disclaimer */}
       <Card className="bg-muted/50 border-dashed">

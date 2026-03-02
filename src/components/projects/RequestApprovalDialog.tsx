@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,9 +13,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CreateApprovalData, ApprovalType } from "@/hooks/useApprovals";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCreateApprovalMutation } from "@/store/api/approvals";
+import { useGetProjectRegistrationsQuery } from "@/store/api/projects";
+import { useGetStatusesByModuleQuery } from "@/store/api/status";
 
 interface Registration {
   id: string;
@@ -59,40 +60,52 @@ export const RequestApprovalDialog = ({
   const [approverEmail, setApproverEmail] = useState("");
   const [dueBy, setDueBy] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [loadingRegistrations, setLoadingRegistrations] = useState(false);
+  const {
+    data: projectRegistrationsResponse,
+    isLoading: loadingRegistrations,
+  } = useGetProjectRegistrationsQuery(
+    { projectId },
+    { skip: !projectId }
+  );
 
-  const fetchRegistrations = useCallback(async () => {
-    setLoadingRegistrations(true);
-    try {
-      const { data, error } = await supabase
-        .from('homeowner_registrations')
-        .select('id, customer_name, customer_email')
-        .eq('project_id', projectId);
-      
-      if (error) {
-        throw error;
-      }
-      setRegistrations((data as Registration[]) || []);
-    } catch (error: unknown) {
-      toast({
-        title: "Error fetching registrations",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to load homeowner registrations.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingRegistrations(false);
-    }
-  }, [projectId, toast]);
+  const registrations: Registration[] =
+    (projectRegistrationsResponse?.data ?? []).map((raw) => {
+      const r = raw as {
+        id: string;
+        firstName?: string | null;
+        lastName?: string | null;
+        email?: string | null;
+        customerName?: string;
+        customer_email?: string;
+        customerEmail?: string;
+      };
+      const fullName = [r.firstName, r.lastName].filter(Boolean).join(" ");
+      const name =
+        fullName ||
+        r.customerName ||
+        r.customer_email ||
+        r.customerEmail ||
+        r.email ||
+        "";
+      const email =
+        r.email ??
+        r.customerEmail ??
+        r.customer_email ??
+        "";
+      return {
+        id: r.id,
+        customer_name: name || "(No name)",
+        customer_email: email,
+      };
+    });
 
-  useEffect(() => {
-    if (open && projectId) {
-      void fetchRegistrations();
-    }
-  }, [open, projectId, fetchRegistrations]);
+  const { data: approvalStatusResponse } = useGetStatusesByModuleQuery({
+    module: "APPROVAL_REQUEST",
+  });
+  const pendingStatusId =
+    approvalStatusResponse?.data.find(
+      (s) => s.name.toUpperCase() === "PENDING"
+    )?.id ?? null;
 
   const handleRegistrationChange = (regId: string) => {
     const actualId = regId === "none" ? "" : regId;
@@ -112,10 +125,12 @@ export const RequestApprovalDialog = ({
     
     setIsSubmitting(true);
     let result: unknown = null;
+    let builderResult: { success?: boolean; message?: string } | null = null;
 
     // First, try the builder POST /api/builder/projects/{projectId}/activities/{activityId}/approvals
     // This should always be attempted, regardless of Supabase availability.
     try {
+      const statusId = pendingStatusId ?? "pending";
       const body = {
         approvalType: approvalType,
         approverEmail: approverEmail.trim() || "",
@@ -123,15 +138,22 @@ export const RequestApprovalDialog = ({
         description: description.trim() || "",
         dueBy: dueBy || "",
         registrationId: registrationId || "",
-        statusId: "pending",
+        statusId,
         title: title.trim(),
       };
 
-      await createApprovalMutation({
+      builderResult = await createApprovalMutation({
         projectId,
         activityId,
         body,
       }).unwrap();
+      if (builderResult?.success) {
+        toast({
+          title: "Approval request created",
+          description:
+            builderResult.message ?? "Approval request created successfully.",
+        });
+      }
     } catch {
       // Ignore builder API errors; Supabase remains source of truth for UI
     }
@@ -147,18 +169,13 @@ export const RequestApprovalDialog = ({
         approver_email: approverEmail.trim() || null,
         due_by: dueBy || null
       });
-    } catch (error: unknown) {
-      toast({
-        title: "Error requesting approval",
-        description:
-          error instanceof Error ? error.message : "Failed to submit approval request.",
-        variant: "destructive",
-      });
+    } catch {
+      // Supabase/onSubmit errors are not surfaced to avoid duplicate or misleading toasts
     }
 
     setIsSubmitting(false);
     
-    if (result) {
+    if (builderResult?.success || result) {
       resetForm();
       onOpenChange(false);
     }

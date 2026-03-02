@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Users, 
@@ -16,6 +15,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { LinkRegistrationDialog } from "./LinkRegistrationDialog";
+import { useGetProjectRegistrationsQuery } from "@/store/api/projects";
 
 interface Registration {
   id: string;
@@ -43,33 +43,106 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
   const navigate = useNavigate();
   const { toast } = useToast();
   const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [loading, setLoading] = useState(true);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
 
-  const fetchRegistrations = async () => {
-    try {
-      const { data, error } = await (supabase as any)
-        .from('homeowner_registrations')
-        .select('id, customer_name, customer_email, customer_phone, property_address, status, settlement_date, created_at')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setRegistrations(data || []);
-    } catch (error: any) {
-      toast({
-        title: "Error fetching registrations",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    data: projectRegistrationsResponse,
+    isLoading: loading,
+    error,
+    refetch,
+  } = useGetProjectRegistrationsQuery(
+    { projectId },
+    { skip: !projectId }
+  );
 
   useEffect(() => {
-    fetchRegistrations();
-  }, [projectId]);
+    if (!projectRegistrationsResponse) return;
+    const rawRegs = projectRegistrationsResponse.data ?? [];
+    const mapped: Registration[] = rawRegs.map((raw) => {
+      const r = raw as {
+        id: string;
+        firstName?: string | null;
+        lastName?: string | null;
+        email?: string | null;
+        contact?: string | null;
+        address?: string | null;
+        city?: string | null;
+        state?: string | null;
+        postcode?: string | null;
+        zip?: string | null;
+        customer_name?: string;
+        customerEmail?: string;
+        customer_email?: string;
+        statusName?: string | null;
+        status?: string | null;
+        settlementDate?: string | null;
+        settlement_date?: string | null;
+        createdAt?: string | null;
+        created_at?: string | null;
+      };
+
+      const fullName = [r.firstName, r.lastName].filter(Boolean).join(" ");
+      const customer_name =
+        fullName ||
+        r.customer_name ||
+        r.customerEmail ||
+        r.customer_email ||
+        r.email ||
+        "(No name)";
+
+      const customer_email =
+        r.email ??
+        r.customerEmail ??
+        r.customer_email ??
+        "";
+
+      const customer_phone = r.contact ?? null;
+
+      const property_address = [
+        r.address,
+        r.city,
+        r.state,
+        r.postcode ?? r.zip,
+      ]
+        .filter(Boolean)
+        .join(", ");
+
+      const statusRaw = r.statusName ?? r.status ?? "draft";
+      const status = typeof statusRaw === "string" ? statusRaw.toLowerCase() : "draft";
+
+      const settlement_date = r.settlementDate ?? r.settlement_date ?? null;
+      const created_at = r.createdAt ?? r.created_at ?? new Date().toISOString();
+
+      return {
+        id: r.id,
+        customer_name,
+        customer_email,
+        customer_phone,
+        property_address,
+        status,
+        settlement_date,
+        created_at,
+      };
+    });
+    setRegistrations(mapped);
+  }, [projectRegistrationsResponse]);
+
+  useEffect(() => {
+    if (!error) return;
+    const message =
+      error && typeof error === "object" && "data" in error
+        ? String((error as { data?: unknown }).data ?? "Failed to load registrations")
+        : "Failed to load registrations";
+    toast({
+      title: "Error fetching registrations",
+      description: message,
+      variant: "destructive",
+    });
+  }, [error, toast]);
+
+  const fetchRegistrations = () => {
+    void refetch();
+  };
 
   const handleCreateRegistration = () => {
     // Navigate to onboarding with project pre-selected

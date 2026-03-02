@@ -18,7 +18,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useApprovals, ApprovalRequest, ApprovalStatus, ApprovalType } from "@/hooks/useApprovals";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useGetProjectApprovalsQuery, useUpdateApprovalMutation, type BuilderApprovalApi } from "@/store/api/approvals";
+import { useGetActivityByIdQuery } from "@/store/api/activities";
+import { useGetStatusesByModuleQuery } from "@/store/api/status";
 import { 
   ArrowLeft, 
   Clock, 
@@ -40,13 +44,61 @@ const statusConfig: Record<ApprovalStatus, { icon: React.ElementType; color: str
   cancelled: { icon: Ban, color: "bg-gray-100 text-gray-700", label: "Cancelled" }
 };
 
+function hasBuilderAuth(): boolean {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData) as { jwt?: string } | null;
+    return !!parsed?.jwt;
+  } catch {
+    return false;
+  }
+}
+
+function mapApiApprovalToRequest(item: BuilderApprovalApi, projectId: string): ApprovalRequest {
+  const statusValue = (item as BuilderApprovalApi & { statusValue?: string }).statusValue;
+  const statusRaw = statusValue ?? item.statusName ?? item.status ?? "PENDING";
+  const statusName = String(statusRaw).toLowerCase();
+  const status: ApprovalStatus = ["pending", "approved", "rejected", "cancelled"].includes(statusName)
+    ? (statusName as ApprovalStatus)
+    : "pending";
+  const approvalTypeRaw = item.approvalType ?? item.approval_type ?? "Other";
+  const approvalType = (typeof approvalTypeRaw === "string" ? approvalTypeRaw : "Other") as ApprovalType;
+  const decisionComment = item.decisionComment ?? item.decision_comment;
+  return {
+    id: typeof item.id === "string" ? item.id : "",
+    activity_id: typeof (item.activityId ?? item.activity_id) === "string" ? (item.activityId ?? item.activity_id) : "",
+    project_id: projectId,
+    registration_id: null,
+    builder_id: "",
+    approval_type: approvalType,
+    title: typeof item.title === "string" ? item.title : "",
+    description: typeof item.description === "string" ? item.description : null,
+    approver_name: typeof (item.approverName ?? item.approver_name) === "string" ? (item.approverName ?? item.approver_name) as string : null,
+    approver_email: typeof (item.approverEmail ?? item.approver_email) === "string" ? (item.approverEmail ?? item.approver_email) as string : null,
+    status,
+    requested_at: typeof (item.requestedAt ?? item.requested_at) === "string" ? (item.requestedAt ?? item.requested_at) as string : new Date().toISOString(),
+    due_by: typeof (item.dueBy ?? item.due_by) === "string" ? (item.dueBy ?? item.due_by) : null,
+    decided_at: typeof (item.decidedAt ?? item.decided_at) === "string" ? (item.decidedAt ?? item.decided_at) : null,
+    decided_by: null,
+    decision_comment: typeof decisionComment === "string" ? decisionComment : null,
+    approval_token: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 const ApprovalDetail = () => {
   const { projectId, approvalId } = useParams<{ projectId: string; approvalId: string }>();
   const { user, loading: authLoading } = useAuth();
   const { fetchApproval, respondToApproval } = useApprovals(projectId);
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const isBuilder = hasBuilderAuth();
 
   const [approval, setApproval] = useState<ApprovalRequest | null>(null);
+  const [approvalFromApi, setApprovalFromApi] = useState(false);
+  const [apiTriedAndNotFound, setApiTriedAndNotFound] = useState(false);
   const [activityName, setActivityName] = useState<string>("");
   const [registrationName, setRegistrationName] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -57,63 +109,154 @@ const ApprovalDetail = () => {
     action: null
   });
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/auth');
-    }
-  }, [user, authLoading, navigate]);
+  const { data: approvalsResponse, isLoading: approvalsLoading, refetch: refetchApprovals } = useGetProjectApprovalsQuery(
+    { projectId: projectId ?? "" },
+    { skip: !projectId || !approvalId }
+  );
+
+  const { data: activityResponse } = useGetActivityByIdQuery(
+    { projectId: projectId ?? "", id: approval?.activity_id ?? "" },
+    { skip: !projectId || !approval?.activity_id || !approvalFromApi }
+  );
+
+  const { data: statusResponse } = useGetStatusesByModuleQuery(
+    { module: "APPROVAL_REQUEST" },
+    { skip: !approvalFromApi || !confirmDialog.action }
+  );
+
+  const [updateApproval] = useUpdateApprovalMutation();
 
   useEffect(() => {
+    if (!authLoading && !user && !isBuilder) {
+      navigate('/auth');
+    }
+  }, [user, authLoading, isBuilder, navigate]);
+
+  // Load approval from builder API first (so detail shows when coming from ApprovalsList)
+  useEffect(() => {
+    if (!approvalId || !projectId) return;
+
+    if (approvalsLoading) {
+      setLoading(true);
+      return;
+    }
+
+    const list = approvalsResponse?.success && Array.isArray(approvalsResponse.data) ? approvalsResponse.data : [];
+    const found = list.find(
+      (a) =>
+        String(a.id) === approvalId ||
+        String((a as Record<string, unknown>)?.approvalId) === approvalId
+    );
+    if (found) {
+      setApproval(mapApiApprovalToRequest(found, projectId));
+      setRegistrationName(typeof (found.approverName ?? found.approver_name) === "string" ? (found.approverName ?? found.approver_name) : "");
+      setApprovalFromApi(true);
+      setApiTriedAndNotFound(false);
+      setLoading(false);
+    } else if (!approvalsLoading) {
+      setLoading(false);
+      if (isBuilder) {
+        navigate(`/projects/${projectId}`);
+      } else {
+        setApiTriedAndNotFound(true);
+      }
+    }
+  }, [approvalId, projectId, isBuilder, approvalsResponse, approvalsLoading, navigate]);
+
+  // Reset API-not-found when params change
+  useEffect(() => {
+    setApiTriedAndNotFound(false);
+  }, [approvalId, projectId]);
+
+  // Load approval from Supabase only after API was tried and didn't find (non-builder)
+  useEffect(() => {
+    if (!approvalId || !user || isBuilder || !apiTriedAndNotFound) return;
+
     const loadApproval = async () => {
-      if (approvalId && user) {
-        setLoading(true);
-        const data = await fetchApproval(approvalId);
-        if (data) {
-          setApproval(data);
-          
-          // Fetch activity name
-          const { data: activity } = await (supabase as any)
+      setLoading(true);
+      const data = await fetchApproval(approvalId);
+      if (data) {
+        setApproval(data);
+        setApprovalFromApi(false);
+        const { data: activity } = (await supabase
             .from('project_activities')
             .select('name')
             .eq('id', data.activity_id)
+            .single()) as { data: { name?: string } | null };
+        if (activity?.name) setActivityName(activity.name);
+        if (data.registration_id) {
+          const { data: registration } = await supabase
+            .from('homeowner_registrations')
+            .select('customer_name')
+            .eq('id', data.registration_id)
             .single();
-          if (activity) setActivityName(activity.name);
-
-          // Fetch registration name if linked
-          if (data.registration_id) {
-            const { data: registration } = await supabase
-              .from('homeowner_registrations')
-              .select('customer_name')
-              .eq('id', data.registration_id)
-              .single();
-            if (registration) setRegistrationName(registration.customer_name);
-          }
-        } else {
-          navigate(`/projects/${projectId}`);
+          if (registration) setRegistrationName(registration.customer_name);
         }
-        setLoading(false);
+      } else {
+        navigate(`/projects/${projectId}`);
       }
+      setLoading(false);
     };
     loadApproval();
-  }, [approvalId, user]);
+  }, [approvalId, user, isBuilder, apiTriedAndNotFound, projectId, fetchApproval, navigate]);
+
+  // Set activity name when loaded from API
+  useEffect(() => {
+    if (approvalFromApi && activityResponse?.success && activityResponse?.data?.name) {
+      setActivityName(activityResponse.data.name);
+    }
+  }, [approvalFromApi, activityResponse]);
 
   const handleRespond = async (status: 'approved' | 'rejected' | 'cancelled') => {
     setConfirmDialog({ open: true, action: status });
   };
 
   const confirmResponse = async () => {
-    if (!confirmDialog.action || !approvalId) return;
-    
+    if (!confirmDialog.action || !approvalId || !approval) return;
+
     setIsSubmitting(true);
-    const success = await respondToApproval(approvalId, confirmDialog.action, decisionComment);
-    setIsSubmitting(false);
-    
-    if (success) {
-      setConfirmDialog({ open: false, action: null });
-      // Reload approval data
-      const data = await fetchApproval(approvalId);
-      if (data) setApproval(data);
+    let success = false;
+
+    if (approvalFromApi && projectId && approval.activity_id) {
+      const statuses = statusResponse?.success && Array.isArray(statusResponse.data) ? statusResponse.data : [];
+      const actionToName: Record<string, string> = { approved: "Approved", rejected: "Rejected", cancelled: "Cancelled" };
+      const name = actionToName[confirmDialog.action];
+      const statusId = statuses.find((s) => s.name.toLowerCase() === confirmDialog.action)?.id
+        ?? statuses.find((s) => s.name === name)?.id;
+      if (!statusId) {
+        toast({ title: "Error", description: "Could not resolve status.", variant: "destructive" });
+        setIsSubmitting(false);
+        return;
+      }
+      try {
+        await updateApproval({
+          projectId,
+          activityId: approval.activity_id,
+          id: approvalId,
+          body: { decisionComment: decisionComment.trim(), statusId },
+        }).unwrap();
+        success = true;
+        const result = await refetchApprovals();
+        const list = result.data?.success && Array.isArray(result.data.data) ? result.data.data : [];
+        const updated = list.find((a) => String(a.id) === approvalId);
+        if (updated) setApproval(mapApiApprovalToRequest(updated, projectId));
+        toast({
+          title: confirmDialog.action === "approved" ? "Approved" : confirmDialog.action === "rejected" ? "Rejected" : "Cancelled",
+          description: `Request has been ${confirmDialog.action}.`,
+        });
+      } catch {
+        toast({ title: "Error responding to approval", variant: "destructive" });
+      }
+    } else {
+      success = await respondToApproval(approvalId, confirmDialog.action, decisionComment);
+      if (success) {
+        const data = await fetchApproval(approvalId);
+        if (data) setApproval(data);
+      }
     }
+
+    setIsSubmitting(false);
+    if (success) setConfirmDialog({ open: false, action: null });
   };
 
   if (authLoading || loading) {

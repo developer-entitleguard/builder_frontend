@@ -132,14 +132,14 @@ const App = () => (
                   <ProjectCreate />
                 </ProtectedRoute>
               } />
-              <Route path="/projects/:id" element={
-                <ProtectedRoute>
-                  <ProjectDetail />
-                </ProtectedRoute>
-              } />
               <Route path="/projects/:projectId/approvals/:approvalId" element={
                 <ProtectedRoute>
                   <ApprovalDetail />
+                </ProtectedRoute>
+              } />
+              <Route path="/projects/:id" element={
+                <ProtectedRoute>
+                  <ProjectDetail />
                 </ProtectedRoute>
               } />
               <Route path="/consent" element={<ConsentConfirmation />} />

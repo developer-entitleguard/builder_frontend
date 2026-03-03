@@ -48,7 +48,8 @@ function mapApiApprovalToRequest(
   item: BuilderApprovalApi,
   projectId: string
 ): ApprovalRequest {
-  const statusRaw = item.statusName ?? item.status ?? "PENDING";
+  const statusValue = (item as BuilderApprovalApi & { statusValue?: string }).statusValue;
+  const statusRaw = statusValue ?? item.statusName ?? item.status ?? "PENDING";
   const statusName = String(statusRaw).toLowerCase();
   const status: ApprovalStatus = ["pending", "approved", "rejected", "cancelled"].includes(statusName)
     ? (statusName as ApprovalStatus)

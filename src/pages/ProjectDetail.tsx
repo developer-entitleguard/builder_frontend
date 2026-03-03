@@ -10,6 +10,7 @@ import { useActivityCategories } from "@/hooks/useActivityCategories";
 import { useApprovals } from "@/hooks/useApprovals";
 import { useAuth } from "@/hooks/useAuth";
 import { useProjectByIdQuery, type BuilderProjectApi } from "@/store/api/projects";
+import { useGetProjectApprovalsQuery } from "@/store/api/approvals";
 import { useGetStatusesByModuleQuery } from "@/store/api/status";
 import { ActivityList } from "@/components/projects/ActivityList";
 import { ApprovalsList } from "@/components/projects/ApprovalsList";
@@ -114,6 +115,18 @@ const ProjectDetail = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+
+  const isBuilder = hasBuilderAuth();
+
+  const { data: approvalsApiResponse } = useGetProjectApprovalsQuery(
+    { projectId: id ?? "" },
+    { skip: !id || !isBuilder }
+  );
+
+  const approvalsCount =
+    isBuilder && approvalsApiResponse?.success && Array.isArray(approvalsApiResponse.data)
+      ? approvalsApiResponse.data.length
+      : approvals.length;
 
   const {
     data: projectResponse,
@@ -302,7 +315,7 @@ const ProjectDetail = () => {
               Registrations
             </TabsTrigger>
             <TabsTrigger value="approvals">
-              Approvals ({approvals.length})
+              Approvals ({approvalsCount})
             </TabsTrigger>
             <TabsTrigger value="pricing" className="flex items-center gap-1">
               <DollarSign className="h-4 w-4" />

@@ -217,7 +217,8 @@ const ApprovalDetail = () => {
     setIsSubmitting(true);
     let success = false;
 
-    if (approvalFromApi && projectId && approval.activity_id) {
+    // Builder path: PUT /api/builder/projects/{projectId}/activities/{activityId}/approvals/{id}
+    if (isBuilder && projectId && approval.activity_id) {
       const statuses = statusResponse?.success && Array.isArray(statusResponse.data) ? statusResponse.data : [];
       const actionToName: Record<string, string> = { approved: "Approved", rejected: "Rejected", cancelled: "Cancelled" };
       const name = actionToName[confirmDialog.action];
@@ -229,7 +230,7 @@ const ApprovalDetail = () => {
         return;
       }
       try {
-        await updateApproval({
+        const apiResult = await updateApproval({
           projectId,
           activityId: approval.activity_id,
           id: approvalId,
@@ -241,8 +242,13 @@ const ApprovalDetail = () => {
         const updated = list.find((a) => String(a.id) === approvalId);
         if (updated) setApproval(mapApiApprovalToRequest(updated, projectId));
         toast({
-          title: confirmDialog.action === "approved" ? "Approved" : confirmDialog.action === "rejected" ? "Rejected" : "Cancelled",
-          description: `Request has been ${confirmDialog.action}.`,
+          title:
+            confirmDialog.action === "approved"
+              ? "Approved"
+              : confirmDialog.action === "rejected"
+              ? "Rejected"
+              : "Cancelled",
+          description: apiResult?.message ?? "Approval decision recorded successfully.",
         });
       } catch {
         toast({ title: "Error responding to approval", variant: "destructive" });

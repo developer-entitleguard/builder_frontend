@@ -134,4 +134,41 @@ export const useDownTemp = () => {
   return { download, isLoading };
 };
 
+export const useGetDownloadActivityTemplate = () => {
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const download = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const authToken = getAuthToken();
+      const apiBaseUrl = getApiBaseUrl();
+      const url = import.meta.env.DEV
+        ? `/api/builder/download/activity-template`
+        : `${apiBaseUrl}/api/builder/download/activity-template`;
+
+      await createDownload(url, "activity_template.csv", authToken);
+
+      toast({
+        title: "Template downloaded",
+        description: "Activity template CSV file has been downloaded",
+      });
+    } catch (error) {
+      console.error("Error downloading activity template:", error);
+      toast({
+        title: "Error downloading template",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to download activity template",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  return { download, isLoading };
+};
+
 

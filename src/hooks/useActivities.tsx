@@ -7,6 +7,7 @@ import {
   useGetActivitiesByProjectQuery,
   useCreateActivityMutation,
   useDeleteActivityMutation,
+  useUpdateActivityMutation,
   type BuilderActivityApi,
 } from "@/store/api/activities";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
@@ -125,6 +126,7 @@ export const useActivities = (projectId: string | undefined) => {
 
   const [createActivityMutation] = useCreateActivityMutation();
   const [deleteActivityMutation] = useDeleteActivityMutation();
+  const [updateActivityMutation] = useUpdateActivityMutation();
 
   // Map builder API activities into local Activity shape
   useEffect(() => {
@@ -321,7 +323,83 @@ export const useActivities = (projectId: string | undefined) => {
     }
   };
 
-  const updateActivity = async (id: string, data: Partial<CreateActivityData & { status: ActivityStatus; percentage_complete: number; completed?: boolean }>): Promise<boolean> => {
+  const updateActivity = async (
+    id: string,
+    data: Partial<
+      CreateActivityData & {
+        status: ActivityStatus;
+        percentage_complete: number;
+        completed?: boolean;
+      }
+    >
+  ): Promise<boolean> => {
+    // Builder API path via RTK Query
+    if (isBuilder && projectId) {
+      try {
+        const existing = activities.find((a) => a.id === id);
+        if (!existing) {
+          throw new Error("Activity not found");
+        }
+
+        const willBeCompleted =
+          typeof data.completed === "boolean"
+            ? data.completed
+            : existing.completed ?? existing.status === "done";
+
+        const body = {
+          categoryId: data.category_id ?? existing.category_id ?? null,
+          completed: willBeCompleted,
+          completedAt: willBeCompleted
+            ? new Date().toISOString()
+            : null,
+          description:
+            data.description ?? existing.description ?? "",
+          dueDate: data.due_date ?? existing.due_date ?? "",
+          name: data.name ?? existing.name,
+          orderIndex: existing.order_index,
+          pricePaid:
+            data.price_paid ?? existing.price_paid ?? 0,
+          quote: data.quote ?? existing.quote ?? 0,
+          vendorEmail:
+            data.vendor_email ?? existing.vendor_email ?? "",
+          vendorName:
+            data.vendor_name ?? existing.vendor_name ?? "",
+          vendorPhone:
+            data.vendor_phone ?? existing.vendor_phone ?? "",
+        };
+
+        const result = await updateActivityMutation({
+          projectId,
+          id,
+          body,
+        }).unwrap();
+
+        if (!result?.success) {
+          toast({
+            title: "Error updating activity",
+            description:
+              result?.message || "Failed to update activity",
+            variant: "destructive",
+          });
+          return false;
+        }
+
+        // RTK Query invalidates and refetches; local state will update via useEffect
+        return true;
+      } catch (error: unknown) {
+        toast({
+          title: "Error updating activity",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Failed to update activity",
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+
+    // Legacy Supabase path
     try {
       const updateData: Record<string, unknown> = { ...data };
       if (typeof data.completed === "boolean") {
@@ -336,19 +414,22 @@ export const useActivities = (projectId: string | undefined) => {
       }
 
       const { error } = await (supabase as typeof supabase)
-        .from('project_activities')
+        .from("project_activities")
         .update(updateData)
-        .eq('id', id);
+        .eq("id", id);
 
       if (error) throw error;
-      
+
       await fetchActivities();
       return true;
     } catch (error: unknown) {
       toast({
         title: "Error updating activity",
-        description: error instanceof Error ? error.message : "Failed to delete activity",
-        variant: "destructive"
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete activity",
+        variant: "destructive",
       });
       return false;
     }

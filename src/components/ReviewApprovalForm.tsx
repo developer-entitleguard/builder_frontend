@@ -8,7 +8,7 @@ import { User, Home, FileText, Building, CheckCircle, MessageSquare, Loader2, Lo
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useOrganization } from "@/hooks/useOrganization";
-import { useCreateCustomerEntitlementMutation, useGetCustomerDetailsQuery } from "@/store/api";
+import { useCreateCustomerEntitlementMutation, useGetCustomerDetailsQuery, useSendConsentMailMutation } from "@/store/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,7 +57,12 @@ const getBuilderId = (): string | null => {
   }
 };
 
-const ReviewApprovalForm = ({ onNext, formData, registrationId, useBuilderEntitlementApi }: ReviewApprovalFormProps) => {
+const ReviewApprovalForm = ({
+  onNext,
+  formData,
+  registrationId,
+  useBuilderEntitlementApi,
+}: ReviewApprovalFormProps) => {
   const { toast } = useToast();
   const { organization } = useOrganization();
   const builderId = organization?.id ?? getBuilderId();
@@ -76,7 +81,7 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId, useBuilderEntitl
   const [consentLocked, setConsentLocked] = useState(false);
   const [selectedItems, setSelectedItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [requestingConsent, setRequestingConsent] = useState(false);
+  const [sendConsentMail, { isLoading: requestingConsent }] = useSendConsentMailMutation();
   const [consentDialogOpen, setConsentDialogOpen] = useState(false);
   const [consentUrl, setConsentUrl] = useState<string | null>(null);
 
@@ -232,41 +237,7 @@ const ReviewApprovalForm = ({ onNext, formData, registrationId, useBuilderEntitl
       return;
     }
 
-    setRequestingConsent(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('consent-management', {
-        body: {
-          action: 'request_consent',
-          registration_id: registrationId,
-        },
-      });
-
-      if (error) throw error;
-
-      setConsentUrl(data.consentUrl);
-      setConsentDialogOpen(true);
-
-      if (data.emailSent) {
-        toast({
-          title: "Consent request sent",
-          description: `Email sent to ${data.customerEmail}`,
-        });
-      } else {
-        toast({
-          title: "Consent link generated",
-          description: data.emailError ? `Email failed: ${data.emailError}. Please share the link manually.` : `Share the link with ${data.customerEmail}`,
-          variant: data.emailError ? "destructive" : "default"
-        });
-      }
-    } catch (error: unknown) {
-      toast({
-        title: "Error requesting consent",
-        description: error instanceof Error ? error.message : "Failed to request consent",
-        variant: "destructive"
-      });
-    } finally {
-      setRequestingConsent(false);
-    }
+    await sendConsentMail({ id: registrationId });
   };
 
   const copyConsentUrl = () => {

@@ -35,6 +35,12 @@ export interface UpdateBuilderCustomerMapResponse {
   message: string;
 }
 
+export interface SendConsentMailResponse {
+  success: boolean;
+  message: string;
+  data?: unknown;
+}
+
 export const builderCustomerApi = api.injectEndpoints({
   endpoints: (build) => ({
     createBuilderCustomer: build.mutation<
@@ -129,6 +135,16 @@ export const builderCustomerApi = api.injectEndpoints({
       },
       invalidatesTags: ['BuilderCustomer', 'CustomerDetails'],
     }),
+
+    sendConsentMail: build.mutation<
+      SendConsentMailResponse,
+      { id: string }
+    >({
+      query: ({ id }) => ({
+        url: `/api/builder-customer/${id}/send-consent-mail`,
+        method: 'POST',
+      }),
+    }),
   }),
 });
 
@@ -136,4 +152,5 @@ export const {
   useCreateBuilderCustomerMutation,
   useDeleteBuilderCustomerMutation,
   useUpdateBuilderCustomerMapMutation,
+  useSendConsentMailMutation,
 } = builderCustomerApi;

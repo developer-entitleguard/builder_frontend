@@ -543,6 +543,9 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
         }).unwrap();
         setSelectedItems(prev => [...prev, newCustomItem]);
         setShowCustomItemModal(false);
+        if (registrationId) {
+          fetchExistingMap(registrationId);
+        }
         toast({
           title: "Custom item added",
           description: "The item has been saved and added to the selection.",

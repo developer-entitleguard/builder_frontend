@@ -41,6 +41,12 @@ export interface SendConsentMailResponse {
   data?: unknown;
 }
 
+export interface BulkDeleteBuilderCustomerResponse {
+  success: boolean;
+  message: string;
+  data?: unknown;
+}
+
 export const builderCustomerApi = api.injectEndpoints({
   endpoints: (build) => ({
     createBuilderCustomer: build.mutation<
@@ -61,6 +67,18 @@ export const builderCustomerApi = api.injectEndpoints({
       query: (id) => ({
         url: `/api/builder/customer/${id}`,
         method: 'DELETE',
+      }),
+      invalidatesTags: ['BuilderCustomer', 'CustomerDetails', 'Dashboard'],
+    }),
+    // Bulk delete builder customers: DELETE /api/builder/customer with body ["id1","id2",...]
+    deleteBuilderCustomers: build.mutation<
+      BulkDeleteBuilderCustomerResponse,
+      string[]
+    >({
+      query: (ids) => ({
+        url: '/api/builder/customer',
+        method: 'DELETE',
+        body: ids,
       }),
       invalidatesTags: ['BuilderCustomer', 'CustomerDetails', 'Dashboard'],
     }),
@@ -153,4 +171,5 @@ export const {
   useDeleteBuilderCustomerMutation,
   useUpdateBuilderCustomerMapMutation,
   useSendConsentMailMutation,
+  useDeleteBuilderCustomersMutation,
 } = builderCustomerApi;

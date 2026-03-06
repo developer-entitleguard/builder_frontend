@@ -15,8 +15,9 @@ import {
   useGetBillOfMaterialsQuery,
   useAssignBOMMutation,
   useLazyCheckBOMRestrictionsQuery,
+  useDeleteBuilderCustomersMutation,
 } from "@/store/api";
-import { Package, Send, X, AlertTriangle } from "lucide-react";
+import { Package, Send, X, AlertTriangle, Trash2 } from "lucide-react";
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -33,6 +34,7 @@ export const BulkActionsBar = ({
 }: BulkActionsBarProps) => {
   const { toast } = useToast();
   const [bomDialogOpen, setBomDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedBom, setSelectedBom] = useState("");
   const [loading, setLoading] = useState(false);
   const [warningModalOpen, setWarningModalOpen] = useState(false);
@@ -40,6 +42,7 @@ export const BulkActionsBar = ({
 
   const [checkBOMRestrictions] = useLazyCheckBOMRestrictionsQuery();
   const [assignBOM, { isLoading: isAssigningBOM }] = useAssignBOMMutation();
+  const [deleteBuilderCustomers, { isLoading: isDeleting }] = useDeleteBuilderCustomersMutation();
 
   const {
     data: bomsData,
@@ -178,6 +181,41 @@ export const BulkActionsBar = ({
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) {
+      toast({
+        title: "No registrations selected",
+        description: "Please select at least one registration to delete.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await deleteBuilderCustomers(selectedIds).unwrap();
+
+      toast({
+        title: "Registrations deleted",
+        description: `${selectedIds.length} registration(s) have been deleted.`,
+      });
+
+      onClearSelection();
+      onSuccess();
+    } catch (error) {
+      toast({
+        title: "Error deleting registrations",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete selected registrations",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (selectedCount === 0) return null;
 
   return (
@@ -215,6 +253,21 @@ export const BulkActionsBar = ({
             <Send className="h-4 w-4 mr-2" />
             {loading || isAssigningBOM ? "Submitting..." : "Bulk Submit"}
           </Button>
+
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDeleteDialogOpen(true);
+            }}
+            disabled={loading || isDeleting}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete
+          </Button>
         </div>
 
         <Button
@@ -226,6 +279,39 @@ export const BulkActionsBar = ({
           <X className="h-4 w-4" />
         </Button>
       </div>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete registration(s)?</DialogTitle>
+            <DialogDescription>
+              {`Are you sure you want to delete ${selectedIds.length} registration(s)? This action cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={loading || isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={async () => {
+                await handleBulkDelete();
+                setDeleteDialogOpen(false);
+              }}
+              disabled={loading || isDeleting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              {loading || isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={bomDialogOpen} onOpenChange={setBomDialogOpen}>
         <DialogContent>

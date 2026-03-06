@@ -42,6 +42,7 @@ interface HomeownerRegistration {
   project_id: string | null;
   project_name: string;
   status: string;
+  status_name: string | null;
   created_at: string;
   entitlement_sent_at: string | null;
 }
@@ -153,6 +154,7 @@ const Dashboard = () => {
           project_id: item.project_id ?? null,
           project_name: item.projectName ?? 'No Project',
           status,
+          status_name: item.statusName ?? null,
           created_at: item.createdAt ?? new Date().toISOString(),
           entitlement_sent_at: item.statusName === 'SENT' ? (item.createdAt ?? null) : null,
         };
@@ -188,6 +190,7 @@ const Dashboard = () => {
             project_id: null,
             project_name: projectName,
             status,
+            status_name: h.statusName ?? null,
             created_at: h.createdAt ?? new Date().toISOString(),
             entitlement_sent_at: h.statusName === 'SENT' ? (h.createdAt ?? null) : null,
           });
@@ -215,7 +218,7 @@ const Dashboard = () => {
     if (!organization && !builderId) return;
   }, [isAuthenticated, organization, builderId, navigate]);
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, statusName?: string | null) => {
     const statusConfig = {
       draft: { label: 'Draft', variant: 'secondary' as const },
       documents_pending: { label: 'Documents Pending', variant: 'outline' as const },
@@ -226,7 +229,18 @@ const Dashboard = () => {
     };
     
     const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.draft;
-    return <Badge variant={config.variant} className={status === 'handed_over' ? 'bg-green-600 text-white' : ''}>{config.label}</Badge>;
+    const label =
+      statusName && statusName.trim() !== ""
+        ? statusName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+        : config.label;
+    return (
+      <Badge
+        variant={config.variant}
+        className={status === 'handed_over' ? 'bg-green-600 text-white' : ''}
+      >
+        {label}
+      </Badge>
+    );
   };
 
   const getStatusIcon = (status: string) => {
@@ -275,7 +289,7 @@ const Dashboard = () => {
     }
   };
 
-  // Helper to get project name from project_id
+  // Helper to get project name from project_id (legacy fallback)
   const getProjectName = (projectId: string | null): string => {
     if (!projectId) return 'No Project';
     const project = projects.find(p => p.id === projectId);
@@ -302,10 +316,10 @@ const Dashboard = () => {
     }));
   }, [statusesData?.data]);
 
-  // Group registrations by project_id
+  // Group registrations by project (prefer API project_name, fallback to project_id lookup)
   const projectGroups = filteredRegistrations.reduce((acc, reg) => {
-    const projectKey = reg.project_id || 'no-project';
-    const projectName = getProjectName(reg.project_id);
+    const projectKey = reg.project_id || reg.project_name || 'no-project';
+    const projectName = reg.project_name || getProjectName(reg.project_id);
     if (!acc[projectKey]) {
       acc[projectKey] = { name: projectName, registrations: [] };
     }
@@ -634,7 +648,7 @@ const Dashboard = () => {
                               <div className="flex items-center space-x-2 mb-1">
                                 <h4 className="font-semibold text-lg text-foreground">{registration.customer_name}</h4>
                                 <Badge variant="outline" className="text-xs">
-                                  {getProjectName(registration.project_id)}
+                                  {registration.project_name || getProjectName(registration.project_id)}
                                 </Badge>
                               </div>
                               <p className="text-sm text-muted-foreground mb-1">{registration.customer_email}</p>
@@ -644,7 +658,7 @@ const Dashboard = () => {
                             </div>
                           </div>
                           <div className="flex items-center space-x-4">
-                            {getStatusBadge(registration.status)}
+                            {getStatusBadge(registration.status, registration.status_name)}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -724,7 +738,7 @@ const Dashboard = () => {
                                     </div>
                                   </div>
                                   <div className="flex items-center space-x-3">
-                                    {getStatusBadge(registration.status)}
+                                    {getStatusBadge(registration.status, registration.status_name)}
                                     <Button 
                                       variant="ghost" 
                                       size="sm"

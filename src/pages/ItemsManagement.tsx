@@ -18,6 +18,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Upload, FileText, X } from "lucide-react";
@@ -83,6 +93,8 @@ const ItemsManagement = () => {
   const { toast } = useToast();
   const [selectedBomId, setSelectedBomId] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDeleteId, setItemToDeleteId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<BuilderItem | null>(null);
   const [uploadingManual, setUploadingManual] = useState(false);
   const [formData, setFormData] = useState({
@@ -259,12 +271,19 @@ const ItemsManagement = () => {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this item?")) return;
+  const openDeleteDialog = (id: string) => {
+    setItemToDeleteId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!itemToDeleteId) return;
     try {
-      await deleteItem(id).unwrap();
+      await deleteItem(itemToDeleteId).unwrap();
       toast({ title: "Item deleted successfully" });
       refetchBillMaterials();
+      setDeleteDialogOpen(false);
+      setItemToDeleteId(null);
     } catch (error: unknown) {
       toast({
         title: "Error deleting item",
@@ -642,7 +661,7 @@ const ItemsManagement = () => {
                               <Button variant="outline" size="sm" onClick={() => handleEdit(item)}>
                                 <Edit className="w-4 h-4" />
                               </Button>
-                              <Button variant="outline" size="sm" onClick={() => handleDelete(item.id)}>
+                              <Button variant="outline" size="sm" onClick={() => openDeleteDialog(item.id)}>
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </div>
@@ -659,6 +678,23 @@ const ItemsManagement = () => {
           </>
         )}
       </main>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => { setDeleteDialogOpen(open); if (!open) setItemToDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete item</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this item? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

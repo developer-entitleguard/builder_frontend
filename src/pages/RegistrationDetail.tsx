@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
@@ -37,6 +37,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+interface SelectedItemShape {
+  id?: string;
+  category?: string;
+  name?: string;
+  brand?: string;
+  model?: string;
+  warranty_years?: number;
+  warranty_documents?: Array<{ url?: string } | string>;
+  manual_documents?: Array<{ url?: string } | string>;
+  manual_url?: string;
+  documentation_url?: string;
+}
+
 interface RegistrationData {
   id: string;
   customer_name: string;
@@ -50,8 +63,8 @@ interface RegistrationData {
   settlement_date: string | null;
   notes: string | null;
   status: string;
-  selected_items: any;
-  documents_uploaded: any;
+  selected_items: unknown;
+  documents_uploaded: unknown;
   created_at: string;
   updated_at: string;
   entitlement_sent_at: string | null;
@@ -104,62 +117,7 @@ const RegistrationDetail = () => {
   const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
   const [deleteBuilderCustomer] = useDeleteBuilderCustomerMutation();
 
-  useEffect(() => {
-    if (!id) {
-      navigate('/dashboard');
-      return;
-    }
-    if (user) {
-      fetchRegistration();
-    } else if (!isBuilderFlow) {
-      setLoading(false);
-      if (!hasBuilderAuth()) navigate('/dashboard');
-    }
-  }, [user, id, navigate, isBuilderFlow]);
-
-  useEffect(() => {
-    if (!isBuilderFlow || !customerDetailsResponse?.data?.customer) return;
-    const c = customerDetailsResponse.data.customer;
-    setRegistration({
-      id: c.id,
-      customer_name: `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim(),
-      customer_email: c.email ?? '',
-      customer_phone: c.contact ?? null,
-      property_address: c.address ?? '',
-      property_city: c.city ?? '',
-      property_state: c.state ?? '',
-      property_zip: c.zip ?? '',
-      project_name: c.projectName ?? null,
-      settlement_date: c.settlementDate ?? null,
-      notes: c.notes ?? null,
-      status: 'draft',
-      selected_items: (customerDetailsResponse.data as any).mappedItems ?? [],
-      documents_uploaded: {},
-      created_at: '',
-      updated_at: '',
-      entitlement_sent_at: null,
-      price: null,
-      num_bedrooms: null,
-      num_rooms: null,
-      total_built_up_area: null,
-    });
-    setLoading(false);
-  }, [isBuilderFlow, customerDetailsResponse]);
-
-  useEffect(() => {
-    if (isBuilderFlow && !loadingFromApi && !customerDetailsResponse?.data?.customer && builderId && id) {
-      toast({
-        title: "Registration not found",
-        description: "This registration doesn't exist or you don't have access to it.",
-        variant: "destructive"
-      });
-      navigate('/dashboard');
-    } else if (isBuilderFlow && !loadingFromApi) {
-      setLoading(false);
-    }
-  }, [isBuilderFlow, loadingFromApi, customerDetailsResponse, builderId, id, toast, navigate]);
-
-  const fetchRegistration = async () => {
+  const fetchRegistration = useCallback(async () => {
     if (!user || !id) return;
 
     try {
@@ -183,18 +141,74 @@ const RegistrationDetail = () => {
         throw error;
       }
 
-      setRegistration(data);
-    } catch (error: any) {
+      setRegistration(data as RegistrationData);
+    } catch (error: unknown) {
       toast({
         title: "Error loading registration",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive"
       });
       navigate('/dashboard');
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, id, toast, navigate]);
+
+  useEffect(() => {
+    if (!id) {
+      navigate('/dashboard');
+      return;
+    }
+    if (user) {
+      fetchRegistration();
+    } else if (!isBuilderFlow) {
+      setLoading(false);
+      if (!hasBuilderAuth()) navigate('/dashboard');
+    }
+  }, [user, id, navigate, isBuilderFlow, fetchRegistration]);
+
+  useEffect(() => {
+    if (!isBuilderFlow || !customerDetailsResponse?.data?.customer) return;
+    const c = customerDetailsResponse.data.customer as unknown as Record<string, unknown>;
+    const project = c.project as { createdAt?: string; updatedAt?: string; name?: string } | undefined;
+    setRegistration({
+      id: c.id as string,
+      customer_name: `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim(),
+      customer_email: (c.email as string) ?? '',
+      customer_phone: (c.contact as string | null) ?? null,
+      property_address: (c.address as string) ?? '',
+      property_city: (c.city as string) ?? '',
+      property_state: (c.state as string) ?? '',
+      property_zip: (c.zip as string) ?? '',
+      project_name: (c.projectName as string | null) ?? project?.name ?? null,
+      settlement_date: (c.settlementDate as string | null) ?? null,
+      notes: (c.notes as string | null) ?? null,
+      status: 'draft',
+      selected_items: (customerDetailsResponse.data as { mappedItems?: unknown }).mappedItems ?? [],
+      documents_uploaded: {},
+      created_at: project?.createdAt ?? '',
+      updated_at: project?.updatedAt ?? '',
+      entitlement_sent_at: null,
+      price: null,
+      num_bedrooms: null,
+      num_rooms: null,
+      total_built_up_area: null,
+    });
+    setLoading(false);
+  }, [isBuilderFlow, customerDetailsResponse]);
+
+  useEffect(() => {
+    if (isBuilderFlow && !loadingFromApi && !customerDetailsResponse?.data?.customer && builderId && id) {
+      toast({
+        title: "Registration not found",
+        description: "This registration doesn't exist or you don't have access to it.",
+        variant: "destructive"
+      });
+      navigate('/dashboard');
+    } else if (isBuilderFlow && !loadingFromApi) {
+      setLoading(false);
+    }
+  }, [isBuilderFlow, loadingFromApi, customerDetailsResponse, builderId, id, toast, navigate]);
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -240,10 +254,15 @@ const RegistrationDetail = () => {
       });
 
       if (user) fetchRegistration();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg = error && typeof error === 'object' && 'data' in error
+        ? (error as { data?: unknown }).data
+        : error instanceof Error
+          ? error.message
+          : 'Failed to send entitlement';
       toast({
         title: "Error sending entitlement",
-        description: error?.data ?? error?.message ?? 'Failed to send entitlement',
+        description: String(msg ?? 'Failed to send entitlement'),
         variant: "destructive"
       });
     }
@@ -269,10 +288,10 @@ const RegistrationDetail = () => {
 
       setHandoverDialogOpen(false);
       fetchRegistration();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error updating status",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive"
       });
     }
@@ -300,10 +319,15 @@ const RegistrationDetail = () => {
       });
 
       navigate('/dashboard');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg = error && typeof error === 'object' && 'data' in error
+        ? (error as { data?: unknown }).data
+        : error instanceof Error
+          ? error.message
+          : 'Failed to delete';
       toast({
         title: "Error deleting registration",
-        description: error?.data ?? error?.message ?? 'Failed to delete',
+        description: String(msg ?? 'Failed to delete'),
         variant: "destructive"
       });
     }
@@ -491,7 +515,11 @@ const RegistrationDetail = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Created</p>
-                <p className="text-sm">{new Date(registration.created_at).toLocaleDateString()}</p>
+                <p className="text-sm">
+                  {registration.created_at
+                    ? new Date(registration.created_at).toLocaleDateString()
+                    : '—'}
+                </p>
               </div>
               {registration.entitlement_sent_at && (
                 <div>
@@ -515,17 +543,17 @@ const RegistrationDetail = () => {
                 <div className="space-y-4">
                   {/* Group items by category */}
                   {Object.entries(
-                    registration.selected_items.reduce((acc: Record<string, any[]>, item: any) => {
+                    (registration.selected_items as SelectedItemShape[]).reduce((acc: Record<string, SelectedItemShape[]>, item: SelectedItemShape) => {
                       const category = item.category || 'Other';
                       if (!acc[category]) acc[category] = [];
                       acc[category].push(item);
                       return acc;
-                    }, {})
-                  ).map(([category, items]: [string, any[]]) => (
+                    }, {} as Record<string, SelectedItemShape[]>)
+                  ).map(([category, items]) => (
                     <div key={category}>
                       <h4 className="font-medium text-sm mb-2">{category}</h4>
                       <div className="space-y-2">
-                        {items.map((item: any, index: number) => (
+                        {items.map((item: SelectedItemShape, index: number) => (
                           <div key={item.id || index} className="flex items-center justify-between p-2 bg-muted rounded-md">
                             <div className="flex-1">
                               <p className="text-sm font-medium">{item.name}</p>
@@ -562,32 +590,35 @@ const RegistrationDetail = () => {
                 const allDocuments: { type: string; name: string; url: string }[] = [];
                 
                 if (registration.selected_items && Array.isArray(registration.selected_items)) {
-                  registration.selected_items.forEach((item: any) => {
+                  (registration.selected_items as SelectedItemShape[]).forEach((item: SelectedItemShape) => {
                     if (item.warranty_documents && Array.isArray(item.warranty_documents)) {
-                      item.warranty_documents.forEach((doc: any) => {
-                        allDocuments.push({ type: 'Warranty', name: `${item.name} - Warranty`, url: doc.url || doc });
+                      item.warranty_documents.forEach((doc: { url?: string } | string) => {
+                        const urlVal = typeof doc === 'object' && doc && 'url' in doc ? (doc as { url?: string }).url : doc;
+                        allDocuments.push({ type: 'Warranty', name: `${item.name ?? 'Item'} - Warranty`, url: typeof urlVal === 'string' ? urlVal : '' });
                       });
                     }
                     if (item.manual_documents && Array.isArray(item.manual_documents)) {
-                      item.manual_documents.forEach((doc: any) => {
-                        allDocuments.push({ type: 'Manual', name: `${item.name} - Manual`, url: doc.url || doc });
+                      item.manual_documents.forEach((doc: { url?: string } | string) => {
+                        const urlVal = typeof doc === 'object' && doc && 'url' in doc ? (doc as { url?: string }).url : doc;
+                        allDocuments.push({ type: 'Manual', name: `${item.name ?? 'Item'} - Manual`, url: typeof urlVal === 'string' ? urlVal : '' });
                       });
                     }
                     if (item.manual_url) {
-                      allDocuments.push({ type: 'Manual', name: `${item.name} - Manual`, url: item.manual_url });
+                      allDocuments.push({ type: 'Manual', name: `${item.name ?? 'Item'} - Manual`, url: item.manual_url });
                     }
                     if (item.documentation_url) {
-                      allDocuments.push({ type: 'Documentation', name: `${item.name} - Documentation`, url: item.documentation_url });
+                      allDocuments.push({ type: 'Documentation', name: `${item.name ?? 'Item'} - Documentation`, url: item.documentation_url });
                     }
                   });
                 }
                 
                 // Also check documents_uploaded object
-                if (registration.documents_uploaded && Object.keys(registration.documents_uploaded).length > 0) {
-                  Object.entries(registration.documents_uploaded).forEach(([docType, files]: [string, any]) => {
+                const docsUploaded = registration.documents_uploaded as Record<string, unknown> | null | undefined;
+                if (docsUploaded && typeof docsUploaded === 'object' && Object.keys(docsUploaded).length > 0) {
+                  Object.entries(docsUploaded).forEach(([docType, files]) => {
                     if (Array.isArray(files)) {
-                      files.forEach((file: any) => {
-                        allDocuments.push({ type: docType, name: file.name || docType, url: file.url || file });
+                      (files as Array<{ name?: string; url?: string }>).forEach((file: { name?: string; url?: string }) => {
+                        allDocuments.push({ type: docType, name: file.name ?? docType, url: file.url ?? '' });
                       });
                     }
                   });

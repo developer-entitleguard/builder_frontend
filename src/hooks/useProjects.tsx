@@ -76,16 +76,14 @@ const mapPropertyType = (value: string): PropertyType => {
 };
 
 const mapStatus = (value: string): ProjectStatus => {
-  const key = value.toLowerCase();
+  const key = value.toLowerCase().replace(/\s+/g, "_");
   switch (key) {
     case "planning":
       return "planning";
     case "inprogress":
-      return "in_progress";
     case "in_progress":
       return "in_progress";
     case "onhold":
-      return "on_hold";
     case "on_hold":
       return "on_hold";
     case "completed":

@@ -149,7 +149,7 @@ export const useActivities = (projectId: string | undefined) => {
         category_id: a.categoryId ?? null,
         created_at: a.createdAt,
         updated_at: a.updatedAt,
-        completed: status === "done",
+        completed: a.completed ?? (status === "done"),
         quote: a.quote ?? null,
         price_paid: a.pricePaid ?? null,
         vendor_name: a.vendorName ?? null,

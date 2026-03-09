@@ -281,12 +281,6 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
       const brand = dto?.brand != null && dto.brand !== '' ? String(dto.brand) : getStr(m, 'brand');
       const model = dto?.model != null && dto.model !== '' ? String(dto.model) : getStr(m, 'model');
       const notes = (dto?.note != null && dto.note !== '' ? String(dto.note) : getStr(m, 'notes', 'note')) as string;
-      if (dto?.fileResponseDto?.length) {
-        for (const f of dto.fileResponseDto) {
-          const doc = { name: f.fileName, url: f.fileUrl, path: f.fileUrl, fileId: f.id };
-          manual_documents.push(doc);
-        }
-      }
       return {
         id,
         name: name || 'Unnamed item',

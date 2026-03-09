@@ -171,6 +171,47 @@ const RegistrationDetail = () => {
     if (!isBuilderFlow || !customerDetailsResponse?.data?.customer) return;
     const c = customerDetailsResponse.data.customer as unknown as Record<string, unknown>;
     const project = c.project as { createdAt?: string; updatedAt?: string; name?: string } | undefined;
+
+    // Build selected items from customerDetails dtos (category + item name/brand/model)
+    const dataWithDtos = customerDetailsResponse.data as {
+      dtos?: Array<{
+        category?: string | null;
+        items?: Array<{
+          id?: string | null;
+          builderCustomerMapId?: string | null;
+          builder_customer_map_id?: string | null;
+          name?: string | null;
+          category?: string | null;
+          brand?: string | null;
+          model?: string | null;
+        }> | null;
+      }>;
+    };
+
+    const selectedItems: SelectedItemShape[] = [];
+    if (Array.isArray(dataWithDtos.dtos)) {
+      for (const dto of dataWithDtos.dtos) {
+        const dtoCategory = dto.category ?? "Other";
+        if (!Array.isArray(dto.items)) continue;
+        for (const rawItem of dto.items) {
+          const id =
+            rawItem.builderCustomerMapId ??
+            rawItem.builder_customer_map_id ??
+            rawItem.id ??
+            undefined;
+          const category = rawItem.category ?? dtoCategory ?? "Other";
+          const name = rawItem.name ?? "Unnamed item";
+          selectedItems.push({
+            id,
+            name,
+            category,
+            brand: rawItem.brand ?? undefined,
+            model: rawItem.model ?? undefined,
+          });
+        }
+      }
+    }
+
     setRegistration({
       id: c.id as string,
       customer_name: `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim(),
@@ -184,7 +225,7 @@ const RegistrationDetail = () => {
       settlement_date: (c.settlementDate as string | null) ?? null,
       notes: (c.notes as string | null) ?? null,
       status: 'draft',
-      selected_items: (customerDetailsResponse.data as { mappedItems?: unknown }).mappedItems ?? [],
+      selected_items: selectedItems,
       documents_uploaded: {},
       created_at: project?.createdAt ?? '',
       updated_at: project?.updatedAt ?? '',
@@ -610,6 +651,43 @@ const RegistrationDetail = () => {
                       allDocuments.push({ type: 'Documentation', name: `${item.name ?? 'Item'} - Documentation`, url: item.documentation_url });
                     }
                   });
+                }
+
+                // Also collect documents from customerDetails dtos.fileResponseDto so we can show
+                // "<Item name> - <fileName>" entries for each mapped item document.
+                const dataWithDtos = customerDetailsResponse?.data as
+                  | {
+                      dtos?: Array<{
+                        category?: string | null;
+                        items?: Array<{
+                          name?: string | null;
+                          fileResponseDto?: Array<{
+                            id?: string;
+                            fileName?: string;
+                            fileUrl?: string;
+                          }> | null;
+                        }> | null;
+                      }>;
+                    }
+                  | undefined;
+
+                if (dataWithDtos?.dtos && Array.isArray(dataWithDtos.dtos)) {
+                  for (const dto of dataWithDtos.dtos) {
+                    if (!dto.items || !Array.isArray(dto.items)) continue;
+                    for (const item of dto.items) {
+                      if (!item.fileResponseDto || !Array.isArray(item.fileResponseDto)) continue;
+                      for (const f of item.fileResponseDto) {
+                        const fileName = f.fileName ?? "document";
+                        const url = f.fileUrl ?? "";
+                        const itemName = item.name ?? "Item";
+                        allDocuments.push({
+                          type: "Document",
+                          name: `${itemName} - ${fileName}`,
+                          url,
+                        });
+                      }
+                    }
+                  }
                 }
                 
                 // Also check documents_uploaded object

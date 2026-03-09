@@ -7,6 +7,10 @@ export interface BuilderActivityCategoryApi {
   orderIndex: number;
   createdAt: string;
   updatedAt: string;
+  /** Added by backend: category-level progress summary */
+  percentageComplete?: number;
+  totalActivities?: number;
+  completedActivities?: number;
 }
 
 export interface BuilderActivityCategoriesResponse {

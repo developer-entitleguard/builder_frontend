@@ -14,6 +14,9 @@ export interface ActivityCategory {
   order_index?: number;
   created_at?: string;
   updated_at?: string;
+  percentage_complete?: number;
+  total_activities?: number;
+  completed_activities?: number;
 }
 
 export interface CreateCategoryData {
@@ -62,6 +65,9 @@ export const useActivityCategories = (projectId: string | undefined) => {
         order_index: c.orderIndex,
         created_at: c.createdAt,
         updated_at: c.updatedAt,
+        percentage_complete: c.percentageComplete,
+        total_activities: c.totalActivities,
+        completed_activities: c.completedActivities,
       })
     );
 

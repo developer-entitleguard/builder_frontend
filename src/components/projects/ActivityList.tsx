@@ -281,8 +281,25 @@ export const ActivityList = ({
       <div className="space-y-4">
         {categories.map(category => {
           const isCollapsed = collapsedCategories.has(category.id);
-          const progress = getCategoryProgress(category.id);
-          const stats = getCategoryStats(category.id);
+          const apiProgress =
+            typeof category.percentage_complete === "number"
+              ? category.percentage_complete
+              : undefined;
+          const progressRaw = apiProgress ?? getCategoryProgress(category.id);
+          const progress = Math.max(0, Math.min(100, Math.round(progressRaw)));
+
+          const apiCompleted =
+            typeof category.completed_activities === "number"
+              ? category.completed_activities
+              : undefined;
+          const apiTotal =
+            typeof category.total_activities === "number"
+              ? category.total_activities
+              : undefined;
+          const stats =
+            apiCompleted != null && apiTotal != null
+              ? { completed: apiCompleted, total: apiTotal }
+              : getCategoryStats(category.id);
           const catActivities = activities.filter(a => a.category_id === category.id);
 
           return (

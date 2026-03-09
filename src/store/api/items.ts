@@ -11,6 +11,20 @@ import type {
 import { getApiBaseUrl } from '@/lib/config';
 import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 
+type BuilderItemFileDtoLocal = {
+  type: 'warranty' | 'Manual';
+  file: File;
+  id?: string;
+};
+
+type CreateItemWithFilesRequest = CreateBuilderItemRequest & {
+  builderItemFilesDtos?: BuilderItemFileDtoLocal[];
+};
+
+type UpdateItemWithFilesRequest = UpdateBuilderItemRequest & {
+  builderItemFilesDtos?: BuilderItemFileDtoLocal[];
+};
+
 export const itemsApi = api.injectEndpoints({
   endpoints: (build) => ({
     // Get all items with pagination
@@ -32,8 +46,8 @@ export const itemsApi = api.injectEndpoints({
       providesTags: (result, error, id) => [{ type: 'Item', id }],
     }),
 
-    // Create item (multipart/form-data, matches OLD /api/builder/item payload)
-    createItem: build.mutation<BuilderItem, CreateBuilderItemRequest>({
+    // Create item (multipart/form-data, matches OLD /api/builder/item payload, extended with optional files)
+    createItem: build.mutation<BuilderItem, CreateItemWithFilesRequest>({
       queryFn: async (data) => {
         try {
           const formData = new FormData();
@@ -52,6 +66,17 @@ export const itemsApi = api.injectEndpoints({
           }
           if (data.billMaterialId) {
             formData.append('billMaterialId', data.billMaterialId);
+          }
+
+          // Optional attached files: builderItemFilesDtos[0].type, builderItemFilesDtos[0].file
+          if (data.builderItemFilesDtos?.length) {
+            data.builderItemFilesDtos.forEach((fileDto, index) => {
+              formData.append(`builderItemFilesDtos[${index}].type`, fileDto.type);
+              formData.append(`builderItemFilesDtos[${index}].file`, fileDto.file);
+              if (fileDto.id) {
+                formData.append(`builderItemFilesDtos[${index}].id`, fileDto.id);
+              }
+            });
           }
 
           // JWT from localStorage
@@ -107,7 +132,7 @@ export const itemsApi = api.injectEndpoints({
     // Update item (multipart/form-data, same endpoint as create)
     updateItem: build.mutation<
       BuilderItem,
-      { id: string; data: UpdateBuilderItemRequest & { builderOrganizationId?: string; billMaterialId?: string } }
+      { id: string; data: UpdateItemWithFilesRequest & { builderOrganizationId?: string; billMaterialId?: string } }
     >({
       queryFn: async ({ id, data }) => {
         try {
@@ -130,6 +155,17 @@ export const itemsApi = api.injectEndpoints({
           }
           if (data.billMaterialId) {
             formData.append('billMaterialId', data.billMaterialId);
+          }
+
+          // Optional attached files: builderItemFilesDtos[0].type, builderItemFilesDtos[0].file
+          if (data.builderItemFilesDtos?.length) {
+            data.builderItemFilesDtos.forEach((fileDto, index) => {
+              formData.append(`builderItemFilesDtos[${index}].type`, fileDto.type);
+              formData.append(`builderItemFilesDtos[${index}].file`, fileDto.file);
+              if (fileDto.id) {
+                formData.append(`builderItemFilesDtos[${index}].id`, fileDto.id);
+              }
+            });
           }
 
           let authToken = '';

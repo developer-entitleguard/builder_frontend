@@ -215,6 +215,8 @@ export const useActivities = (projectId: string | undefined) => {
           description: data.description ?? "",
           dueDate: data.due_date ?? "",
           name: data.name,
+          // Optional priority from UI (low/medium/high/urgent)
+          priority: data.priority ?? "medium",
           orderIndex: maxOrder,
           pricePaid: data.price_paid ?? 0,
           quote: data.quote ?? 0,

@@ -97,6 +97,7 @@ const ItemsManagement = () => {
   const [itemToDeleteId, setItemToDeleteId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<BuilderItem | null>(null);
   const [uploadingManual, setUploadingManual] = useState(false);
+  const [manualFile, setManualFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     category: "",
@@ -196,6 +197,7 @@ const ItemsManagement = () => {
       warranty_years: "",
       manual_url: ""
     });
+    setManualFile(null);
     setEditingItem(null);
   };
 
@@ -217,6 +219,9 @@ const ItemsManagement = () => {
     }
 
     try {
+      const builderItemFilesDtos =
+        manualFile != null ? [{ type: "Manual" as const, file: manualFile }] : undefined;
+
       const payload = {
         name: formData.name,
         category: formData.category,
@@ -230,6 +235,7 @@ const ItemsManagement = () => {
         purchaser: formData.purchaser || undefined,
         builderOrganizationId,
         ...(selectedBomId ? { billMaterialId: selectedBomId } : {}),
+        ...(builderItemFilesDtos ? { builderItemFilesDtos } : {}),
       };
 
       if (editingItem) {
@@ -254,6 +260,7 @@ const ItemsManagement = () => {
 
   const handleEdit = (item: BuilderItem) => {
     setEditingItem(item);
+    setManualFile(null);
     setFormData({
       name: item.name,
       category: item.category,
@@ -294,36 +301,13 @@ const ItemsManagement = () => {
   };
 
   const handleManualUpload = async (file: File) => {
-    const currentUserId = getCurrentUserId(user?.id);
-    if (!currentUserId || !selectedBomId) return;
-
     setUploadingManual(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}_manual.${fileExt}`;
-      const filePath = `${currentUserId}/bom-manuals/${selectedBomId}/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('item-documents')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('item-documents')
-        .getPublicUrl(filePath);
-
-      setFormData(prev => ({ ...prev, manual_url: publicUrl }));
-      
+      setManualFile(file);
+      setFormData(prev => ({ ...prev, manual_url: file.name }));
       toast({
-        title: "Manual uploaded",
-        description: "The manual document has been uploaded successfully",
-      });
-    } catch (error: unknown) {
-      toast({
-        title: "Upload failed",
-        description: error instanceof Error ? error.message : String(error),
-        variant: "destructive"
+        title: "Manual selected",
+        description: "The manual document will be uploaded when you save the item.",
       });
     } finally {
       setUploadingManual(false);
@@ -331,30 +315,8 @@ const ItemsManagement = () => {
   };
 
   const handleRemoveManual = async () => {
-    if (!formData.manual_url) return;
-
-    try {
-      // Extract path from URL if it's a supabase storage URL
-      const urlParts = formData.manual_url.split('/item-documents/');
-      if (urlParts.length > 1) {
-        const filePath = decodeURIComponent(urlParts[1]);
-        await supabase.storage
-          .from('item-documents')
-          .remove([filePath]);
-      }
-      
-      setFormData(prev => ({ ...prev, manual_url: '' }));
-      toast({
-        title: "Manual removed",
-        description: "The manual document has been removed",
-      });
-    } catch (error: unknown) {
-      toast({
-        title: "Remove failed", 
-        description: error instanceof Error ? error.message : String(error),
-        variant: "destructive"
-      });
-    }
+    setManualFile(null);
+    setFormData(prev => ({ ...prev, manual_url: "" }));
   };
 
   const groupedItems = items.reduce((acc, item) => {
@@ -523,17 +485,12 @@ const ItemsManagement = () => {
                 </div>
                 <div>
                   <Label>Manual Document</Label>
-                  {formData.manual_url ? (
+                  {manualFile ? (
                     <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/50">
                       <FileText className="h-4 w-4 text-primary" />
-                      <a 
-                        href={formData.manual_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-sm text-primary hover:underline flex-1 truncate"
-                      >
-                        View Manual
-                      </a>
+                      <span className="text-sm flex-1 truncate">
+                        {manualFile.name}
+                      </span>
                       <Button
                         type="button"
                         variant="ghost"

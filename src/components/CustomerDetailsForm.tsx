@@ -1,4 +1,4 @@
-import { useState, useEffect, useImperativeHandle, forwardRef } from "react";
+import { useState, useEffect, useImperativeHandle, forwardRef, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +49,13 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
   const { toast } = useToast();
   const { organization } = useOrganization();
   const { data: projectsResponse, isLoading: projectsLoading } = useProjectsQuery();
-  const projects = projectsResponse?.data ?? [];
+  const projects = useMemo(() => projectsResponse?.data ?? [], [projectsResponse?.data]);
+  const initialProject = (initialData as unknown as { project?: { id?: string; name?: string } } | undefined)?.project;
+  const getNonEmpty = (v: unknown): string | undefined => {
+    if (typeof v !== "string") return undefined;
+    const t = v.trim();
+    return t.length ? t : undefined;
+  };
   const [createBuilderCustomer] = useCreateBuilderCustomerMutation();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -61,8 +67,8 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
     city: initialData?.city || '',
     state: initialData?.state || '',
     zipCode: initialData?.zipCode || '',
-    projectId: initialData?.projectId || '',
-    projectName: initialData?.projectName || '',
+    projectId: getNonEmpty(initialData?.projectId) || getNonEmpty(initialProject?.id) || '',
+    projectName: getNonEmpty(initialData?.projectName) || getNonEmpty(initialProject?.name) || '',
     settlementDate: initialData?.settlementDate || '',
     notes: initialData?.notes || '',
     price: initialData?.price || '',
@@ -75,6 +81,9 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
   // Sync form when parent passes updated initialData (e.g. after fetching customer details from API)
   useEffect(() => {
     if (!initialData || typeof initialData !== 'object') return;
+    const project = (initialData as unknown as { project?: { id?: string; name?: string } }).project;
+    const nextProjectId = getNonEmpty((initialData as { projectId?: unknown }).projectId) ?? getNonEmpty(project?.id);
+    const nextProjectName = getNonEmpty((initialData as { projectName?: unknown }).projectName) ?? getNonEmpty(project?.name);
     setFormData(prev => ({
       ...prev,
       firstName: initialData.firstName ?? prev.firstName,
@@ -85,8 +94,8 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
       city: initialData.city ?? prev.city,
       state: initialData.state ?? prev.state,
       zipCode: initialData.zipCode ?? prev.zipCode,
-      projectId: initialData.projectId ?? prev.projectId,
-      projectName: initialData.projectName ?? prev.projectName,
+      projectId: nextProjectId ?? prev.projectId,
+      projectName: nextProjectName ?? prev.projectName,
       settlementDate: initialData.settlementDate ?? prev.settlementDate,
       notes: initialData.notes ?? prev.notes,
       price: initialData.price ?? prev.price,
@@ -95,6 +104,21 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
       totalBuiltUpArea: initialData.totalBuiltUpArea ?? prev.totalBuiltUpArea
     }));
   }, [initialData]);
+
+  useEffect(() => {
+    if (!projects.length || !formData.projectId) return;
+
+    const selected = projects.find(
+      (p) => String(p.id) === String(formData.projectId)
+    );
+
+    if (selected) {
+      setFormData((prev) => ({
+        ...prev,
+        projectName: selected.name,
+      }));
+    }
+  }, [projects, formData.projectId]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -116,6 +140,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
         setFormData(prev => ({
           ...prev,
           projectId: value,
+          projectName: selectedProject.name,
           propertyAddress: selectedProject.address,
           city: selectedProject.city,
           state: selectedProject.state,
@@ -437,13 +462,19 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
               <div className="space-y-2">
                 <Label htmlFor="projectId">Link to Project *</Label>
                 <Select 
-                  value={formData.projectId} 
+                  // Radix Select does not allow empty-string item values; use undefined for "no selection"
+                  value={formData.projectId || undefined} 
                   onValueChange={(value) => handleInputChange('projectId', value)}
                 >
                   <SelectTrigger className={errors.projectId ? 'border-destructive' : ''}>
                     <SelectValue placeholder={projectsLoading ? "Loading projects..." : "Select a project"} />
                   </SelectTrigger>
                   <SelectContent>
+                    {formData.projectId && !projects.some((p) => p.id === formData.projectId) && (
+                      <SelectItem key={formData.projectId} value={formData.projectId}>
+                        {formData.projectName || "Selected project"}
+                      </SelectItem>
+                    )}
                     {projects.map((project) => (
                       <SelectItem key={project.id} value={project.id}>
                         {project.name}

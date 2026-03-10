@@ -116,6 +116,9 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
   const [deleteItemFile] = useDeleteItemFileMutation();
 
   const [selectedBomId, setSelectedBomId] = useState<string>("");
+  const [initialBomId, setInitialBomId] = useState<string | null>(null);
+  const [pendingBomId, setPendingBomId] = useState<string | null>(null);
+  const [showBomChangeWarning, setShowBomChangeWarning] = useState(false);
   const [selectedItems, setSelectedItems] = useState<RegistrationItem[]>(
     Array.isArray(initialData?.selected_items) ? initialData.selected_items : []
   );
@@ -191,6 +194,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
       null;
     if (!selectedBomId && customerBomId) {
       setSelectedBomId(customerBomId);
+      setInitialBomId(customerBomId);
     }
   }, [customerDetailsResponse, selectedBomId]);
 
@@ -314,6 +318,18 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
   const loading = loadingBoms;
 
   const handleBOMSelect = (bomId: string) => {
+    if (
+      existingMapResponse?.message &&
+      typeof existingMapResponse.message === "string" &&
+      existingMapResponse.message.toLowerCase().includes("bom already mapped") &&
+      selectedBomId &&
+      bomId !== selectedBomId
+    ) {
+      setPendingBomId(bomId);
+      setShowBomChangeWarning(true);
+      return;
+    }
+
     setSelectedBomId(bomId);
   };
 
@@ -699,6 +715,40 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
               </Select>
             </CardContent>
           </Card>
+
+          <Dialog open={showBomChangeWarning} onOpenChange={setShowBomChangeWarning}>
+            <DialogContent className="sm:max-w-[480px] bg-background">
+              <DialogHeader>
+                <DialogTitle>Change Bill of Materials?</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                This customer already has a Bill of Materials mapped. Changing the BOM may update the items shown for
+                this customer. Do you want to continue?
+              </p>
+              <DialogFooter className="mt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowBomChangeWarning(false);
+                    setPendingBomId(null);
+                  }}
+                >
+                  No, keep current BOM
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (pendingBomId) {
+                      setSelectedBomId(pendingBomId);
+                    }
+                    setShowBomChangeWarning(false);
+                    setPendingBomId(null);
+                  }}
+                >
+                  Yes, change BOM
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {selectedItems.length > 0 && (
             <>

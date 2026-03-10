@@ -133,26 +133,33 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
       setFormData(prev => ({ ...prev, [field]: formatted }));
     }
     
-    // Auto-populate address fields when a project is selected
+    // When a project is selected, update only project fields,
+    // and auto-fill address fields **only if** they are still empty
+    // so user-entered address/city/state/postcode are never overwritten.
     if (field === 'projectId' && value) {
       const selectedProject = projects.find(p => p.id === value);
       if (selectedProject) {
-        setFormData(prev => ({
-          ...prev,
-          projectId: value,
-          projectName: selectedProject.name,
-          propertyAddress: selectedProject.address,
-          city: selectedProject.city,
-          state: selectedProject.state,
-          zipCode: selectedProject.postcode
-        }));
-        // Clear any address-related errors
+        setFormData(prev => {
+          const shouldAutofillAddress =
+            !prev.propertyAddress && !prev.city && !prev.state && !prev.zipCode;
+
+          return {
+            ...prev,
+            projectId: value,
+            projectName: selectedProject.name,
+            ...(shouldAutofillAddress && {
+              propertyAddress: selectedProject.address ?? prev.propertyAddress,
+              city: selectedProject.city ?? prev.city,
+              state: selectedProject.state ?? prev.state,
+              zipCode: selectedProject.postcode ?? prev.zipCode,
+            }),
+          };
+        });
+
+        if (!errors.projectId) return;
         setErrors(prev => ({
           ...prev,
-          propertyAddress: '',
-          city: '',
-          state: '',
-          zipCode: ''
+          projectId: '',
         }));
       }
     }

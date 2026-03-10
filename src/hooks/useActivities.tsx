@@ -93,6 +93,13 @@ const mapActivityStatus = (value: string | undefined | null): ActivityStatus => 
   }
 };
 
+const mapActivityPriority = (value: string | undefined | null): ActivityPriority => {
+  if (value == null || value === "") return "medium";
+  const key = value.toLowerCase();
+  if (key === "low" || key === "medium" || key === "high" || key === "urgent") return key;
+  return "medium";
+};
+
 export const useActivities = (projectId: string | undefined) => {
   const { user } = useAuth();
   const { organization } = useOrganization();
@@ -141,7 +148,7 @@ export const useActivities = (projectId: string | undefined) => {
         name: a.name,
         description: a.description ?? null,
         status,
-        priority: "medium",
+        priority: mapActivityPriority(a.priority),
         percentage_complete: a.percentageComplete ?? 0,
         due_date: a.dueDate ?? null,
         completed_at: a.completedAt ?? null,
@@ -253,7 +260,7 @@ export const useActivities = (projectId: string | undefined) => {
           name: createdApi.name,
           description: createdApi.description,
           status: mapActivityStatus(createdApi.statusName),
-          priority: "medium",
+          priority: mapActivityPriority(createdApi.priority),
           percentage_complete: createdApi.percentageComplete ?? 0,
           due_date: createdApi.dueDate,
           completed_at: createdApi.completedAt,

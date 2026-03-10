@@ -19,6 +19,7 @@ export interface BuilderActivityApi {
   vendorName?: string | null;
   vendorEmail?: string | null;
   vendorPhone?: string | null;
+  priority?: string | null;
   createdAt: string;
   updatedAt: string;
 }

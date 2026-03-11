@@ -254,7 +254,10 @@ const ReviewApprovalForm = ({
     if (useBuilderEntitlementApi && registrationId) {
       setSendingEntitlement(true);
       try {
-        await createCustomerEntitlement({ builderCustomerId: registrationId }).unwrap();
+        await createCustomerEntitlement({
+          builderCustomerId: registrationId,
+          consentReceived: consentConfirmed,
+        }).unwrap();
         toast({
           title: "Entitlement sent!",
           description: "The warranty entitlement has been sent to the homeowner.",

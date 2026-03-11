@@ -711,7 +711,7 @@ const RegistrationDetail = () => {
                             <p className="text-sm">{doc.name}</p>
                             <Badge variant="outline" className="text-xs">{doc.type}</Badge>
                           </div>
-                          {doc.url && (
+                          {/* {doc.url && (
                             <a 
                               href={doc.url} 
                               target="_blank" 
@@ -720,7 +720,7 @@ const RegistrationDetail = () => {
                             >
                               View
                             </a>
-                          )}
+                          )} */}
                         </div>
                       ))}
                     </div>

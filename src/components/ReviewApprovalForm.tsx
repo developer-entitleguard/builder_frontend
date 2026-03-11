@@ -73,6 +73,8 @@ const ReviewApprovalForm = ({
   const apiData = customerDetailsResponse?.data;
   const totalItemsFromApi = apiData?.totalItems ?? null;
   const totalDocumentsFromApi = apiData?.totalDocuments ?? null;
+  const apiConsentReceived = Boolean((apiData as unknown as { customer?: { consentReceived?: boolean } })?.customer?.consentReceived);
+  const apiConsentMethod = (apiData as unknown as { customer?: { consentMethod?: unknown } })?.customer?.consentMethod;
 
   const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
   const [sendingEntitlement, setSendingEntitlement] = useState(false);
@@ -108,6 +110,19 @@ const ReviewApprovalForm = ({
       console.error('Error checking consent:', error);
     }
   }, [registrationId]);
+
+  // Prefer backend API consent state when available (builder flow),
+  // and keep Supabase lookup as fallback for older flows.
+  useEffect(() => {
+    if (!apiData) return;
+    if (apiConsentReceived) {
+      setConsentConfirmed(true);
+      // If consent already exists, do not allow unchecking.
+      setConsentLocked(true);
+    }
+    // If API explicitly says false, don't auto-clear anything here;
+    // user may confirm via checkbox or Supabase may already have it.
+  }, [apiData, apiConsentReceived, apiConsentMethod]);
 
   const fetchSelectedItems = useCallback(async (itemIds: string[]) => {
     if (!Array.isArray(itemIds) || itemIds.length === 0) {
@@ -254,10 +269,7 @@ const ReviewApprovalForm = ({
     if (useBuilderEntitlementApi && registrationId) {
       setSendingEntitlement(true);
       try {
-        await createCustomerEntitlement({
-          builderCustomerId: registrationId,
-          consentReceived: consentConfirmed,
-        }).unwrap();
+        await createCustomerEntitlement({ builderCustomerId: registrationId }).unwrap();
         toast({
           title: "Entitlement sent!",
           description: "The warranty entitlement has been sent to the homeowner.",

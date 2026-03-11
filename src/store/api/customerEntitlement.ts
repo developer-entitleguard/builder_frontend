@@ -5,12 +5,11 @@ export const customerEntitlementApi = api.injectEndpoints({
   endpoints: (build) => ({
     createCustomerEntitlement: build.mutation<
       CustomerEntitlementResponse,
-      { builderCustomerId: string; consentReceived?: boolean }
+      { builderCustomerId: string }
     >({
-      query: ({ builderCustomerId, consentReceived }) => ({
+      query: ({ builderCustomerId }) => ({
         url: `/api/create/customerentitlement/${builderCustomerId}`,
         method: 'POST',
-        ...(consentReceived !== undefined && { body: { consentReceived } }),
       }),
       invalidatesTags: ['CustomerDetails', 'Dashboard'],
     }),

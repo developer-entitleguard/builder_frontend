@@ -49,6 +49,11 @@ interface BuilderItem {
   bom_id: string | null;
   warranty_years: number | null;
   manual_url: string | null;
+  manual_documents?: Array<{
+    id: string;
+    name: string;
+    fileId?: string;
+  }>;
 }
 
 interface BillOfMaterials {
@@ -158,22 +163,52 @@ const ItemsManagement = () => {
       price: string | null;
       documentationUrl: string | null;
       purchaser: string | null;
-    }>).map((item) => ({
-      id: item.id,
-      name: item.name,
-      category: item.category,
-      make: item.make ?? null,
-      brand: item.brand ?? null,
-      model: item.model ?? null,
-      description: item.text ?? null,
-      price: item.price ? parseFloat(item.price) : null,
-      documentation_url: item.documentationUrl ?? null,
-      notes: item.note ?? null,
-      purchaser: item.purchaser ?? null,
-      bom_id: selectedBomId || null,
-      warranty_years: null as number | null,
-      manual_url: null as string | null,
-    })).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+      warranty?: number | string | null;
+      builderItemFiles?: Array<{
+        id: string;
+        type: string;
+        files?: {
+          id?: string;
+          name?: string;
+          filePath?: string;
+        };
+      }>;
+    }>).map((item) => {
+      const manual_documents: Array<{ id: string; name: string; fileId?: string }> = [];
+      if (Array.isArray(item.builderItemFiles)) {
+        for (const f of item.builderItemFiles) {
+          const typeLower = (f.type ?? '').toLowerCase();
+          if (typeLower === 'manual') {
+            const file = f.files ?? {};
+            manual_documents.push({
+              id: f.id,
+              name: file.name || 'document',
+              fileId: file.id,
+            });
+          }
+        }
+      }
+      return {
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        make: item.make ?? null,
+        brand: item.brand ?? null,
+        model: item.model ?? null,
+        description: item.text ?? null,
+        price: item.price ? parseFloat(item.price) : null,
+        documentation_url: item.documentationUrl ?? null,
+        notes: item.note ?? null,
+        purchaser: item.purchaser ?? null,
+        bom_id: selectedBomId || null,
+        warranty_years:
+          item.warranty != null && item.warranty !== ""
+            ? Number(item.warranty)
+            : null,
+        manual_url: null as string | null,
+        manual_documents,
+      };
+    }).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
   }, [billMaterialsResponse?.data, selectedBomId]);
 
   const loading = isLoadingBOMs || (!!selectedBomId && isLoadingBillMaterials);
@@ -218,6 +253,22 @@ const ItemsManagement = () => {
       return;
     }
 
+    const warrantyYears =
+      formData.warranty_years !== ""
+        ? Number(formData.warranty_years)
+        : null;
+    if (
+      warrantyYears != null &&
+      (!Number.isFinite(warrantyYears) || warrantyYears < 0 || warrantyYears > 10)
+    ) {
+      toast({
+        title: "Invalid warranty",
+        description: "Warranty (Years) must be between 0 and 10.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const builderItemFilesDtos =
         manualFile != null ? [{ type: "Manual" as const, file: manualFile }] : undefined;
@@ -233,6 +284,7 @@ const ItemsManagement = () => {
         price: formData.price ? parseFloat(formData.price) : null,
         documentationUrl: formData.documentation_url || undefined,
         purchaser: formData.purchaser || undefined,
+        warranty: warrantyYears,
         builderOrganizationId,
         ...(selectedBomId ? { billMaterialId: selectedBomId } : {}),
         ...(builderItemFilesDtos ? { builderItemFilesDtos } : {}),
@@ -457,9 +509,11 @@ const ItemsManagement = () => {
                       id="warranty_years"
                       type="number"
                       min="0"
-                      max="99"
+                      max="10"
                       value={formData.warranty_years}
-                      onChange={(e) => setFormData({ ...formData, warranty_years: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, warranty_years: e.target.value })
+                      }
                       placeholder="e.g., 2"
                     />
                   </div>
@@ -516,6 +570,16 @@ const ItemsManagement = () => {
                       {uploadingManual && (
                         <span className="text-sm text-muted-foreground">Uploading...</span>
                       )}
+                    </div>
+                  )}
+                  {editingItem?.manual_documents && editingItem.manual_documents.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {editingItem.manual_documents.map((doc) => (
+                        <div key={doc.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <FileText className="h-4 w-4" />
+                          <span className="flex-1 truncate">{doc.name}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">

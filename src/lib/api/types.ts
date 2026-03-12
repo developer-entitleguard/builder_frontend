@@ -168,6 +168,7 @@ export interface CreateBuilderItemRequest {
   text?: string;
   note?: string | null;
   price?: number | null;
+  warranty?: number | null;
 }
 
 export interface UpdateBuilderItemRequest {
@@ -184,6 +185,7 @@ export interface UpdateBuilderItemRequest {
   note?: string | null;
   documentationUrl?: string;
   purchaser?: string;
+  warranty?: number | null;
 }
 
 // Registrations

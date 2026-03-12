@@ -19,6 +19,7 @@ import './projectOptions';
 import './status';
 import './activities';
 import './pricing';
+import './terms';
 
 // Export the main API slice
 export { api } from './apiSlice';
@@ -86,6 +87,9 @@ export * from './activities';
 
 // Pricing
 export * from './pricing';
+
+// Terms
+export * from './terms';
 
 // Re-export types
 export type * from '@/lib/api/types';

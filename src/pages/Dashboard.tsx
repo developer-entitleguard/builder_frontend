@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
-import { useGetDashboardCountQuery, useDashboardRegistrationsQuery, useGetStatusesByTypeQuery } from '@/store/api';
+import { useGetDashboardCountQuery, useDashboardRegistrationsQuery, useGetStatusesByTypeQuery, useGetBuilderTermsStatusQuery, useGetLatestTermsQuery, useAcceptBuilderTermsMutation } from '@/store/api';
 import Header from '@/components/Header';
 import { RegistrationTypeDialog } from '@/components/RegistrationTypeDialog';
 import { BulkActionsBar } from '@/components/BulkActionsBar';
@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
@@ -76,8 +77,18 @@ const Dashboard = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedRegistrations, setSelectedRegistrations] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-
+  const [termsDialogOpen, setTermsDialogOpen] = useState(false);
   const isAuthenticated = !!user || hasBuilderAuth();
+
+  const { data: termsStatusData } = useGetBuilderTermsStatusQuery(undefined, {
+    skip: !isAuthenticated,
+    refetchOnMountOrArgChange: true,
+  });
+  const shouldFetchLatestTerms = isAuthenticated && termsStatusData?.data && termsStatusData.data.acceptedLatestVersion === false;
+  const { data: latestTermsData } = useGetLatestTermsQuery(undefined, {
+    skip: !shouldFetchLatestTerms,
+  });
+  const [acceptTerms, { isLoading: acceptingTerms }] = useAcceptBuilderTermsMutation();
 
   // builderId for dashboard API (same as OLD project)
   const builderId = useMemo(() => {
@@ -93,6 +104,14 @@ const Dashboard = () => {
     }
     return organization?.id ?? null;
   }, [organization?.id]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (!termsStatusData?.data) return;
+    if (termsStatusData.data.acceptedLatestVersion === false && latestTermsData?.data) {
+      setTermsDialogOpen(true);
+    }
+  }, [isAuthenticated, termsStatusData, latestTermsData]);
 
   const { data: countData } = useGetDashboardCountQuery(
     { builderId: builderId || '' },
@@ -776,6 +795,53 @@ const Dashboard = () => {
         onClearSelection={() => setSelectedRegistrations([])}
         onSuccess={fetchRegistrations}
       />
+
+      <Dialog open={termsDialogOpen} onOpenChange={(open) => {
+        if (!open && termsStatusData?.data?.acceptedLatestVersion === false) {
+          return;
+        }
+        setTermsDialogOpen(open);
+      }}>
+        <DialogContent className="max-w-3xl max-h-[80vh] bg-background flex flex-col [&>button]:hidden">
+          <DialogHeader>
+            <DialogTitle>Terms and Conditions</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-auto border rounded-md p-4 bg-muted/30 text-sm whitespace-pre-wrap">
+            {latestTermsData?.data?.content ?? 'Loading latest terms...'}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button
+              onClick={async () => {
+                const versionId = latestTermsData?.data?.id;
+                if (!versionId) return;
+                try {
+                  await acceptTerms({ versionId }).unwrap();
+                  toast({
+                    title: "Terms accepted",
+                    description: "You have accepted the latest terms and conditions.",
+                  });
+                  setTermsDialogOpen(false);
+                } catch (error: unknown) {
+                  const message =
+                    error && typeof error === 'object' && 'data' in error
+                      ? (error as { data?: { message?: string } }).data?.message
+                      : error instanceof Error
+                        ? error.message
+                        : "Failed to accept terms.";
+                  toast({
+                    title: "Error accepting terms",
+                    description: String(message),
+                    variant: "destructive",
+                  });
+                }
+              }}
+              disabled={acceptingTerms || !latestTermsData?.data?.id}
+            >
+              {acceptingTerms ? "Accepting..." : "Accept & Agree"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

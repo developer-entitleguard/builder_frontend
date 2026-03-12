@@ -43,6 +43,8 @@ interface ReviewApprovalFormProps {
   registrationId?: string | null;
   /** When true, form calls POST /api/create/customerentitlement/:builderCustomerId when Send to Homeowner is clicked */
   useBuilderEntitlementApi?: boolean;
+  /** When true, form is read-only (view mode only). */
+  readOnly?: boolean;
 }
 
 const getBuilderId = (): string | null => {
@@ -62,6 +64,7 @@ const ReviewApprovalForm = ({
   formData,
   registrationId,
   useBuilderEntitlementApi,
+  readOnly,
 }: ReviewApprovalFormProps) => {
   const { toast } = useToast();
   const { organization } = useOrganization();
@@ -221,6 +224,7 @@ const ReviewApprovalForm = ({
   }, [formData, registrationId, checkExistingConsent, fetchSelectedItems]);
 
   const handleConsentChange = async (checked: boolean) => {
+    if (readOnly) return;
     if (consentLocked) return;
     
     setConsentConfirmed(checked);
@@ -243,6 +247,7 @@ const ReviewApprovalForm = ({
   };
 
   const handleRequestConsent = async () => {
+    if (readOnly) return;
     if (!registrationId) {
       toast({
         title: "Error",
@@ -266,6 +271,10 @@ const ReviewApprovalForm = ({
   };
 
   const handleSendToHomeowner = async () => {
+    if (readOnly) {
+      onNext();
+      return;
+    }
     if (useBuilderEntitlementApi && registrationId) {
       setSendingEntitlement(true);
       try {
@@ -359,7 +368,7 @@ const ReviewApprovalForm = ({
     );
   }
 
-  const canSubmit = approved && consentConfirmed;
+  const canSubmit = readOnly ? true : approved && consentConfirmed;
 
   return (
     <div className="space-y-6">
@@ -531,11 +540,11 @@ const ReviewApprovalForm = ({
               id="consent" 
               checked={consentConfirmed}
               onCheckedChange={handleConsentChange}
-              disabled={consentLocked}
+              disabled={consentLocked || readOnly}
             />
             <div className="space-y-1 flex-1">
               <div className="flex items-center gap-2">
-                <label htmlFor="consent" className={`font-medium ${consentLocked ? 'cursor-default' : 'cursor-pointer'}`}>
+                <label htmlFor="consent" className={`font-medium ${consentLocked || readOnly ? 'cursor-default' : 'cursor-pointer'}`}>
                   I confirm that I have the customer's permission to send them this documentation package via email
                 </label>
                 {consentLocked && (
@@ -553,7 +562,7 @@ const ReviewApprovalForm = ({
             </div>
           </div>
 
-          {!consentConfirmed && !consentLocked && (
+          {!consentConfirmed && !consentLocked && !readOnly && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
               <p className="text-sm text-amber-800 mb-3">
                 <strong>Don't have consent yet?</strong> Send a consent request to the customer. They will receive a link to provide their consent digitally.
@@ -588,10 +597,11 @@ const ReviewApprovalForm = ({
             <Checkbox 
               id="approve" 
               checked={approved}
-              onCheckedChange={(checked) => setApproved(checked as boolean)}
+              onCheckedChange={(checked) => !readOnly && setApproved(checked as boolean)}
+              disabled={readOnly}
             />
             <div className="space-y-1">
-              <label htmlFor="approve" className="font-medium cursor-pointer">
+              <label htmlFor="approve" className={`font-medium ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}>
                 I approve this warranty documentation package
               </label>
               <p className="text-sm text-muted-foreground">
@@ -608,10 +618,16 @@ const ReviewApprovalForm = ({
         </p>
         <Button 
           onClick={handleSendToHomeowner}
-          disabled={!canSubmit || sendingEntitlement}
+          disabled={readOnly ? false : (!canSubmit || sendingEntitlement)}
           className="min-w-[160px]"
         >
-          {sendingEntitlement ? "Sending..." : !consentConfirmed ? "Get Customer Consent" : "Send to Homeowner"}
+          {readOnly
+            ? "Next"
+            : sendingEntitlement
+              ? "Sending..."
+              : !consentConfirmed
+                ? "Get Customer Consent"
+                : "Send to Homeowner"}
         </Button>
       </div>
 

@@ -69,6 +69,7 @@ const Onboarding = () => {
   const [loading, setLoading] = useState(false);
   const [originalEmail, setOriginalEmail] = useState<string | null>(null);
   const [originalStatus, setOriginalStatus] = useState<string | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const [emailChangeDialogOpen, setEmailChangeDialogOpen] = useState(false);
   const [pendingCustomerData, setPendingCustomerData] = useState<CustomerFormData | null>(null);
   const customerFormRef = useRef<CustomerDetailsFormRef>(null);
@@ -104,6 +105,12 @@ const Onboarding = () => {
       return '';
     };
     const project = c.project as { id?: string; name?: string } | undefined;
+    const statusObj = c.status as { name?: string } | undefined;
+    const statusName = statusObj?.name ?? '';
+    if (statusName.toUpperCase() === 'SENT') {
+      setIsReadOnly(true);
+      setOriginalStatus('sent');
+    }
     setFormData((prev) => ({
       ...prev,
       customer: {
@@ -188,6 +195,10 @@ const Onboarding = () => {
         };
 
         setFormData(existingFormData);
+
+        if (data.status === 'sent') {
+          setIsReadOnly(true);
+        }
 
         // Determine which step to start on based on data completeness
         if (data.status === 'ready_for_review') {
@@ -369,10 +380,14 @@ const Onboarding = () => {
 
   const handleSaveAndExit = async () => {
     if (currentStep === 'customer') {
+      if (isReadOnly) {
+        navigate('/dashboard');
+        return;
+      }
       await customerFormRef.current?.saveAndExit();
       return;
     }
-    if (currentStep === 'items' && hasBuilderAuth()) {
+    if (currentStep === 'items' && hasBuilderAuth() && !isReadOnly) {
       const ok = await saveCustomerFromFormData();
       if (!ok) {
         toast({
@@ -383,7 +398,7 @@ const Onboarding = () => {
         return;
       }
     }
-    if (currentStep === 'review' && hasBuilderAuth() && registrationId) {
+    if (currentStep === 'review' && hasBuilderAuth() && registrationId && !isReadOnly) {
       try {
         await createCustomerEntitlement({ builderCustomerId: registrationId }).unwrap();
         toast({
@@ -520,6 +535,7 @@ const Onboarding = () => {
             onNext={handleCustomerNext}
             initialData={formData.customer}
             registrationId={registrationId}
+            readOnly={isReadOnly}
             onSavedAndExit={() => {
               toast({
                 title: "Registration saved",
@@ -535,6 +551,7 @@ const Onboarding = () => {
             onNext={handleItemsNext}
             initialData={formData.items}
             registrationId={registrationId}
+            readOnly={isReadOnly}
             onSaveCustomerBeforeContinue={hasBuilderAuth() ? saveCustomerFromFormData : undefined}
           />
         );
@@ -545,6 +562,7 @@ const Onboarding = () => {
             formData={formData}
             registrationId={registrationId}
             useBuilderEntitlementApi={hasBuilderAuth()}
+            readOnly={isReadOnly}
           />
         );
       case 'send':

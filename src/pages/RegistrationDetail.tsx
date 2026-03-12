@@ -63,6 +63,7 @@ interface RegistrationData {
   settlement_date: string | null;
   notes: string | null;
   status: string;
+  status_name?: string | null;
   selected_items: unknown;
   documents_uploaded: unknown;
   created_at: string;
@@ -171,6 +172,12 @@ const RegistrationDetail = () => {
     if (!isBuilderFlow || !customerDetailsResponse?.data?.customer) return;
     const c = customerDetailsResponse.data.customer as unknown as Record<string, unknown>;
     const project = c.project as { createdAt?: string; updatedAt?: string; name?: string } | undefined;
+    const statusObj = c.status as { name?: string } | undefined;
+    const apiStatusName = statusObj?.name ?? '';
+    let internalStatus: string = 'draft';
+    const n = apiStatusName.toUpperCase().replace(/\s+/g, ' ');
+    if (n === 'ENTITLEMENT') internalStatus = 'documents_pending';
+    else if (n === 'SENT' || n === 'DELIVERED') internalStatus = 'sent';
 
     // Build selected items from customerDetails dtos (category + item name/brand/model)
     const dataWithDtos = customerDetailsResponse.data as {
@@ -224,7 +231,8 @@ const RegistrationDetail = () => {
       project_name: (c.projectName as string | null) ?? project?.name ?? null,
       settlement_date: (c.settlementDate as string | null) ?? null,
       notes: (c.notes as string | null) ?? null,
-      status: 'draft',
+      status: internalStatus,
+      status_name: apiStatusName || null,
       selected_items: selectedItems,
       documents_uploaded: {},
       created_at: project?.createdAt ?? '',
@@ -251,7 +259,7 @@ const RegistrationDetail = () => {
     }
   }, [isBuilderFlow, loadingFromApi, customerDetailsResponse, builderId, id, toast, navigate]);
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, statusName?: string | null) => {
     const statusConfig = {
       draft: { label: 'Draft', variant: 'secondary' as const },
       documents_pending: { label: 'Documents Pending', variant: 'outline' as const },
@@ -262,7 +270,18 @@ const RegistrationDetail = () => {
     };
     
     const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.draft;
-    return <Badge variant={config.variant} className={status === 'handed_over' ? 'bg-green-600 text-white' : ''}>{config.label}</Badge>;
+    const label =
+      statusName && statusName.trim() !== ""
+        ? statusName
+        : config.label;
+    return (
+      <Badge
+        variant={config.variant}
+        className={status === 'handed_over' ? 'bg-green-600 text-white' : ''}
+      >
+        {label}
+      </Badge>
+    );
   };
 
   const isHandedOver = registration?.status === 'handed_over';
@@ -423,17 +442,19 @@ const RegistrationDetail = () => {
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            {getStatusBadge(registration.status)}
+            {getStatusBadge(registration.status, registration.status_name)}
             {!isHandedOver && (
               <>
                 <Button variant="outline" onClick={handleContinueOnboarding}>
                   <Edit className="h-4 w-4 mr-2" />
-                  {registration.status === 'sent' ? 'Update Details' : 'Continue Editing'}
+                  {registration.status === 'sent' ? 'View Details' : 'Continue Editing'}
                 </Button>
-                <Button onClick={handleSendEntitlement}>
-                  <Send className="h-4 w-4 mr-2" />
-                  {registration.status === 'sent' ? 'Resend Entitlement' : 'Send Entitlement'}
-                </Button>
+                {registration.status !== 'sent' && (
+                  <Button onClick={handleSendEntitlement}>
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Entitlement
+                  </Button>
+                )}
                 {registration.status === 'sent' && (
                   <Button variant="secondary" onClick={() => setHandoverDialogOpen(true)}>
                     <KeyRound className="h-4 w-4 mr-2" />

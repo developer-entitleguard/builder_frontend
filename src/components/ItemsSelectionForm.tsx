@@ -80,6 +80,8 @@ interface ItemsSelectionFormProps {
     selected_items?: RegistrationItem[];
   };
   registrationId?: string;
+  /** When true, form is read-only (view mode only). */
+  readOnly?: boolean;
   /** When set (e.g. builder flow), called before continuing to review. Should call /api/builder/customer. Returns true if save succeeded. */
   onSaveCustomerBeforeContinue?: () => Promise<boolean>;
 }
@@ -107,7 +109,7 @@ const getBuilderId = (): string | null => {
   }
 };
 
-const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustomerBeforeContinue }: ItemsSelectionFormProps) => {
+const ItemsSelectionForm = ({ onNext, initialData, registrationId, readOnly, onSaveCustomerBeforeContinue }: ItemsSelectionFormProps) => {
   const { user } = useAuth();
   const { organization } = useOrganization();
   const { toast } = useToast();
@@ -318,6 +320,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
   const loading = loadingBoms;
 
   const handleBOMSelect = (bomId: string) => {
+    if (readOnly) return;
     if (
       existingMapResponse?.message &&
       typeof existingMapResponse.message === "string" &&
@@ -342,6 +345,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
   }, [registrationId, selectedBomId, builderItemsByBOMResponse, fetchExistingMap]);
 
   const handleRemoveItem = (itemId: string) => {
+    if (readOnly) return;
     setPendingItemFiles((prev) => {
       const next = { ...prev };
       delete next[itemId];
@@ -352,12 +356,14 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
   };
 
   const handleUpdateItem = (itemId: string, field: string, value: string) => {
+    if (readOnly) return;
     setSelectedItems(prev => prev.map(item => 
       item.id === itemId ? { ...item, [field]: value } : item
     ));
   };
 
   const handleFileUpload = async (itemId: string, file: File, documentType: 'warranty' | 'manual') => {
+    if (readOnly) return;
     if (!registrationId) return;
 
     const uploadKey = `${itemId}_${documentType}`;
@@ -441,6 +447,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
     doc: { path: string; fileId?: string },
     documentType: 'warranty' | 'manual'
   ) => {
+    if (readOnly) return;
     const documentPath = doc.path;
 
     if (documentPath.startsWith('pending_')) {
@@ -505,6 +512,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
   };
 
   const handleOpenCustomItemModal = () => {
+    if (readOnly) return;
     setNewCustomItem({
       id: `custom_${Date.now()}`,
       name: '',
@@ -526,6 +534,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
   };
 
   const handleSaveCustomItem = async () => {
+    if (readOnly) return;
     if (!newCustomItem.name.trim()) {
       toast({
         title: "Missing item name",
@@ -581,6 +590,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
   };
 
   const handleSaveItemEdit = async (item: RegistrationItem) => {
+    if (readOnly) return;
     if (!registrationId || !selectedBomId) {
       toast({
         title: "Cannot save",
@@ -657,6 +667,11 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
   }, {} as Record<string, RegistrationItem[]>);
 
   const handleNext = async () => {
+    if (readOnly) {
+      onNext({ selected_items: selectedItems });
+      return;
+    }
+
     if (onSaveCustomerBeforeContinue) {
       setSaving(true);
       try {
@@ -701,7 +716,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
               <CardDescription>Choose a BOM to load items from</CardDescription>
             </CardHeader>
             <CardContent>
-              <Select value={selectedBomId} onValueChange={handleBOMSelect}>
+              <Select value={selectedBomId} onValueChange={handleBOMSelect} disabled={readOnly}>
                 <SelectTrigger className="bg-background">
                   <SelectValue placeholder="Select a Bill of Materials" />
                 </SelectTrigger>
@@ -756,10 +771,12 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <span>Items ({selectedItems.length})</span>
-                    <Button onClick={handleOpenCustomItemModal} variant="outline" size="sm">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Custom Item
-                    </Button>
+                    {!readOnly && (
+                      <Button onClick={handleOpenCustomItemModal} variant="outline" size="sm">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Custom Item
+                      </Button>
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -792,25 +809,27 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
                                         </Badge>
                                       )}
                                     </div>
-                                    <div className="flex gap-2">
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setEditingItemId(isEditing ? null : item.id)}
-                                      >
-                                        <Edit2 className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleRemoveItem(item.id)}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </div>
+                                    {!readOnly && (
+                                      <div className="flex gap-2">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => setEditingItemId(isEditing ? null : item.id)}
+                                        >
+                                          <Edit2 className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleRemoveItem(item.id)}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    )}
                                   </div>
 
-                                  {isEditing ? (
+                                  {isEditing && !readOnly ? (
                                     <div className="grid grid-cols-2 gap-3">
                                       <div>
                                         <Label htmlFor={`make-${item.id}`}>Make</Label>
@@ -1019,7 +1038,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, onSaveCustome
         </>
       )}
 
-      <Dialog open={showCustomItemModal} onOpenChange={setShowCustomItemModal}>
+      <Dialog open={showCustomItemModal && !readOnly} onOpenChange={setShowCustomItemModal}>
         <DialogContent className="sm:max-w-[500px] bg-background">
           <DialogHeader>
             <DialogTitle>Add Custom Item</DialogTitle>

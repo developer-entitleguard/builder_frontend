@@ -35,6 +35,8 @@ export interface CustomerDetailsFormProps {
   onNext: (data: CustomerDetailsFormData & { registrationId?: string }) => void;
   initialData?: Partial<CustomerDetailsFormData> & { id?: string; registrationId?: string };
   registrationId?: string | null;
+  /** When true, form is read-only (view mode only). */
+  readOnly?: boolean;
   /** Called after customer is saved via Save & Exit (API success). Use to e.g. toast and navigate away. */
   onSavedAndExit?: (registrationId: string) => void;
 }
@@ -45,7 +47,7 @@ export interface CustomerDetailsFormRef {
 }
 
 const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFormProps>(
-  ({ onNext, initialData, registrationId, onSavedAndExit }, ref) => {
+  ({ onNext, initialData, registrationId, readOnly, onSavedAndExit }, ref) => {
   const { toast } = useToast();
   const { organization } = useOrganization();
   const { data: projectsResponse, isLoading: projectsLoading } = useProjectsQuery();
@@ -121,6 +123,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
   }, [projects, formData.projectId]);
 
   const handleInputChange = (field: string, value: string) => {
+    if (readOnly) return;
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
@@ -292,7 +295,13 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (readOnly) {
+      // In read-only mode, just move to next step with existing data.
+      onNext({ ...formData, registrationId: registrationId ?? initialData?.registrationId });
+      return;
+    }
+
     if (!validateForm()) {
       toast({
         title: "Please fix the errors",
@@ -347,22 +356,24 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="firstName">First Name *</Label>
-                <Input
+                  <Input
                   id="firstName"
                   value={formData.firstName}
                   onChange={(e) => handleInputChange('firstName', e.target.value)}
                   placeholder="Enter first name"
                   required
+                  disabled={readOnly}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="lastName">Last Name *</Label>
-                <Input
+                  <Input
                   id="lastName"
                   value={formData.lastName}
                   onChange={(e) => handleInputChange('lastName', e.target.value)}
                   placeholder="Enter last name"
                   required
+                  disabled={readOnly}
                 />
               </div>
             </div>
@@ -379,6 +390,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                     placeholder="homebuyer@email.com"
                     className="pl-10"
                     required
+                    disabled={readOnly}
                   />
                 </div>
               </div>
@@ -394,6 +406,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                     placeholder="04XX XXX XXX or 0X XXXX XXXX"
                     className={`pl-10 ${errors.phone ? 'border-destructive' : ''}`}
                     required
+                    disabled={readOnly}
                   />
                 </div>
                 {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
@@ -422,6 +435,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                 onChange={(e) => handleInputChange('propertyAddress', e.target.value)}
                 placeholder="123 Main Street"
                 required
+                disabled={readOnly}
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -433,11 +447,12 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                   onChange={(e) => handleInputChange('city', e.target.value)}
                   placeholder="City name"
                   required
+                  disabled={readOnly}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="state">State *</Label>
-                <Select value={formData.state} onValueChange={(value) => handleInputChange('state', value)}>
+                <Select value={formData.state} onValueChange={(value) => handleInputChange('state', value)} disabled={readOnly}>
                   <SelectTrigger className={errors.state ? 'border-destructive' : ''}>
                     <SelectValue placeholder="Select state" />
                   </SelectTrigger>
@@ -461,6 +476,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                   maxLength={4}
                   className={errors.zipCode ? 'border-destructive' : ''}
                   required
+                  disabled={readOnly}
                 />
                 {errors.zipCode && <p className="text-sm text-destructive">{errors.zipCode}</p>}
               </div>
@@ -472,6 +488,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                   // Radix Select does not allow empty-string item values; use undefined for "no selection"
                   value={formData.projectId || undefined} 
                   onValueChange={(value) => handleInputChange('projectId', value)}
+                  disabled={readOnly}
                 >
                   <SelectTrigger className={errors.projectId ? 'border-destructive' : ''}>
                     <SelectValue placeholder={projectsLoading ? "Loading projects..." : "Select a project"} />
@@ -501,6 +518,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                   placeholder="e.g., 750000"
                   min="0"
                   step="1000"
+                  disabled={readOnly}
                 />
               </div>
               <div className="space-y-2">
@@ -510,6 +528,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                   type="date"
                   value={formData.settlementDate}
                   onChange={(e) => handleInputChange('settlementDate', e.target.value)}
+                  disabled={readOnly}
                 />
               </div>
             </div>
@@ -523,6 +542,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                   onChange={(e) => handleInputChange('numBedrooms', e.target.value)}
                   placeholder="e.g., 4"
                   min="0"
+                  disabled={readOnly}
                 />
               </div>
               <div className="space-y-2">
@@ -534,6 +554,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                   onChange={(e) => handleInputChange('numRooms', e.target.value)}
                   placeholder="e.g., 8"
                   min="0"
+                  disabled={readOnly}
                 />
               </div>
               <div className="space-y-2">
@@ -546,6 +567,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                   placeholder="e.g., 250"
                   min="0"
                   step="0.01"
+                  disabled={readOnly}
                 />
               </div>
             </div>
@@ -557,6 +579,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                 onChange={(e) => handleInputChange('notes', e.target.value)}
                 placeholder="Any additional information or special requirements..."
                 className="min-h-[80px]"
+                disabled={readOnly}
               />
             </div>
           </CardContent>
@@ -564,7 +587,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
 
         <div className="flex justify-end">
           <Button type="submit" size="lg" className="min-w-[150px]" disabled={loading}>
-            {loading ? 'Saving...' : 'Continue to Items'}
+            {readOnly ? 'Next' : loading ? 'Saving...' : 'Continue to Items'}
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         </div>

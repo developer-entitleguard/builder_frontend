@@ -4,6 +4,7 @@ import {
   useGetActivityCategoriesByProjectQuery,
   useCreateActivityCategoryMutation,
   useUpdateActivityCategoryMutation,
+  useDeleteActivityCategoryMutation,
   type BuilderActivityCategoryApi,
 } from "@/store/api/activityCategories";
 
@@ -53,6 +54,7 @@ export const useActivityCategories = (projectId: string | undefined) => {
 
   const [createCategoryMutation] = useCreateActivityCategoryMutation();
   const [updateCategoryMutation] = useUpdateActivityCategoryMutation();
+  const [deleteCategoryMutation] = useDeleteActivityCategoryMutation();
 
   useEffect(() => {
     if (!isBuilder || !apiCategories?.data) return;
@@ -215,9 +217,56 @@ export const useActivityCategories = (projectId: string | undefined) => {
     [projectId, isBuilder, categories, updateCategoryMutation, toast]
   );
 
-  const deleteCategory = useCallback(async (_id: string): Promise<boolean> => {
-    return false;
-  }, []);
+  const deleteCategory = useCallback(
+    async (id: string): Promise<boolean> => {
+      if (!projectId) {
+        throw new Error("No project");
+      }
+
+      if (!isBuilder) {
+        // Non-builder path not yet implemented
+        return false;
+      }
+
+      try {
+        const result = await deleteCategoryMutation({
+          projectId,
+          id,
+        }).unwrap();
+
+        if (!result?.success) {
+          toast({
+            title: "Error deleting category",
+            description:
+              result?.message || "Failed to delete activity category",
+            variant: "destructive",
+          });
+          return false;
+        }
+
+        toast({
+          title: "Category deleted",
+          description:
+            result.message ||
+            "Activity category has been deleted from the project.",
+        });
+
+        // RTK Query invalidates and refetches; local state will be updated via useEffect
+        return true;
+      } catch (error: unknown) {
+        toast({
+          title: "Error deleting category",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Failed to delete activity category",
+          variant: "destructive",
+        });
+        return false;
+      }
+    },
+    [projectId, isBuilder, deleteCategoryMutation, toast]
+  );
 
   return {
     categories,

@@ -285,6 +285,9 @@ const RegistrationDetail = () => {
   };
 
   const isHandedOver = registration?.status === 'handed_over';
+  const isHandedStatus =
+    registration?.status === 'handed_over' ||
+    (registration?.status_name ?? '').toUpperCase() === 'HANDED';
 
   const handleContinueOnboarding = () => {
     // Navigate to onboarding with the registration ID to continue editing
@@ -447,7 +450,7 @@ const RegistrationDetail = () => {
               <>
                 <Button variant="outline" onClick={handleContinueOnboarding}>
                   <Edit className="h-4 w-4 mr-2" />
-                  {registration.status === 'sent' ? 'View Details' : 'Continue Editing'}
+                  {isHandedStatus ? 'View Details' : 'Continue Editing'}
                 </Button>
                 {registration.status !== 'sent' && (
                   <Button onClick={handleSendEntitlement}>

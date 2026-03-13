@@ -221,13 +221,11 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (ownerError) {
-      toast({
-        title: 'Error loading registrations',
-        description: 'Failed to load registrations. Please try again.',
-        variant: 'destructive',
-      });
+      // Silently log dashboard registration load issues instead of showing a toast on login.
+      // Registrations list will simply appear empty if the API fails.
+      console.warn('Error loading registrations', ownerError);
     }
-  }, [ownerError, toast]);
+  }, [ownerError]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -686,7 +684,9 @@ const Dashboard = () => {
                                 navigate(`/onboarding?id=${registration.id}`);
                               }}
                             >
-                              Continue editing
+                              {(registration.status_name ?? '').toUpperCase() === 'HANDED'
+                                ? 'View Details'
+                                : 'Continue editing'}
                             </Button>
                             <div className="text-right">
                               <p className="text-sm text-muted-foreground">

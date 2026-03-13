@@ -107,9 +107,11 @@ const Onboarding = () => {
     const project = c.project as { id?: string; name?: string } | undefined;
     const statusObj = c.status as { name?: string } | undefined;
     const statusName = statusObj?.name ?? '';
-    if (statusName.toUpperCase() === 'SENT') {
+    const normalizedStatus = statusName.toUpperCase().replace(/\s+/g, '_');
+    // Only HANDED/HANDED_OVER should be read-only; SENT stays editable.
+    if (normalizedStatus === 'HANDED' || normalizedStatus === 'HANDED_OVER') {
       setIsReadOnly(true);
-      setOriginalStatus('sent');
+      setOriginalStatus('handed_over');
     }
     setFormData((prev) => ({
       ...prev,
@@ -196,7 +198,8 @@ const Onboarding = () => {
 
         setFormData(existingFormData);
 
-        if (data.status === 'sent') {
+        // Supabase flow: mark read-only only when status is handed_over
+        if (data.status === 'handed_over') {
           setIsReadOnly(true);
         }
 

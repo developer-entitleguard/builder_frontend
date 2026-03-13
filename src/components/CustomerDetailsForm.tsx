@@ -108,19 +108,40 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
   }, [initialData]);
 
   useEffect(() => {
-    if (!projects.length || !formData.projectId) return;
+    if (!projects.length) return;
 
-    const selected = projects.find(
-      (p) => String(p.id) === String(formData.projectId)
-    );
-
-    if (selected) {
-      setFormData((prev) => ({
-        ...prev,
-        projectName: selected.name,
-      }));
+    // Prefer matching by id when we already have a projectId
+    if (formData.projectId) {
+      const selectedById = projects.find(
+        (p) => String(p.id) === String(formData.projectId)
+      );
+      if (selectedById) {
+        setFormData((prev) => ({
+          ...prev,
+          projectId: String(selectedById.id),
+          projectName: selectedById.name,
+        }));
+        return;
+      }
     }
-  }, [projects, formData.projectId]);
+
+    // Fallback: when we only have a projectName from /api/customerdetails,
+    // try to resolve the id by matching the name from /api/builder/projects.
+    const initialProjectName =
+      (initialData as { projectName?: string } | undefined)?.projectName;
+    if (initialProjectName && !formData.projectId) {
+      const matchByName = projects.find(
+        (p) => p.name === initialProjectName
+      );
+      if (matchByName) {
+        setFormData((prev) => ({
+          ...prev,
+          projectId: String(matchByName.id),
+          projectName: matchByName.name,
+        }));
+      }
+    }
+  }, [projects, formData.projectId, initialData]);
 
   const handleInputChange = (field: string, value: string) => {
     if (readOnly) return;

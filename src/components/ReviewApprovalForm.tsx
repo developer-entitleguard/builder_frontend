@@ -8,7 +8,7 @@ import { User, Home, FileText, Building, CheckCircle, MessageSquare, Loader2, Lo
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useOrganization } from "@/hooks/useOrganization";
-import { useCreateCustomerEntitlementMutation, useGetCustomerDetailsQuery, useSendConsentMailMutation } from "@/store/api";
+import { useCreateBuilderCustomerMutation, useGetCustomerDetailsQuery, useSendConsentMailMutation, useGetStatusesByTypeQuery } from "@/store/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -79,7 +79,7 @@ const ReviewApprovalForm = ({
   const apiConsentReceived = Boolean((apiData as unknown as { customer?: { consentReceived?: boolean } })?.customer?.consentReceived);
   const apiConsentMethod = (apiData as unknown as { customer?: { consentMethod?: unknown } })?.customer?.consentMethod;
 
-  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
+  const [createBuilderCustomer] = useCreateBuilderCustomerMutation();
   const [sendingEntitlement, setSendingEntitlement] = useState(false);
   const [approved, setApproved] = useState(false);
   const [consentConfirmed, setConsentConfirmed] = useState(false);
@@ -89,6 +89,11 @@ const ReviewApprovalForm = ({
   const [sendConsentMail, { isLoading: requestingConsent }] = useSendConsentMailMutation();
   const [consentDialogOpen, setConsentDialogOpen] = useState(false);
   const [consentUrl, setConsentUrl] = useState<string | null>(null);
+
+  const { data: builderStatuses } = useGetStatusesByTypeQuery(
+    { type: "BUILDER" },
+    { skip: !builderId }
+  );
 
   const checkExistingConsent = useCallback(async () => {
     if (!registrationId) return;
@@ -275,32 +280,87 @@ const ReviewApprovalForm = ({
       onNext();
       return;
     }
-    if (useBuilderEntitlementApi && registrationId) {
-      setSendingEntitlement(true);
-      try {
-        await createCustomerEntitlement({ builderCustomerId: registrationId }).unwrap();
-        toast({
-          title: "Entitlement sent!",
-          description: "The warranty entitlement has been sent to the homeowner.",
-        });
-        onNext();
-      } catch (error: unknown) {
-        const description =
-          error && typeof error === "object" && "data" in error
-            ? String((error as { data?: unknown }).data ?? "Failed to send entitlement")
-            : error instanceof Error
-              ? error.message
-              : "Failed to send entitlement";
-        toast({
-          title: "Error sending entitlement",
-          description,
-          variant: "destructive",
-        });
-      } finally {
-        setSendingEntitlement(false);
-      }
-    } else {
+
+    if (!builderId || !registrationId || !apiData?.customer) {
       onNext();
+      return;
+    }
+
+    const customer = apiData.customer as unknown as {
+      id?: string;
+      firstName?: string;
+      lastName?: string | null;
+      email?: string;
+      contact?: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+      project?: { id?: string; name?: string } | null;
+      projectName?: string | null;
+      settlementDate?: string | null;
+      notes?: string | null;
+      numBedrooms?: number | null;
+      numRooms?: number | null;
+      price?: number | null;
+      totalBuiltUpArea?: number | null;
+      builderOrganization?: { id?: string } | null;
+    };
+
+    setSendingEntitlement(true);
+    try {
+      const sentStatusId =
+        builderStatuses?.data?.find(
+          (s) => s.module === "BUILDER" && s.name?.toUpperCase() === "SENT"
+        )?.id;
+
+      await createBuilderCustomer({
+        id: customer.id ?? registrationId ?? undefined,
+        firstName: customer.firstName ?? "",
+        lastName: (customer.lastName as string | null) ?? "",
+        email: customer.email ?? "",
+        contact: customer.contact ?? "",
+        address: customer.address ?? "",
+        city: customer.city ?? "",
+        state: customer.state ?? "",
+        zip: customer.zip ?? "",
+        country: "Australia",
+        projectId: customer.project?.id ?? undefined,
+        projectName: customer.projectName ?? customer.project?.name ?? undefined,
+        settlementDate: customer.settlementDate ?? undefined,
+        notes: customer.notes ?? undefined,
+        numBedrooms: customer.numBedrooms ?? undefined,
+        numRooms: customer.numRooms ?? undefined,
+        price: customer.price ?? undefined,
+        totalBuiltUpArea: customer.totalBuiltUpArea ?? undefined,
+        consentMethod: "form",
+        consentReceived: true,
+        consentReceivedAt: new Date().toISOString(),
+        consentToken: undefined,
+        builderOrganizationId: customer.builderOrganization?.id ?? builderId,
+        ...(sentStatusId ? { statusId: sentStatusId } : {}),
+      }).unwrap();
+
+      toast({
+        title: "Sent to homeowner",
+        description: "The homeowner has been marked as SENT and the details have been saved.",
+      });
+
+      onNext();
+    } catch (error: unknown) {
+      const description =
+        error && typeof error === "object" && "data" in error
+          ? String((error as { data?: unknown }).data ?? "Failed to send to homeowner")
+          : error instanceof Error
+            ? error.message
+            : "Failed to send to homeowner";
+      toast({
+        title: "Error sending to homeowner",
+        description,
+        variant: "destructive",
+      });
+    } finally {
+      setSendingEntitlement(false);
     }
   };
 

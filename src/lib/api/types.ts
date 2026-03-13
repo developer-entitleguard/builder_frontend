@@ -407,6 +407,7 @@ export interface CreateBuilderCustomerRequest {
   consentReceivedAt?: string;
   consentToken?: string;
   builderOrganizationId: string;
+  statusId?: string;
 }
 
 export interface BuilderCustomerResponse {

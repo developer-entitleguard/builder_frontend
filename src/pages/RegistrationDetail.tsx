@@ -335,22 +335,31 @@ const RegistrationDetail = () => {
     if (!registration) return;
 
     try {
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .update({ 
-          status: 'handed_over'
-        })
-        .eq('id', registration.id);
+      if (isBuilderFlow) {
+        await createCustomerEntitlement({ builderCustomerId: registration.id }).unwrap();
+        toast({
+          title: "Entitlement created",
+          description: "The homeowner entitlement has been created for this handed over property.",
+        });
+        setHandoverDialogOpen(false);
+      } else {
+        const { error } = await supabase
+          .from('homeowner_registrations')
+          .update({ 
+            status: 'handed_over'
+          })
+          .eq('id', registration.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "Property handed over",
-        description: "The property has been marked as handed over. This registration is now read-only."
-      });
+        toast({
+          title: "Property handed over",
+          description: "The property has been marked as handed over. This registration is now read-only."
+        });
 
-      setHandoverDialogOpen(false);
-      fetchRegistration();
+        setHandoverDialogOpen(false);
+        fetchRegistration();
+      }
     } catch (error: unknown) {
       toast({
         title: "Error updating status",

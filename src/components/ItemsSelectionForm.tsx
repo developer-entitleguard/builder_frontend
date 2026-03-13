@@ -149,10 +149,15 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, readOnly, onS
     manual_documents: []
   });
 
-  // BOM list from API (matches old project: /api/getbillofmaterials)
-  const { data: bomsResponse, isLoading: loadingBoms } = useGetBillOfMaterialsQuery(undefined, {
-    skip: !isAuthenticated,
-  });
+  const builderId = organization?.id ?? getBuilderId();
+
+  // BOM list from API (matches old project: /api/getbillofmaterials), scoped by builderId
+  const { data: bomsResponse, isLoading: loadingBoms } = useGetBillOfMaterialsQuery(
+    builderId ? { builderId } : ({} as { builderId: string }),
+    {
+      skip: !isAuthenticated || !builderId,
+    }
+  );
   const boms: BillOfMaterials[] = (bomsResponse?.data ?? []).map((b) => ({
     id: b.id,
     name: b.bomName,
@@ -176,7 +181,6 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, readOnly, onS
     }
   );
 
-  const builderId = organization?.id ?? getBuilderId();
   // Customer details API: /api/customerdetails?builderId=...&customerId=...
   const { data: customerDetailsResponse } = useGetCustomerDetailsQuery(
     { builderId: builderId ?? '', customerId: registrationId ?? '' },

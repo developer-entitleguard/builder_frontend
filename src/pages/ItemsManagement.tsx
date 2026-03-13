@@ -121,11 +121,6 @@ const ItemsManagement = () => {
   const isAuthenticated = !!user || hasBuilderAuth();
 
   const { data: categoriesResponse } = useGetCategorysQuery();
-  const { data: bomsResponse, isLoading: isLoadingBOMs, refetch: refetchBOMs } = useGetBillOfMaterialsQuery();
-  const { data: billMaterialsResponse, isLoading: isLoadingBillMaterials, refetch: refetchBillMaterials } = useGetBillMaterialsQuery(
-    selectedBomId,
-    { skip: !selectedBomId }
-  );
   const [createItem, { isLoading: isCreating }] = useCreateItemMutation();
   const [updateItem, { isLoading: isUpdating }] = useUpdateItemMutation();
   const [deleteItem] = useDeleteItemMutation();
@@ -135,6 +130,32 @@ const ItemsManagement = () => {
     if (list?.length) return list.map((c) => c.name);
     return FALLBACK_CATEGORIES;
   }, [categoriesResponse?.data]);
+
+  const builderOrganizationId = organization?.id ?? (() => {
+    try {
+      const d = localStorage.getItem("userData");
+      if (!d) return null;
+      const p = JSON.parse(d);
+      return p?.userInfo?.builderOrganization?.id ?? p?.builderOrganization?.id ?? null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const {
+    data: bomsResponse,
+    isLoading: isLoadingBOMs,
+    refetch: refetchBOMs,
+  } = useGetBillOfMaterialsQuery(
+    builderOrganizationId ? { builderId: builderOrganizationId } : ({} as { builderId: string }),
+    { skip: !builderOrganizationId }
+  );
+
+  const {
+    data: billMaterialsResponse,
+    isLoading: isLoadingBillMaterials,
+    refetch: refetchBillMaterials,
+  } = useGetBillMaterialsQuery(selectedBomId, { skip: !selectedBomId });
 
   const boms = useMemo(() => {
     return (bomsResponse?.data ?? []).map((bom) => ({
@@ -235,15 +256,6 @@ const ItemsManagement = () => {
     setManualFile(null);
     setEditingItem(null);
   };
-
-  const builderOrganizationId = organization?.id ?? (() => {
-    try {
-      const d = localStorage.getItem("userData");
-      if (!d) return null;
-      const p = JSON.parse(d);
-      return p?.userInfo?.builderOrganization?.id ?? p?.builderOrganization?.id ?? null;
-    } catch { return null; }
-  })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

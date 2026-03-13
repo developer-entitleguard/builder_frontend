@@ -301,11 +301,16 @@ export const itemsApi = api.injectEndpoints({
       providesTags: ['Item'],
     }),
 
-    // Get Bill of Materials from API
-    getBillOfMaterials: build.query<{ success: boolean; message: string; data: Array<{ id: string; bomName: string; projectName: string }> }, void>({
-      query: () => ({
+    // Get Bill of Materials from API (scoped by builderId)
+    getBillOfMaterials: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{ id: string; bomName: string; projectName: string }>;
+    }, { builderId: string }>({
+      query: ({ builderId }) => ({
         url: '/api/getbillofmaterials',
         method: 'GET',
+        params: { builderId },
       }),
       providesTags: ['Item'],
     }),

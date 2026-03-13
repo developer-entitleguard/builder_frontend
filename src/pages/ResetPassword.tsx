@@ -1,114 +1,107 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useSetPasswordForUserMutation } from '@/store/api/auth';
+import { useResetPasswordWithTokenMutation } from '@/store/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Building2, Lock, Eye, EyeOff } from 'lucide-react';
+import { Lock, Eye, EyeOff } from 'lucide-react';
 
 const ResetPassword = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordData, setPasswordData] = useState({
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
-  const [setPasswordForUser, { isLoading }] = useSetPasswordForUserMutation();
+  const [resetPasswordWithToken, { isLoading }] = useResetPasswordWithTokenMutation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') || '';
-  const getEmailFromToken = (token: string): string => {
+
+  const getEmailFromToken = (t: string): string => {
     try {
-      const base64Url = token.split('.')[1];
+      const base64Url = t.split('.')[1];
+      if (!base64Url) return '';
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-      }).join(''));
-      const payload = JSON.parse(jsonPayload);
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const payload = JSON.parse(jsonPayload) as { mail?: string; email?: string };
       return payload.mail || payload.email || '';
     } catch (error) {
       console.error('Error decoding token:', error);
       return '';
     }
   };
-  
+
   const email = getEmailFromToken(token);
-  console.log('Extracted email from token:', email);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (passwordData.password !== passwordData.confirmPassword) {
       toast({
-        title: "Password mismatch",
-        description: "Passwords do not match.",
-        variant: "destructive"
+        title: 'Password mismatch',
+        description: 'Passwords do not match.',
+        variant: 'destructive',
       });
       return;
     }
 
     if (passwordData.password.length < 6) {
       toast({
-        title: "Password too short",
-        description: "Password must be at least 6 characters long.",
-        variant: "destructive"
+        title: 'Password too short',
+        description: 'Password must be at least 6 characters long.',
+        variant: 'destructive',
       });
       return;
     }
 
-    // Validate required URL parameters
     if (!token) {
       toast({
-        title: "Invalid reset link",
-        description: "Please use the reset link sent to your email.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (!email) {
-      toast({
-        title: "Invalid token",
-        description: "Unable to extract email from reset link. Please request a new reset link.",
-        variant: "destructive"
+        title: 'Invalid reset link',
+        description: 'Please use the reset link sent to your email.',
+        variant: 'destructive',
       });
       return;
     }
 
     try {
-      const result = await setPasswordForUser({
-        contact: '',
-        email: email,
-        loginType: 'email',
-        otp: '',
+      const result = await resetPasswordWithToken({
         password: passwordData.password,
-        token: token
+        token,
       }).unwrap();
 
       toast({
-        title: "Password updated",
-        description: result.message || "Your password has been updated successfully."
+        title: 'Password updated',
+        description: result.message || 'Your password has been updated successfully.',
       });
       setPasswordData({ password: '', confirmPassword: '' });
       navigate('/auth');
     } catch (error: unknown) {
-      let errorMessage = "An unexpected error occurred.";
-      
+      let errorMessage = 'An unexpected error occurred.';
+
       if (error && typeof error === 'object') {
-        if ('data' in error && error.data && typeof error.data === 'object' && 'message' in error.data) {
-          errorMessage = String(error.data.message);
+        if ('data' in error && (error as { data?: unknown }).data) {
+          const data = (error as { data?: { message?: string } }).data;
+          if (data && typeof data === 'object' && 'message' in data) {
+            errorMessage = String((data as { message?: string }).message);
+          }
         } else if ('message' in error) {
-          errorMessage = String(error.message);
+          errorMessage = String((error as { message?: string }).message);
         }
       }
-      
+
       toast({
-        title: "Error updating password",
+        title: 'Error updating password',
         description: errorMessage,
-        variant: "destructive"
+        variant: 'destructive',
       });
     }
   };
@@ -119,9 +112,9 @@ const ResetPassword = () => {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <div className="p-1">
-              <img 
-                src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
-                alt="Entitle Guard for Builders Logo" 
+              <img
+                src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png"
+                alt="Entitle Guard for Builders Logo"
                 className="h-8 w-8 rounded-lg"
               />
             </div>
@@ -134,7 +127,9 @@ const ResetPassword = () => {
           <CardHeader>
             <CardTitle>Reset Password</CardTitle>
             <CardDescription>
-              {email ? `Enter your new password for ${email}` : 'Enter your new password below to complete the reset process'}
+              {email
+                ? `Enter your new password for ${email}`
+                : 'Enter your new password below to complete the reset process'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -145,11 +140,13 @@ const ResetPassword = () => {
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="new-password"
-                    type={showPassword ? "text" : "password"}
+                    type={showPassword ? 'text' : 'password'}
                     placeholder="Enter new password"
                     className="pl-10 pr-10"
                     value={passwordData.password}
-                    onChange={(e) => setPasswordData(prev => ({ ...prev, password: e.target.value }))}
+                    onChange={(e) =>
+                      setPasswordData((prev) => ({ ...prev, password: e.target.value }))
+                    }
                     required
                     minLength={6}
                   />
@@ -158,7 +155,7 @@ const ResetPassword = () => {
                     variant="ghost"
                     size="sm"
                     className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={() => setShowPassword((prev) => !prev)}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4 text-muted-foreground" />
@@ -174,11 +171,16 @@ const ResetPassword = () => {
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="confirm-password"
-                    type={showConfirmPassword ? "text" : "password"}
+                    type={showConfirmPassword ? 'text' : 'password'}
                     placeholder="Confirm new password"
                     className="pl-10 pr-10"
                     value={passwordData.confirmPassword}
-                    onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                    onChange={(e) =>
+                      setPasswordData((prev) => ({
+                        ...prev,
+                        confirmPassword: e.target.value,
+                      }))
+                    }
                     required
                     minLength={6}
                   />
@@ -187,7 +189,7 @@ const ResetPassword = () => {
                     variant="ghost"
                     size="sm"
                     className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
                   >
                     {showConfirmPassword ? (
                       <EyeOff className="h-4 w-4 text-muted-foreground" />
@@ -198,7 +200,7 @@ const ResetPassword = () => {
                 </div>
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Saving..." : "Save Password"}
+                {isLoading ? 'Saving...' : 'Save Password'}
               </Button>
             </form>
           </CardContent>

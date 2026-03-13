@@ -8,6 +8,7 @@ import { OrganizationProvider } from "@/hooks/useOrganization";
 import OrganizationGate from "@/components/OrganizationGate";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
 import ItemsManagement from "./pages/ItemsManagement";
@@ -72,6 +73,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/auth/resetPassword" element={<ResetPassword />} />
               <Route path="/dashboard" element={
                 <ProtectedRoute>
                   <Dashboard />

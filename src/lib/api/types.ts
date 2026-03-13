@@ -68,6 +68,7 @@ export interface UpdatePasswordRequest {
 
 export interface ResetPasswordWithTokenRequest {
   password: string;
+  token: string;
 }
 
 // Dashboard & stats

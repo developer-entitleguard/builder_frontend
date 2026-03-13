@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useResetPasswordWithTokenMutation } from '@/store/api';
+import { useSetPasswordForUserMutation } from '@/store/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,7 +15,7 @@ const ResetPassword = () => {
     password: '',
     confirmPassword: '',
   });
-  const [resetPasswordWithToken, { isLoading }] = useResetPasswordWithTokenMutation();
+  const [setPasswordForUser, { isLoading }] = useSetPasswordForUserMutation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
@@ -63,17 +63,12 @@ const ResetPassword = () => {
       return;
     }
 
-    if (!token) {
-      toast({
-        title: 'Invalid reset link',
-        description: 'Please use the reset link sent to your email.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     try {
-      const result = await resetPasswordWithToken({
+      const result = await setPasswordForUser({
+        contact: '',
+        email,
+        loginType: 'email',
+        otp: '',
         password: passwordData.password,
         token,
       }).unwrap();

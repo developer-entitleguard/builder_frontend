@@ -27,27 +27,85 @@ import ApprovalResponse from "./pages/ApprovalResponse";
 import PendingQueries from "./pages/PendingQueries";
 import AwaitingAction from "./pages/AwaitingAction";
 import QueriesComplete from "./pages/QueriesComplete";
+import { useValidateTokenQuery } from "@/store/api";
 
 const queryClient = new QueryClient();
 
 // Consider user authenticated if Supabase session OR builder login (userData.jwt in localStorage)
-const hasBuilderAuth = (): boolean => {
+const getBuilderJwt = (): { token: string | null; hasJwt: boolean } => {
   try {
     const userData = localStorage.getItem("userData");
-    if (!userData) return false;
+    if (!userData) return { token: null, hasJwt: false };
     const parsed = JSON.parse(userData);
-    return !!(parsed?.jwt);
+    const jwt = parsed?.jwt as string | undefined;
+    return jwt ? { token: jwt, hasJwt: true } : { token: null, hasJwt: false };
   } catch {
-    return false;
+    return { token: null, hasJwt: false };
   }
+};
+
+const SessionExpiredScreen = () => {
+  const handleSignOut = () => {
+    try {
+      localStorage.removeItem("userData");
+    } catch {
+      // ignore
+    }
+    window.location.href = "/auth";
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/40" />
+      <div className="relative z-10 max-w-md w-full bg-card border rounded-lg shadow-lg p-6 space-y-4">
+        <h2 className="text-xl font-semibold">Session expired</h2>
+        <p className="text-sm text-muted-foreground">
+          Your session is no longer valid. Please sign in again to continue.
+        </p>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            onClick={handleSignOut}
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  const builderAuth = hasBuilderAuth();
+  const { token: builderToken, hasJwt } = getBuilderJwt();
+  const {
+    data: tokenValidation,
+    isLoading: tokenLoading,
+    isError: tokenError,
+  } = useValidateTokenQuery(
+    { token: builderToken ?? "" },
+    { skip: !hasJwt }
+  );
 
-  // If builder JWT is present, allow through immediately (don't wait for Supabase loading)
-  if (builderAuth) {
+  if (hasJwt) {
+    if (tokenLoading) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          Loading...
+        </div>
+      );
+    }
+
+    const expired =
+      tokenValidation?.data?.expired === true ||
+      (tokenValidation?.message || "").toLowerCase().includes("invalid") ||
+      (tokenValidation?.message || "").toLowerCase().includes("expired");
+
+    if (tokenError || expired) {
+      return <SessionExpiredScreen />;
+    }
+
     return <OrganizationGate>{children}</OrganizationGate>;
   }
 

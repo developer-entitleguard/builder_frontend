@@ -50,6 +50,15 @@ export const authApi = api.injectEndpoints({
       invalidatesTags: ['Auth'],
     }),
 
+    validateToken: build.query<{ success: boolean; message: string; data?: { expired?: boolean } }, { token: string }>({
+      query: ({ token }) => ({
+        url: '/unsecure/validtoken',
+        method: 'GET',
+        params: { token },
+      }),
+      providesTags: ['Auth'],
+    }),
+
     // Reset password with token
     resetPasswordWithToken: build.mutation<{ message: string }, ResetPasswordWithTokenRequest>({
       query: (data) => ({
@@ -128,4 +137,5 @@ export const {
   useSendVerifyMailMutation,
   useSetPasswordForUserMutation,
   useUpdateProfileMutation,
+  useValidateTokenQuery,
 } = authApi;

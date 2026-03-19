@@ -176,9 +176,14 @@ export const ActivityList = ({
     });
   };
 
-  const handleToggleCompleted = async (activity: Activity, e: React.MouseEvent) => {
+  const handleMarkCompleteToggle = async (
+    activity: Activity,
+    e: React.MouseEvent
+  ) => {
     e.stopPropagation();
-    await onUpdateActivity(activity.id, { completed: !(activity.completed ?? activity.status === "done") });
+    const isCompleted = activity.completed ?? activity.status === "done";
+    await onUpdateActivity(activity.id, { completed: !isCompleted });
+    onRefresh?.();
   };
 
   const bulkDelete = async (ids: string[]) => {
@@ -420,8 +425,8 @@ export const ActivityList = ({
                     ) : (
                       <div className="divide-y">
                         {catActivities.map(activity => {
-                          const status = statusConfig[activity.status] || statusConfig.pending;
                           const isCompleted = activity.completed ?? activity.status === "done";
+                          const status = isCompleted ? statusConfig.done : statusConfig.pending;
                           const isSelected = selectedActivityIds.has(activity.id);
                           return (
                             <div
@@ -445,6 +450,14 @@ export const ActivityList = ({
                                   <p className="text-xs text-muted-foreground line-clamp-1">{activity.description}</p>
                                 )}
                               </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs"
+                                onClick={(e) => handleMarkCompleteToggle(activity, e)}
+                              >
+                                {isCompleted ? "Mark as pending" : "Mark as complete"}
+                              </Button>
                               <div className="flex items-center gap-2">
                                 {activity.due_date && (
                                   <span className="text-xs text-muted-foreground">
@@ -453,8 +466,7 @@ export const ActivityList = ({
                                 )}
                                 <Badge
                                   variant="outline"
-                                  className={`text-xs ${status.color} cursor-pointer`}
-                                  onClick={(e) => handleToggleCompleted(activity, e)}
+                                  className={`text-xs ${status.color}`}
                                 >
                                   {status.label}
                                 </Badge>
@@ -480,8 +492,8 @@ export const ActivityList = ({
               </div>
               <div className="border-t divide-y">
                 {uncategorizedActivities.map(activity => {
-                  const status = statusConfig[activity.status] || statusConfig.pending;
                   const isCompleted = activity.completed ?? activity.status === "done";
+                  const status = isCompleted ? statusConfig.done : statusConfig.pending;
                   const isSelected = selectedActivityIds.has(activity.id);
                   return (
                     <div
@@ -505,6 +517,14 @@ export const ActivityList = ({
                           <p className="text-xs text-muted-foreground line-clamp-1">{activity.description}</p>
                         )}
                       </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs"
+                        onClick={(e) => handleMarkCompleteToggle(activity, e)}
+                      >
+                        {isCompleted ? "Mark as pending" : "Mark as complete"}
+                      </Button>
                       <div className="flex items-center gap-2">
                         {activity.due_date && (
                           <span className="text-xs text-muted-foreground">
@@ -513,8 +533,7 @@ export const ActivityList = ({
                         )}
                         <Badge
                           variant="outline"
-                          className={`text-xs ${status.color} cursor-pointer`}
-                          onClick={(e) => handleToggleCompleted(activity, e)}
+                          className={`text-xs ${status.color}`}
                         >
                           {status.label}
                         </Badge>

@@ -283,12 +283,13 @@ export const ProjectPricing = ({ project, activities }: ProjectPricingProps) => 
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Buffer</p>
+                <p className="text-sm text-muted-foreground">Site Adjustments</p>
                 <p className="text-2xl font-bold">
-                  ${pricing.buffer_amount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                  ${((pricing.bal_adjustment_amount || 0) + (pricing.topo_adjustment_amount || 0)).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
                 </p>
+               
               </div>
-              <Percent className="h-8 w-8 text-muted-foreground/50" />
+              <TrendingUp className="h-8 w-8 text-muted-foreground/50" />
             </div>
           </CardContent>
         </Card>
@@ -297,12 +298,12 @@ export const ProjectPricing = ({ project, activities }: ProjectPricingProps) => 
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Margin</p>
+                <p className="text-sm text-muted-foreground">Margin and Buffer</p>
                 <p className="text-2xl font-bold">
-                  ${pricing.margin_amount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                  ${((pricing.margin_amount || 0) + (pricing.buffer_amount || 0)).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
                 </p>
               </div>
-              <TrendingUp className="h-8 w-8 text-muted-foreground/50" />
+              <Percent className="h-8 w-8 text-muted-foreground/50" />
             </div>
           </CardContent>
         </Card>

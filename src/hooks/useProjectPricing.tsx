@@ -43,10 +43,15 @@ export interface ProjectPricing {
   project_id: string;
   builder_id: string;
   total_estimated_cost: number;
+  base_estimated_cost: number;
   buffer_percentage: number;
   buffer_amount: number;
   margin_percentage: number;
   margin_amount: number;
+  bal_multiplier: number;
+  topo_multiplier: number;
+  bal_adjustment_amount: number;
+  topo_adjustment_amount: number;
   final_price: number;
   created_at: string;
   updated_at: string;
@@ -86,10 +91,15 @@ function mapBuilderPricingToState(
     project_id: entry.projectId ?? "",
     builder_id: "",
     total_estimated_cost: entry.totalEstimatedCost ?? 0,
+    base_estimated_cost: entry.baseEstimatedCost ?? 0,
     buffer_percentage: entry.bufferPercentage ?? 0,
     buffer_amount: entry.bufferAmount ?? 0,
     margin_percentage: entry.marginPercentage ?? 0,
     margin_amount: entry.marginAmount ?? 0,
+    bal_multiplier: entry.balMultiplier ?? 1,
+    topo_multiplier: entry.topoMultiplier ?? 1,
+    bal_adjustment_amount: entry.balAdjustmentAmount ?? 0,
+    topo_adjustment_amount: entry.topoAdjustmentAmount ?? 0,
     final_price: entry.finalPrice ?? entry.totalEstimatedCost ?? 0,
     created_at: entry.createdAt ?? new Date().toISOString(),
     updated_at: entry.updatedAt ?? new Date().toISOString(),
@@ -254,7 +264,15 @@ export const useProjectPricing = (projectId: string | undefined) => {
       if (pricingError) throw pricingError;
       
       if (pricingData) {
-        setPricing(pricingData as ProjectPricing);
+        const normalizedPricing: ProjectPricing = {
+          ...(pricingData as Omit<ProjectPricing, "base_estimated_cost" | "bal_multiplier" | "topo_multiplier" | "bal_adjustment_amount" | "topo_adjustment_amount">),
+          base_estimated_cost: 0,
+          bal_multiplier: 1,
+          topo_multiplier: 1,
+          bal_adjustment_amount: 0,
+          topo_adjustment_amount: 0,
+        };
+        setPricing(normalizedPricing);
         
         // Fetch cost items
         const { data: itemsData, error: itemsError } = await (supabase as typeof supabase)

@@ -5,10 +5,15 @@ export interface BuilderPricingEntry {
   id?: string;
   projectId?: string;
   totalEstimatedCost?: number;
+  baseEstimatedCost?: number;
   bufferPercentage?: number;
   bufferAmount?: number;
   marginPercentage?: number;
   marginAmount?: number;
+  balMultiplier?: number | null;
+  topoMultiplier?: number | null;
+  balAdjustmentAmount?: number | null;
+  topoAdjustmentAmount?: number | null;
   finalPrice?: number;
   createdAt?: string;
   updatedAt?: string;

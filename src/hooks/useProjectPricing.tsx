@@ -97,6 +97,35 @@ function mapBuilderPricingToState(
   return { pricing: pricingRecord };
 }
 
+const hasPricingValues = (entry: BuilderPricingEntry): boolean => {
+  return (
+    entry.totalEstimatedCost != null ||
+    entry.bufferAmount != null ||
+    entry.bufferPercentage != null ||
+    entry.marginAmount != null ||
+    entry.marginPercentage != null ||
+    entry.finalPrice != null
+  );
+};
+
+const getEntryTimestamp = (entry: BuilderPricingEntry): number => {
+  const ts = entry.updatedAt ?? entry.createdAt;
+  if (!ts) return 0;
+  const ms = new Date(ts).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+const selectBestPricingEntry = (
+  entries: BuilderPricingEntry[]
+): BuilderPricingEntry | undefined => {
+  if (!entries.length) return undefined;
+  const withValues = entries.filter(hasPricingValues);
+  const source = withValues.length > 0 ? withValues : entries;
+  return source
+    .slice()
+    .sort((a, b) => getEntryTimestamp(b) - getEntryTimestamp(a))[0];
+};
+
 function mapBuilderCostItemToState(
   c: BuilderPricingCostItem,
   pricingId: string,
@@ -146,7 +175,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
         setLoading(true);
         const result = await fetchBuilderPricing({ projectId }).unwrap();
         if (result?.success && Array.isArray(result.data)) {
-          const latest = result.data.length > 0 ? result.data[result.data.length - 1] : undefined;
+          const latest = selectBestPricingEntry(result.data);
           const { pricing: p } = mapBuilderPricingToState(latest);
           setPricing(p);
 
@@ -267,9 +296,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
         // Fetch the freshly generated pricing and cost items
         const result = await fetchBuilderPricing({ projectId }).unwrap();
         if (result?.success && Array.isArray(result.data)) {
-          const latest = result.data.length > 0
-            ? result.data[result.data.length - 1]
-            : undefined;
+          const latest = selectBestPricingEntry(result.data);
           const { pricing: p } = mapBuilderPricingToState(latest);
           setPricing(p);
 

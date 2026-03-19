@@ -646,11 +646,19 @@ export const ProjectPricing = ({ project, activities }: ProjectPricingProps) => 
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">+ Buffer</span>
-              <span>${pricing.buffer_amount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
+              <span>
+                ${pricing.buffer_amount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                {' '}
+                ({pricing.buffer_percentage.toFixed(2)}%)
+              </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">+ Margin</span>
-              <span>${pricing.margin_amount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
+              <span>
+                ${pricing.margin_amount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                {' '}
+                ({pricing.margin_percentage.toFixed(2)}%)
+              </span>
             </div>
             <Separator />
             <div className="flex justify-between text-lg font-bold">

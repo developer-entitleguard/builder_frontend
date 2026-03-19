@@ -115,6 +115,19 @@ const getEntryTimestamp = (entry: BuilderPricingEntry): number => {
   return Number.isFinite(ms) ? ms : 0;
 };
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) return error.message;
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+  return fallback;
+};
+
 const selectBestPricingEntry = (
   entries: BuilderPricingEntry[]
 ): BuilderPricingEntry | undefined => {
@@ -166,6 +179,11 @@ export const useProjectPricing = (projectId: string | undefined) => {
   const [updatePricingCostItem] = useUpdatePricingCostItemMutation();
   const [createProjectPricing] = useCreateProjectPricingMutation();
   const [generateProjectPricing] = useGenerateProjectPricingMutation();
+
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
 
   const fetchPricing = useCallback(async () => {
     if (!projectId) return;
@@ -225,7 +243,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
       setLoading(true);
       
       // Fetch pricing
-      const { data: pricingData, error: pricingError } = await (supabase as any)
+      const { data: pricingData, error: pricingError } = await (supabase as typeof supabase)
         .from('project_pricing')
         .select('*')
         .eq('project_id', projectId)
@@ -239,7 +257,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
         setPricing(pricingData as ProjectPricing);
         
         // Fetch cost items
-        const { data: itemsData, error: itemsError } = await (supabase as any)
+        const { data: itemsData, error: itemsError } = await (supabase as typeof supabase)
           .from('project_cost_items')
           .select('*')
           .eq('pricing_id', pricingData.id)
@@ -251,11 +269,11 @@ export const useProjectPricing = (projectId: string | undefined) => {
         setPricing(null);
         setCostItems([]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching pricing:", error);
       toast({
         title: "Error fetching pricing",
-        description: error.message,
+        description: getErrorMessage(error, "Failed to load pricing"),
         variant: "destructive"
       });
     } finally {
@@ -293,34 +311,62 @@ export const useProjectPricing = (projectId: string | undefined) => {
         // Step 2: POST /api/builder/projects/{projectId}/pricing/{pricingId}/generate
         await generateProjectPricing({ projectId, pricingId }).unwrap();
 
-        // Fetch the freshly generated pricing and cost items
-        const result = await fetchBuilderPricing({ projectId }).unwrap();
-        if (result?.success && Array.isArray(result.data)) {
-          const latest = selectBestPricingEntry(result.data);
-          const { pricing: p } = mapBuilderPricingToState(latest);
-          setPricing(p);
+        // Regeneration can be eventually-consistent; poll pricing + cost-items briefly.
+        setLoading(true);
+        let latestPricing: ProjectPricing | null = null;
+        let latestItems: CostItem[] = [];
+        const maxAttempts = 5;
 
-          if (latest?.id) {
-            const costItemsResult = await fetchBuilderCostItems({
-              pricingId: latest.id,
-            }).unwrap();
-            if (costItemsResult?.success && Array.isArray(costItemsResult.data)) {
-              const items = costItemsResult.data.map((c, idx) =>
-                mapBuilderCostItemToState(c, latest.id!, idx)
-              );
-              setCostItems(items);
-              const total = p?.final_price ?? items.reduce((s, i) => s + Number(i.total_cost), 0);
-              toast({
-                title: "Pricing generated",
-                description: `${items.length} cost items · Total $${total.toLocaleString()}`,
-              });
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const result = await fetchBuilderPricing({ projectId }).unwrap();
+          if (result?.success && Array.isArray(result.data)) {
+            const latest = selectBestPricingEntry(result.data);
+            const { pricing: p } = mapBuilderPricingToState(latest);
+            latestPricing = p;
+            setPricing(p);
+
+            if (latest?.id) {
+              const costItemsResult = await fetchBuilderCostItems({
+                pricingId: latest.id,
+              }).unwrap();
+              if (costItemsResult?.success && Array.isArray(costItemsResult.data)) {
+                latestItems = costItemsResult.data.map((c, idx) =>
+                  mapBuilderCostItemToState(c, latest.id!, idx)
+                );
+                setCostItems(latestItems);
+              } else {
+                latestItems = [];
+                setCostItems([]);
+              }
             } else {
+              latestItems = [];
               setCostItems([]);
             }
-          } else {
-            setCostItems([]);
+
+            const hasMeaningfulPricing =
+              latest?.totalEstimatedCost != null ||
+              latest?.bufferAmount != null ||
+              latest?.bufferPercentage != null ||
+              latest?.marginAmount != null ||
+              latest?.marginPercentage != null ||
+              latest?.finalPrice != null;
+
+            if (hasMeaningfulPricing || latestItems.length > 0) {
+              break;
+            }
           }
+
+          await sleep(1200);
         }
+
+        const total =
+          latestPricing?.final_price ??
+          latestPricing?.total_estimated_cost ??
+          latestItems.reduce((s, i) => s + Number(i.total_cost), 0);
+        toast({
+          title: "Pricing generated",
+          description: `${latestItems.length} cost items · Total $${total.toLocaleString()}`,
+        });
         return true;
       } catch (e) {
         toast({
@@ -330,6 +376,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
         });
         return false;
       } finally {
+        setLoading(false);
         setGenerating(false);
       }
     }
@@ -379,14 +426,14 @@ export const useProjectPricing = (projectId: string | undefined) => {
       
       // Delete existing pricing if any
       if (pricing) {
-        await (supabase as any)
+        await (supabase as typeof supabase)
           .from('project_pricing')
           .delete()
           .eq('id', pricing.id);
       }
       
       // Create new pricing record
-      const { data: newPricing, error: pricingError } = await (supabase as any)
+      const { data: newPricing, error: pricingError } = await (supabase as typeof supabase)
         .from('project_pricing')
         .insert({
           project_id: projectId,
@@ -414,7 +461,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
         from_bom: item.from_bom || false
       }));
 
-      const { error: itemsError } = await (supabase as any)
+      const { error: itemsError } = await (supabase as typeof supabase)
         .from('project_cost_items')
         .insert(costItemsToInsert);
 
@@ -428,11 +475,11 @@ export const useProjectPricing = (projectId: string | undefined) => {
       });
       
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error generating pricing:", error);
       toast({
         title: "Error generating pricing",
-        description: error.message,
+        description: getErrorMessage(error, "Failed to generate pricing"),
         variant: "destructive"
       });
       return false;
@@ -487,10 +534,10 @@ export const useProjectPricing = (projectId: string | undefined) => {
 
         await recalculateTotals();
         return true;
-      } catch (error: any) {
+      } catch (error: unknown) {
         toast({
           title: "Error updating cost item",
-          description: error.message,
+          description: getErrorMessage(error, "Failed to update cost item"),
           variant: "destructive",
         });
         return false;
@@ -499,7 +546,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
 
     // Legacy Supabase path
     try {
-      const { error } = await (supabase as any)
+      const { error } = await (supabase as typeof supabase)
         .from("project_cost_items")
         .update({
           ...updates,
@@ -518,10 +565,10 @@ export const useProjectPricing = (projectId: string | undefined) => {
       await recalculateTotals();
 
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error updating cost item",
-        description: error.message,
+        description: getErrorMessage(error, "Failed to update cost item"),
         variant: "destructive",
       });
       return false;
@@ -530,7 +577,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
 
   const deleteCostItem = async (itemId: string): Promise<boolean> => {
     try {
-      const { error } = await (supabase as any)
+      const { error } = await (supabase as typeof supabase)
         .from('project_cost_items')
         .delete()
         .eq('id', itemId);
@@ -541,10 +588,10 @@ export const useProjectPricing = (projectId: string | undefined) => {
       await recalculateTotals();
       
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error deleting cost item",
-        description: error.message,
+        description: getErrorMessage(error, "Failed to delete cost item"),
         variant: "destructive"
       });
       return false;
@@ -581,10 +628,10 @@ export const useProjectPricing = (projectId: string | undefined) => {
 
         await fetchPricing();
         return true;
-      } catch (error: any) {
+      } catch (error: unknown) {
         toast({
           title: "Error adding cost item",
-          description: error.message,
+          description: getErrorMessage(error, "Failed to add cost item"),
           variant: "destructive",
         });
         return false;
@@ -593,7 +640,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
 
     // Legacy Supabase path
     try {
-      const { error } = await (supabase as any)
+      const { error } = await (supabase as typeof supabase)
         .from("project_cost_items")
         .insert({
           ...item,
@@ -606,10 +653,10 @@ export const useProjectPricing = (projectId: string | undefined) => {
 
       await fetchPricing();
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error adding cost item",
-        description: error.message,
+        description: getErrorMessage(error, "Failed to add cost item"),
         variant: "destructive",
       });
       return false;
@@ -634,7 +681,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
     
     const finalPrice = costPlusBuffer + marginAmt;
     
-    const { error } = await (supabase as any)
+    const { error } = await (supabase as typeof supabase)
       .from('project_pricing')
       .update({
         total_estimated_cost: totalCost,
@@ -680,7 +727,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
       
       const finalPrice = costPlusBuffer + marginAmt;
 
-      const { error } = await (supabase as any)
+      const { error } = await (supabase as typeof supabase)
         .from('project_pricing')
         .update({
           ...updates,
@@ -701,10 +748,10 @@ export const useProjectPricing = (projectId: string | undefined) => {
       } : null);
       
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error updating buffer/margin",
-        description: error.message,
+        description: getErrorMessage(error, "Failed to update buffer/margin"),
         variant: "destructive"
       });
       return false;

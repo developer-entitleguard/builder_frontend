@@ -324,9 +324,17 @@ export const ProjectPricing = ({ project, activities }: ProjectPricingProps) => 
 
       {/* Regenerate & Last Updated */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Clock className="h-4 w-4" />
-          Last generated: {format(new Date(pricing.updated_at), 'dd MMM yyyy, HH:mm')}
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            Last generated: {format(new Date(pricing.updated_at), 'dd MMM yyyy, HH:mm')}
+          </div>
+          {(generating || loading) && (
+            <div className="flex items-center gap-2 text-primary">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span>Updating pricing data...</span>
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>

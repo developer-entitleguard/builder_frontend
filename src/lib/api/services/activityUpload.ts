@@ -16,13 +16,14 @@ const getAuthToken = (): string => {
 
 export const uploadActivitiesCsv = async (
   projectId: string,
-  file: File
-): Promise<void> => {
+  file: File,
+  saveDuplicate: boolean
+): Promise<unknown> => {
   const authToken = getAuthToken();
   const apiBaseUrl = getApiBaseUrl();
-  const url = import.meta.env.DEV
-    ? `/api/builder/projects/${projectId}/upload/activities`
-    : `${apiBaseUrl}/api/builder/projects/${projectId}/upload/activities`;
+  const path = `/api/builder/projects/${projectId}/upload/activities`;
+  const urlBase = import.meta.env.DEV ? path : `${apiBaseUrl}${path}`;
+  const url = `${urlBase}?saveDuplicate=${saveDuplicate ? "true" : "false"}`;
 
   const formData = new FormData();
   formData.append("file", file);
@@ -42,6 +43,13 @@ export const uploadActivitiesCsv = async (
     const text = await response.text();
     throw new Error(text || `Upload failed: ${response.statusText}`);
   }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return await response.json();
+  }
+  // Some backends return empty body on success.
+  return { success: true };
 };
 
 export const useUploadActivitiesCsv = () => {
@@ -49,15 +57,11 @@ export const useUploadActivitiesCsv = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const upload = useCallback(
-    async (projectId: string, file: File) => {
+    async (projectId: string, file: File, saveDuplicate: boolean) => {
       setIsLoading(true);
       try {
-        await uploadActivitiesCsv(projectId, file);
-        toast({
-          title: "Activities imported",
-          description: "CSV file was uploaded successfully.",
-        });
-        return true;
+        const result = await uploadActivitiesCsv(projectId, file, saveDuplicate);
+        return result;
       } catch (error) {
         console.error("Error uploading activities CSV:", error);
         toast({
@@ -68,7 +72,7 @@ export const useUploadActivitiesCsv = () => {
               : "Failed to upload activities",
           variant: "destructive",
         });
-        return false;
+        return null;
       } finally {
         setIsLoading(false);
       }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,16 @@ import { ListTodo, FileSpreadsheet, Download } from 'lucide-react';
 import type { ActivityCategory, CreateCategoryData } from '@/hooks/useActivityCategories';
 import { useGetDownloadActivityTemplate } from '@/lib/api/services/templateDownload';
 import { useUploadActivitiesCsv } from '@/lib/api/services/activityUpload';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export interface ActivityTypeDialogProps {
   open: boolean;
@@ -35,10 +45,40 @@ export const ActivityTypeDialog = ({
   const [selectedType, setSelectedType] = useState<'single' | 'bulk' | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('none');
+  const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState(false);
+  const [duplicateCount, setDuplicateCount] = useState(0);
+
+  const resetState = () => {
+    setSelectedType(null);
+    setSelectedFile(null);
+    setSelectedCategoryId("none");
+    setDuplicateConfirmOpen(false);
+    setDuplicateCount(0);
+  };
+
+  const countDuplicatesFromResponse = (resp: unknown): number => {
+    if (!resp || typeof resp !== "object") return 0;
+    const anyResp = resp as Record<string, unknown>;
+    const direct = anyResp["duplicates"];
+    if (Array.isArray(direct)) return direct.length;
+    const data = anyResp["data"];
+    if (Array.isArray(data)) return data.length;
+    if (data && typeof data === "object") {
+      const anyData = data as Record<string, unknown>;
+      if (Array.isArray(anyData["duplicates"])) return (anyData["duplicates"] as unknown[]).length;
+      if (Array.isArray(anyData["duplicateActivities"])) return (anyData["duplicateActivities"] as unknown[]).length;
+    }
+    return 0;
+  };
+
+  const duplicateMessage = useMemo(() => {
+    if (!duplicateCount) return "";
+    return `You are trying to add activities that already exist. Number of duplicate activities: ${duplicateCount}. Do you want to continue?`;
+  }, [duplicateCount]);
 
   const handleSingleActivity = () => {
     onOpenChange(false);
-    setSelectedType(null);
+    resetState();
     onSingleAdd?.();
   };
 
@@ -59,13 +99,37 @@ export const ActivityTypeDialog = ({
 
   const handleSave = async () => {
     if (!selectedFile) return;
-    const success = await uploadActivitiesCsv(projectId, selectedFile);
-    if (success) {
-      setSelectedFile(null);
-      setSelectedType(null);
-      onOpenChange(false);
-      onSuccess?.();
+    const resp = await uploadActivitiesCsv(projectId, selectedFile, false);
+    if (!resp) return;
+
+    const dupCount = countDuplicatesFromResponse(resp);
+    if (dupCount > 0) {
+      setDuplicateCount(dupCount);
+      setDuplicateConfirmOpen(true);
+      return;
     }
+
+    toast({
+      title: "Activities imported",
+      description: "CSV file was uploaded successfully.",
+    });
+    resetState();
+    onOpenChange(false);
+    onSuccess?.();
+  };
+
+  const handleConfirmDuplicateYes = async () => {
+    if (!selectedFile) return;
+    const resp = await uploadActivitiesCsv(projectId, selectedFile, true);
+    if (!resp) return;
+    toast({
+      title: "Activities imported",
+      description: "CSV file was uploaded successfully.",
+    });
+    setDuplicateConfirmOpen(false);
+    resetState();
+    onOpenChange(false);
+    onSuccess?.();
   };
 
   const handleBack = () => {
@@ -75,8 +139,7 @@ export const ActivityTypeDialog = ({
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
-      setSelectedType(null);
-      setSelectedFile(null);
+      resetState();
     }
     onOpenChange(newOpen);
   };
@@ -188,6 +251,33 @@ export const ActivityTypeDialog = ({
           </div>
         )}
       </DialogContent>
+
+      <AlertDialog open={duplicateConfirmOpen} onOpenChange={setDuplicateConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Duplicate activities detected</AlertDialogTitle>
+            <AlertDialogDescription>
+              {duplicateMessage}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setDuplicateConfirmOpen(false);
+                resetState();
+                onOpenChange(false);
+              }}
+            >
+              No
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDuplicateYes}
+            >
+              Yes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 };

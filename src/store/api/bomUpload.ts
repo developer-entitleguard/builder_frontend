@@ -7,6 +7,7 @@ export interface UploadTemplateRequest {
   bomName: string;
   projectName?: string;
   builderOrganizationId: string;
+  warranty?: number;
 }
 
 export interface UploadTemplateResponse {
@@ -27,6 +28,9 @@ export const bomUploadApi = api.injectEndpoints({
         formData.append('bomName', data.bomName);
         formData.append('projectName', data.projectName || '');
         formData.append('builderOrganizationId', data.builderOrganizationId);
+        if (typeof data.warranty === 'number' && Number.isFinite(data.warranty)) {
+          formData.append('warranty', String(data.warranty));
+        }
         let authToken = '';
         try {
           const userData = localStorage.getItem('userData');

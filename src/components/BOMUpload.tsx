@@ -13,6 +13,20 @@ interface BOMUploadProps {
   onSuccess: () => void;
 }
 
+interface ParsedBomCsvItem {
+  name?: string | null;
+  category?: string | null;
+  make?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  description?: string | null;
+  price?: number | null;
+  documentation_url?: string | null;
+  notes?: string | null;
+  purchaser?: string | null;
+  warranty_years?: number | null;
+}
+
 export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
   const { organization } = useOrganization();
   const { toast } = useToast();
@@ -48,16 +62,19 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
     setFormData({ ...formData, file });
   };
 
-  const parseCSV = (text: string, defaultWarrantyYears: number | null): any[] => {
+  const parseCSV = (
+    text: string,
+    defaultWarrantyYears: number | null
+  ): ParsedBomCsvItem[] => {
     const lines = text.split('\n').filter(line => line.trim());
     if (lines.length < 2) return [];
     
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-    const items = [];
+    const items: ParsedBomCsvItem[] = [];
     
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',');
-      const item: any = {};
+      const item: ParsedBomCsvItem = {};
       
       headers.forEach((header, index) => {
         const value = values[index]?.trim() || null;
@@ -122,11 +139,20 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
       return;
     }
     try {
+      const parsedWarranty =
+        formData.warrantyYears.trim() === ""
+          ? undefined
+          : Number(formData.warrantyYears);
+
       await uploadTemplate({
         file: formData.file,
         bomName: formData.name,
         projectName: formData.projectName || undefined,
         builderOrganizationId,
+        warranty:
+          typeof parsedWarranty === "number" && Number.isFinite(parsedWarranty)
+            ? parsedWarranty
+            : undefined,
       }).unwrap();
       toast({
         title: "Bill of Materials uploaded successfully",

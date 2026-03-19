@@ -65,6 +65,19 @@ export const ActivityTypeDialog = ({
     if (Array.isArray(data)) return data.length;
     if (data && typeof data === "object") {
       const anyData = data as Record<string, unknown>;
+      if (
+        typeof anyData["duplicateCount"] === "number" &&
+        Number.isFinite(anyData["duplicateCount"])
+      ) {
+        return Number(anyData["duplicateCount"]);
+      }
+      if (
+        typeof anyData["Duplicate"] === "boolean" &&
+        anyData["Duplicate"] === true
+      ) {
+        // If backend only gives a duplicate flag, treat as at least 1 duplicate
+        return 1;
+      }
       if (Array.isArray(anyData["duplicates"])) return (anyData["duplicates"] as unknown[]).length;
       if (Array.isArray(anyData["duplicateActivities"])) return (anyData["duplicateActivities"] as unknown[]).length;
     }

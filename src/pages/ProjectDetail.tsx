@@ -108,7 +108,7 @@ const ProjectDetail = () => {
   const { user, loading: authLoading } = useAuth();
   const { updateProject } = useProjects();
   const { activities, loading: activitiesLoading, fetchActivities, createActivity, updateActivity, deleteActivity, fetchUpdates, postUpdate } = useActivities(id);
-  const { categories, createCategory, updateCategory, deleteCategory } = useActivityCategories(id);
+  const { categories, createCategory, updateCategory, deleteCategory, refetch: refetchCategories } = useActivityCategories(id);
   const { approvals, loading: approvalsLoading, fetchApprovals, requestApproval, respondToApproval } = useApprovals(id);
   const navigate = useNavigate();
 
@@ -342,6 +342,7 @@ const ProjectDetail = () => {
               onUpdateCategory={updateCategory}
               onDeleteCategory={deleteCategory}
               onRefresh={fetchActivities}
+              onRefreshCategories={refetchCategories}
             />
           </TabsContent>
           

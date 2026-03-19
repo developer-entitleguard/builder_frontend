@@ -60,6 +60,7 @@ interface ActivityListProps {
   onUpdateCategory: (id: string, data: Partial<CreateCategoryData>) => Promise<boolean>;
   onDeleteCategory: (id: string) => Promise<boolean>;
   onRefresh?: () => void;
+  onRefreshCategories?: () => void;
 }
 
 const statusConfig: Record<ActivityStatus, { icon: React.ElementType; color: string; label: string }> = {
@@ -92,7 +93,8 @@ export const ActivityList = ({
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
-  onRefresh
+  onRefresh,
+  onRefreshCategories
 }: ActivityListProps) => {
   const [typeDialogOpen, setTypeDialogOpen] = useState(false);
   const [singleDialogOpen, setSingleDialogOpen] = useState(false);
@@ -257,7 +259,10 @@ export const ActivityList = ({
           projectId={projectId}
           currentMaxOrder={currentMaxOrder}
           categories={categories}
-          onSuccess={onRefresh}
+          onSuccess={() => {
+            onRefresh?.();
+            onRefreshCategories?.();
+          }}
           onSingleAdd={() => setSingleDialogOpen(true)}
           onCreateCategory={onCreateCategory}
         />
@@ -610,7 +615,10 @@ export const ActivityList = ({
         projectId={projectId}
         currentMaxOrder={currentMaxOrder}
         categories={categories}
-        onSuccess={onRefresh}
+        onSuccess={() => {
+          onRefresh?.();
+          onRefreshCategories?.();
+        }}
         onSingleAdd={() => setSingleDialogOpen(true)}
         onCreateCategory={onCreateCategory}
       />

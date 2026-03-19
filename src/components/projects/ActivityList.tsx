@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Activity, ActivityStatus, ActivityPriority, ActivityUpdate, CreateActivityData } from "@/hooks/useActivities";
 import { ActivityCategory, CreateCategoryData } from "@/hooks/useActivityCategories";
 import { CreateApprovalData } from "@/hooks/useApprovals";
+import { useDeleteActivitiesMutation } from "@/store/api/activities";
 import { AddActivityDialog } from "./AddActivityDialog";
 import { ActivityDetail } from "./ActivityDetail";
 import { ActivityTypeDialog } from "./ActivityTypeDialog";
@@ -100,9 +101,16 @@ export const ActivityList = ({
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [addActivityCategoryId, setAddActivityCategoryId] = useState<string | null>(null);
+  const [selectedActivityIds, setSelectedActivityIds] = useState<Set<string>>(
+    () => new Set()
+  );
+
+  const [deleteActivitiesMutation, { isLoading: isBulkDeleting }] =
+    useDeleteActivitiesMutation();
 
   const currentMaxOrder = activities.length > 0
     ? Math.max(...activities.map(a => a.order_index)) + 1
@@ -159,9 +167,32 @@ export const ActivityList = ({
     setEditingCategoryId(null);
   };
 
+  const toggleSelected = (activityId: string) => {
+    setSelectedActivityIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(activityId)) next.delete(activityId);
+      else next.add(activityId);
+      return next;
+    });
+  };
+
   const handleToggleCompleted = async (activity: Activity, e: React.MouseEvent) => {
     e.stopPropagation();
     await onUpdateActivity(activity.id, { completed: !(activity.completed ?? activity.status === "done") });
+  };
+
+  const bulkDelete = async (ids: string[]) => {
+    if (!ids.length) return;
+    try {
+      await deleteActivitiesMutation({ projectId, ids }).unwrap();
+    } catch {
+      for (const id of ids) {
+        await onDeleteActivity(id);
+      }
+    } finally {
+      setSelectedActivityIds(new Set());
+      onRefresh?.();
+    }
   };
 
   const getCategoryProgress = (categoryId: string) => {
@@ -256,6 +287,15 @@ export const ActivityList = ({
           <Button variant="outline" onClick={() => setTypeDialogOpen(true)}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Import CSV
+          </Button>
+          <Button
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setDeleteAllOpen(true)}
+            disabled={selectedActivityIds.size === 0 || isBulkDeleting}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete Selected
           </Button>
           <Button variant="outline" onClick={() => setIsAddingCategory(true)}>
             <FolderPlus className="h-4 w-4 mr-2" />
@@ -382,14 +422,20 @@ export const ActivityList = ({
                         {catActivities.map(activity => {
                           const status = statusConfig[activity.status] || statusConfig.pending;
                           const isCompleted = activity.completed ?? activity.status === "done";
+                          const isSelected = selectedActivityIds.has(activity.id);
                           return (
                             <div
                               key={activity.id}
                               className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 cursor-pointer transition-colors"
                               onClick={() => setSelectedActivityId(activity.id)}
                             >
-                              <div onClick={e => handleToggleCompleted(activity, e)}>
-                                <Checkbox checked={isCompleted} className="cursor-pointer" />
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSelected(activity.id);
+                                }}
+                              >
+                                <Checkbox checked={isSelected} className="cursor-pointer" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className={`font-medium text-sm ${isCompleted ? "line-through text-muted-foreground" : "text-foreground"}`}>
@@ -405,7 +451,11 @@ export const ActivityList = ({
                                     {format(new Date(activity.due_date), "MMM d")}
                                   </span>
                                 )}
-                                <Badge variant="outline" className={`text-xs ${status.color}`}>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs ${status.color} cursor-pointer`}
+                                  onClick={(e) => handleToggleCompleted(activity, e)}
+                                >
                                   {status.label}
                                 </Badge>
                                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -432,14 +482,20 @@ export const ActivityList = ({
                 {uncategorizedActivities.map(activity => {
                   const status = statusConfig[activity.status] || statusConfig.pending;
                   const isCompleted = activity.completed ?? activity.status === "done";
+                  const isSelected = selectedActivityIds.has(activity.id);
                   return (
                     <div
                       key={activity.id}
                       className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 cursor-pointer transition-colors"
                       onClick={() => setSelectedActivityId(activity.id)}
                     >
-                      <div onClick={e => handleToggleCompleted(activity, e)}>
-                        <Checkbox checked={isCompleted} className="cursor-pointer" />
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelected(activity.id);
+                        }}
+                      >
+                        <Checkbox checked={isSelected} className="cursor-pointer" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className={`font-medium text-sm ${isCompleted ? "line-through text-muted-foreground" : "text-foreground"}`}>
@@ -455,7 +511,11 @@ export const ActivityList = ({
                             {format(new Date(activity.due_date), "MMM d")}
                           </span>
                         )}
-                        <Badge variant="outline" className={`text-xs ${status.color}`}>
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${status.color} cursor-pointer`}
+                          onClick={(e) => handleToggleCompleted(activity, e)}
+                        >
                           {status.label}
                         </Badge>
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -486,15 +546,36 @@ export const ActivityList = ({
                   const catActivities = activities.filter(
                     (a) => a.category_id === deleteCategoryId
                   );
-                  for (const activity of catActivities) {
-                    await onDeleteActivity(activity.id);
-                  }
+                  await bulkDelete(catActivities.map((a) => a.id));
 
                   // Then delete the category itself (no-op for builder until wired)
                   await onDeleteCategory(deleteCategoryId);
                   onRefresh?.();
                 }
                 setDeleteCategoryId(null);
+              }}
+              className="bg-destructive text-destructive-foreground"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deleteAllOpen} onOpenChange={setDeleteAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete selected activities?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the selected activities in this project. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                await bulkDelete(Array.from(selectedActivityIds));
+                setDeleteAllOpen(false);
               }}
               className="bg-destructive text-destructive-foreground"
             >

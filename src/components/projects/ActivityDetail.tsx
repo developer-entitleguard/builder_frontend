@@ -19,7 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Activity, ActivityStatus, ActivityUpdate, CreateActivityData } from "@/hooks/useActivities";
-import { useGetActivityByIdQuery, useGetActivityUpdatesQuery, usePostActivityUpdateMutation, useUpdateActivityMutation } from "@/store/api/activities";
+import { useDeleteActivitiesMutation, useGetActivityByIdQuery, useGetActivityUpdatesQuery, usePostActivityUpdateMutation, useUpdateActivityMutation } from "@/store/api/activities";
 import { useDeleteActivityCategoryMutation } from "@/store/api/activityCategories";
 import { useToast } from "@/hooks/use-toast";
 import { CreateApprovalData } from "@/hooks/useApprovals";
@@ -200,6 +200,7 @@ export const ActivityDetail = ({
   const [updateActivityMutation] = useUpdateActivityMutation();
   const [postActivityUpdateMutation] = usePostActivityUpdateMutation();
   const [deleteActivityCategory] = useDeleteActivityCategoryMutation();
+  const [deleteActivitiesMutation] = useDeleteActivitiesMutation();
 
   // Call builder GET /api/builder/projects/{projectId}/activities/{id} when in builder mode
   useGetActivityByIdQuery(
@@ -367,7 +368,7 @@ export const ActivityDetail = ({
   const handleDelete = async () => {
     try {
       if (isBuilder) {
-        await deleteActivityCategory({ projectId, id: activity.id }).unwrap();
+        await deleteActivitiesMutation({ projectId, ids: [activity.id] }).unwrap();
         setDeleteDialogOpen(false);
         onBack();
       } else {

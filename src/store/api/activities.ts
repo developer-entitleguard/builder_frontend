@@ -42,6 +42,12 @@ export interface DeleteBuilderActivityResponse {
   data: unknown;
 }
 
+export interface DeleteBuilderActivitiesResponse {
+  success: boolean;
+  message: string;
+  data: BuilderActivityApi[];
+}
+
 export interface BuilderActivityUpdate {
   id?: string;
   activityId?: string;
@@ -161,6 +167,21 @@ export const activitiesApi = api.injectEndpoints({
       ],
     }),
 
+    // DELETE /api/builder/projects/:projectId/activities (bulk delete)
+    deleteActivities: build.mutation<
+      DeleteBuilderActivitiesResponse,
+      { projectId: string; ids: string[] }
+    >({
+      query: ({ projectId, ids }) => ({
+        url: `/api/builder/projects/${projectId}/activities`,
+        method: "DELETE",
+        body: ids,
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: "Activities", id: projectId },
+      ],
+    }),
+
     // GET /api/builder/activity/:activityId/activity_updates
     getActivityUpdates: build.query<
       { success: boolean; message: string; data: BuilderActivityUpdate[] },
@@ -200,5 +221,6 @@ export const {
   useCreateActivityMutation,
   useUpdateActivityMutation,
   useDeleteActivityMutation,
+  useDeleteActivitiesMutation,
 } = activitiesApi;
 

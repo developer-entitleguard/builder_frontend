@@ -340,6 +340,17 @@ const PendingQueries = () => {
           title: "Success",
           description: result.message || "Query Updated Successfully",
         });
+
+        if (queryData?.id) {
+          try {
+            const queryResult = await getQueryById({ id: queryData.id }).unwrap();
+            if (queryResult.success && queryResult.data) {
+              setQueryData(queryResult.data);
+            }
+          } catch (refetchError) {
+            console.error("Error refetching query after assign:", refetchError);
+          }
+        }
       } else {
         toast({
           title: "Error",

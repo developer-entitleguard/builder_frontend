@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { useGetCustomerDetailsQuery, useCreateCustomerEntitlementMutation, useDeleteBuilderCustomerMutation } from '@/store/api';
+import { useCreateBuilderCustomerMutation, useGetCustomerDetailsQuery, useDeleteBuilderCustomerMutation, useGetStatusesByTypeQuery, useCreateCustomerEntitlementMutation } from '@/store/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -111,12 +111,17 @@ const RegistrationDetail = () => {
 
   const builderId = organization?.id ?? getBuilderId();
   const isBuilderFlow = !user && hasBuilderAuth();
-  const { data: customerDetailsResponse, isLoading: loadingFromApi } = useGetCustomerDetailsQuery(
+  const { data: customerDetailsResponse, isLoading: loadingFromApi, refetch: refetchCustomerDetails } = useGetCustomerDetailsQuery(
     { builderId: builderId ?? '', customerId: id ?? '' },
     { skip: !id || !builderId || !isBuilderFlow }
   );
-  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
   const [deleteBuilderCustomer] = useDeleteBuilderCustomerMutation();
+  const { data: builderStatuses } = useGetStatusesByTypeQuery(
+    { type: 'BUILDER' },
+    { skip: !builderId }
+  );
+  const [createBuilderCustomer] = useCreateBuilderCustomerMutation();
+  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
 
   const fetchRegistration = useCallback(async () => {
     if (!user || !id) return;
@@ -299,7 +304,64 @@ const RegistrationDetail = () => {
 
     try {
       if (isBuilderFlow) {
-        await createCustomerEntitlement({ builderCustomerId: registration.id }).unwrap();
+        if (!builderId) return;
+        const customer =
+          customerDetailsResponse?.data?.customer as unknown as {
+            id?: string;
+            firstName?: string;
+            lastName?: string | null;
+            email?: string;
+            contact?: string;
+            address?: string;
+            city?: string;
+            state?: string;
+            zip?: string;
+            project?: { id?: string; name?: string } | null;
+            projectName?: string | null;
+            settlementDate?: string | null;
+            notes?: string | null;
+            numBedrooms?: number | null;
+            numRooms?: number | null;
+            price?: number | null;
+            totalBuiltUpArea?: number | null;
+            builderOrganization?: { id?: string } | null;
+          };
+
+        if (!customer) return;
+
+        const sentStatusId =
+          builderStatuses?.data?.find(
+            (s) => s.module === 'BUILDER' && s.name?.toUpperCase() === 'SENT'
+          )?.id;
+
+        await createBuilderCustomer({
+          id: customer.id ?? registration.id,
+          firstName: customer.firstName ?? '',
+          lastName: (customer.lastName as string | null) ?? '',
+          email: customer.email ?? '',
+          contact: customer.contact ?? '',
+          address: customer.address ?? '',
+          city: customer.city ?? '',
+          state: customer.state ?? '',
+          zip: customer.zip ?? '',
+          country: 'Australia',
+          projectId: customer.project?.id,
+          projectName: customer.projectName ?? customer.project?.name,
+          settlementDate: customer.settlementDate ?? undefined,
+          notes: customer.notes ?? undefined,
+          numBedrooms: customer.numBedrooms ?? undefined,
+          numRooms: customer.numRooms ?? undefined,
+          price: customer.price ?? undefined,
+          totalBuiltUpArea: customer.totalBuiltUpArea ?? undefined,
+          consentMethod: 'form',
+          consentReceived: true,
+          consentReceivedAt: new Date().toISOString(),
+          consentToken: undefined,
+          builderOrganizationId: customer.builderOrganization?.id ?? builderId,
+          ...(sentStatusId ? { statusId: sentStatusId } : {}),
+        }).unwrap();
+
+        await refetchCustomerDetails();
       } else {
         const { error } = await supabase
           .from('homeowner_registrations')

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Upload, Download } from "lucide-react";
+import InfoCircleOutlined from "@ant-design/icons/es/icons/InfoCircleOutlined";
 
 interface BOMUploadProps {
   onSuccess: () => void;
@@ -178,19 +179,19 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
       <DialogTrigger asChild>
         <Button variant="outline">
           <Upload className="w-4 h-4 mr-2" />
-          Upload Bill of Materials
+          Upload item set via CSV
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Upload Bill of Materials</DialogTitle>
+          <DialogTitle>Upload item set via CSV</DialogTitle>
           <DialogDescription>
-            Upload a CSV file with your items. Required columns: name, category. Optional: make, brand, model, description, price, documentation_url, notes, purchaser, warranty_years.
+          Upload a CSV file to bulk-add warranty items. Required columns: name, category. Optional: make, brand, model, description, price, warranty_url, notes, installed_by, warranty_years.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="bomName">BOM Name *</Label>
+            <Label htmlFor="bomName">Item set name *</Label>
             <Input
               id="bomName"
               value={formData.name}
@@ -200,16 +201,22 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
             />
           </div>
           <div>
-            <Label htmlFor="projectName">Project Name (Optional)</Label>
+            <Label htmlFor="projectName">Attach to project (Optional)</Label>
             <Input
               id="projectName"
               value={formData.projectName}
               onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
               placeholder="e.g., Riverside Development"
             />
+            <p className="mt-2 flex items-start gap-2 text-sm text-blue-600">
+              <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
+              <span>
+                If provided this item set will be pre-linked to the selected project. You can still use it on other projects.
+              </span>
+            </p>
           </div>
           <div>
-            <Label htmlFor="warrantyYears">Default Warranty Duration (Years)</Label>
+            <Label htmlFor="warrantyYears">Default warranty period (years)</Label>
             <Input
               id="warrantyYears"
               type="number"
@@ -219,8 +226,11 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
               onChange={(e) => setFormData({ ...formData, warrantyYears: e.target.value })}
               placeholder="e.g., 2"
             />
-            <p className="text-xs text-muted-foreground mt-1">
-              Applied to all items unless specified in CSV
+            <p className="mt-2 flex items-start gap-2 text-sm text-blue-600">
+              <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
+              <span>
+                Applied to all items in this CSV unless a specific warranty_years value is set per row.
+              </span>
             </p>
           </div>
           <div>

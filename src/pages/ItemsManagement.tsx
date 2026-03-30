@@ -31,6 +31,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Upload, FileText, X } from "lucide-react";
+import InfoCircleOutlined from "@ant-design/icons/es/icons/InfoCircleOutlined";
 import Header from "@/components/Header";
 import { BOMUpload } from "@/components/BOMUpload";
 
@@ -423,8 +424,8 @@ const ItemsManagement = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Items Management</h1>
-            <p className="text-muted-foreground mt-1">Manage your master list of items for homeowner registrations</p>
+            <h1 className="text-3xl font-bold text-foreground">Warranty Items Library</h1>
+            <p className="text-muted-foreground mt-1">Build and manage reusable sets of installed items and their warranties. Attach a set to any homeowner registration at handover.</p>
           </div>
           <div className="flex gap-2">
             <BOMUpload onSuccess={refetchItems} />
@@ -437,9 +438,9 @@ const ItemsManagement = () => {
               </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
-                <DialogTitle>{editingItem ? 'Edit Item' : 'Add New Item'}</DialogTitle>
+                <DialogTitle>{editingItem ? 'Edit Item' : 'Add Warranty Item'}</DialogTitle>
                 <DialogDescription>
-                  {editingItem ? 'Update the item details below.' : 'Add a new item to your master list.'}
+                  {editingItem ? 'Update the item details below.' : 'Add an installed item and its warranty details to your library.'}
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -484,6 +485,12 @@ const ItemsManagement = () => {
                       value={formData.make}
                       onChange={(e) => setFormData({ ...formData, make: e.target.value })}
                     />
+                    <div className="mt-2 flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
+                      <span>
+                        The manufacturer or supplier name if different from the brand. Often the same as Brand.
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <Label htmlFor="brand">Brand</Label>
@@ -492,6 +499,12 @@ const ItemsManagement = () => {
                       value={formData.brand}
                       onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
                     />
+                    <div className="mt-2 flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
+                      <span>
+                      The brand or company that makes this item e.g. Bosch, Daikin, Rheem.
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <Label htmlFor="model">Model</Label>
@@ -500,6 +513,12 @@ const ItemsManagement = () => {
                       value={formData.model}
                       onChange={(e) => setFormData({ ...formData, model: e.target.value })}
                     />
+                    <div className="mt-2 flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
+                      <span>
+                      The specific product model number or name e.g. DX20SK or 850E. Helps the homeowner identify their exact product when making a claim.
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <Label htmlFor="price">Price (AUD)</Label>
@@ -528,9 +547,15 @@ const ItemsManagement = () => {
                       }
                       placeholder="e.g., 2"
                     />
+                    <div className="mt-2 flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
+                      <span>
+                      Expiry is calculated from the homeowner's settlement date.
+                      </span>
+                    </div>
                   </div>
                   <div>
-                    <Label htmlFor="documentation_url">Documentation URL</Label>
+                    <Label htmlFor="documentation_url">Supplier warranty URL</Label>
                     <Input
                       id="documentation_url"
                       type="url"
@@ -538,19 +563,31 @@ const ItemsManagement = () => {
                       onChange={(e) => setFormData({ ...formData, documentation_url: e.target.value })}
                       placeholder="https://..."
                     />
+                    <p className="mt-2 flex items-start gap-2 text-sm text-blue-600 bg-blue-50">
+                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
+                      <span>
+                        Shown to homeowner when making a claim.
+                      </span>
+                    </p>
                   </div>
                   <div>
-                    <Label htmlFor="purchaser">Purchaser</Label>
+                    <Label htmlFor="purchaser">Installed by</Label>
                     <Input
                       id="purchaser"
                       value={formData.purchaser}
                       onChange={(e) => setFormData({ ...formData, purchaser: e.target.value })}
                       placeholder="Who purchases this item"
                     />
+                    <p className="mt-2 flex items-start gap-2 text-sm text-blue-600 bg-blue-50">
+                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
+                      <span>
+                        Routes warranty queries to the right trade or supplier.
+                      </span>
+                    </p>
                   </div>
                 </div>
                 <div>
-                  <Label>Manual Document</Label>
+                  <Label>Product manual (PDF)</Label>
                   {manualFile ? (
                     <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/50">
                       <FileText className="h-4 w-4 text-primary" />
@@ -594,9 +631,13 @@ const ItemsManagement = () => {
                       ))}
                     </div>
                   )}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Upload a PDF or document for the product manual
-                  </p>
+                  
+                  <p className="mt-2 flex items-start gap-2 text-sm text-blue-600 bg-blue-50">
+                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
+                      <span>
+                      Upload the installation or product manual as a PDF. Homeowners can access this from the app if they need setup or troubleshooting help.
+                      </span>
+                    </p>
                 </div>
                 <div>
                   <Label htmlFor="notes">Notes</Label>
@@ -632,7 +673,7 @@ const ItemsManagement = () => {
         ) : (
           <>
             <div className="mb-6">
-              <Label htmlFor="bomSelect">Select Bill of Materials</Label>
+              <Label htmlFor="bomSelect">Select item set</Label>
               <Select value={selectedBomId} onValueChange={(value) => {
                 setSelectedBomId(value);
               }}>
@@ -671,12 +712,12 @@ const ItemsManagement = () => {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Name</TableHead>
+                          <TableHead>Item name</TableHead>
                           <TableHead>Make</TableHead>
                           <TableHead>Brand</TableHead>
                           <TableHead>Model</TableHead>
-                          <TableHead>Warranty</TableHead>
-                          <TableHead>Purchaser</TableHead>
+                          <TableHead>Warranty (years)</TableHead>
+                          <TableHead>Installed by</TableHead>
                           <TableHead>Actions</TableHead>
                         </TableRow>
                       </TableHeader>

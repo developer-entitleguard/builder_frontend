@@ -134,7 +134,7 @@ const Header = () => {
                       size="sm" 
                       asChild
                     >
-                      <Link to="/items">Items</Link>
+                      <Link to="/items">Warranty Items</Link>
                     </Button>
                     <Button 
                       variant={location.pathname === '/queries' ? "default" : "ghost"} 

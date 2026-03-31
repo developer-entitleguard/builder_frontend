@@ -32,6 +32,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Upload, FileText, X } from "lucide-react";
 import InfoCircleOutlined from "@ant-design/icons/es/icons/InfoCircleOutlined";
+import { Tooltip } from "antd";
 import Header from "@/components/Header";
 import { BOMUpload } from "@/components/BOMUpload";
 
@@ -62,6 +63,26 @@ interface BillOfMaterials {
   name: string;
   project_name: string | null;
 }
+
+const InfoHint = ({ text, maxChars = 25 }: { text: string; maxChars?: number }) => (
+  <div className="mt-2 flex items-center gap-2 rounded-md bg-blue-50 px-2.5 py-1.5 text-xs text-blue-700">
+    {(() => {
+      const shortText = text.length > maxChars ? `${text.slice(0, maxChars)}...` : text;
+      return (
+        <>
+          <Tooltip title={text}>
+            <InfoCircleOutlined className="shrink-0 text-sm" />
+          </Tooltip>
+          <Tooltip title={text}>
+            <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap">
+              {shortText}
+            </span>
+          </Tooltip>
+        </>
+      );
+    })()}
+  </div>
+);
 
 const FALLBACK_CATEGORIES = [
   "Kitchen", "Bathroom", "Appliances", "Electrical", "Plumbing",
@@ -436,7 +457,7 @@ const ItemsManagement = () => {
                   Add Item
                 </Button>
               </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingItem ? 'Edit Item' : 'Add Warranty Item'}</DialogTitle>
                 <DialogDescription>
@@ -477,7 +498,7 @@ const ItemsManagement = () => {
                     rows={2}
                   />
                 </div>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <Label htmlFor="make">Make</Label>
                     <Input
@@ -485,12 +506,7 @@ const ItemsManagement = () => {
                       value={formData.make}
                       onChange={(e) => setFormData({ ...formData, make: e.target.value })}
                     />
-                    <div className="mt-2 flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
-                      <span>
-                        The manufacturer or supplier name if different from the brand. Often the same as Brand.
-                      </span>
-                    </div>
+                    <InfoHint text="The manufacturer or supplier name if different from the brand. Often the same as Brand." />
                   </div>
                   <div>
                     <Label htmlFor="brand">Brand</Label>
@@ -499,12 +515,7 @@ const ItemsManagement = () => {
                       value={formData.brand}
                       onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
                     />
-                    <div className="mt-2 flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
-                      <span>
-                      The brand or company that makes this item e.g. Bosch, Daikin, Rheem.
-                      </span>
-                    </div>
+                    <InfoHint text="The brand or company that makes this item e.g. Bosch, Daikin, Rheem." />
                   </div>
                   <div>
                     <Label htmlFor="model">Model</Label>
@@ -513,12 +524,7 @@ const ItemsManagement = () => {
                       value={formData.model}
                       onChange={(e) => setFormData({ ...formData, model: e.target.value })}
                     />
-                    <div className="mt-2 flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
-                      <span>
-                      The specific product model number or name e.g. DX20SK or 850E. Helps the homeowner identify their exact product when making a claim.
-                      </span>
-                    </div>
+                    <InfoHint text="The specific product model number or name e.g. DX20SK or 850E. Helps the homeowner identify their exact product when making a claim." />
                   </div>
                   <div>
                     <Label htmlFor="price">Price (AUD)</Label>
@@ -533,7 +539,7 @@ const ItemsManagement = () => {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <Label htmlFor="warranty_years">Warranty (Years)</Label>
                     <Input
@@ -547,12 +553,7 @@ const ItemsManagement = () => {
                       }
                       placeholder="e.g., 2"
                     />
-                    <div className="mt-2 flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
-                      <span>
-                      Expiry is calculated from the homeowner's settlement date.
-                      </span>
-                    </div>
+                    <InfoHint text="Expiry is calculated from the homeowner's settlement date." />
                   </div>
                   <div>
                     <Label htmlFor="documentation_url">Supplier warranty URL</Label>
@@ -563,12 +564,7 @@ const ItemsManagement = () => {
                       onChange={(e) => setFormData({ ...formData, documentation_url: e.target.value })}
                       placeholder="https://..."
                     />
-                    <p className="mt-2 flex items-start gap-2 text-sm text-blue-600 bg-blue-50">
-                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
-                      <span>
-                        Shown to homeowner when making a claim.
-                      </span>
-                    </p>
+                    <InfoHint text="Shown to homeowner when making a claim." />
                   </div>
                   <div>
                     <Label htmlFor="purchaser">Installed by</Label>
@@ -578,12 +574,7 @@ const ItemsManagement = () => {
                       onChange={(e) => setFormData({ ...formData, purchaser: e.target.value })}
                       placeholder="Who purchases this item"
                     />
-                    <p className="mt-2 flex items-start gap-2 text-sm text-blue-600 bg-blue-50">
-                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
-                      <span>
-                        Routes warranty queries to the right trade or supplier.
-                      </span>
-                    </p>
+                    <InfoHint text="Routes warranty queries to the right trade or supplier." />
                   </div>
                 </div>
                 <div>
@@ -632,12 +623,10 @@ const ItemsManagement = () => {
                     </div>
                   )}
                   
-                  <p className="mt-2 flex items-start gap-2 text-sm text-blue-600 bg-blue-50">
-                      <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
-                      <span>
-                      Upload the installation or product manual as a PDF. Homeowners can access this from the app if they need setup or troubleshooting help.
-                      </span>
-                    </p>
+                  <InfoHint
+                    text="Upload the installation or product manual as a PDF. Homeowners can access this from the app if they need setup or troubleshooting help."
+                    maxChars={98}
+                  />
                 </div>
                 <div>
                   <Label htmlFor="notes">Notes</Label>

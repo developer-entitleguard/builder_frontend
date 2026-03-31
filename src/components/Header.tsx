@@ -19,6 +19,18 @@ const hasBuilderAuth = (): boolean => {
   }
 };
 
+const isBuilderAdmin = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData);
+    const role = parsed?.role ?? parsed?.userInfo?.role;
+    return typeof role === "string" && role.toLowerCase() === "admin";
+  } catch {
+    return false;
+  }
+};
+
 const Header = () => {
   const { user, signOut } = useAuth();
   const { isAdmin, isSuperAdmin, currentOrganization, hasMultipleOrgs, impersonatedOrganization, isImpersonating, setImpersonatedOrganization } = useOrganization();
@@ -27,6 +39,7 @@ const Header = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const isAuthenticated = !!user || hasBuilderAuth();
+  const canShowAdminTab = isAdmin || isBuilderAdmin();
 
   const showOrgNavItems = !isSuperAdmin || isImpersonating;
 
@@ -145,7 +158,7 @@ const Header = () => {
                     </Button>
                   </>
                 )}
-                {isAdmin && showOrgNavItems && (
+                {canShowAdminTab && showOrgNavItems && (
                   <Button 
                     variant={location.pathname === '/admin' ? "default" : "ghost"} 
                     size="sm" 

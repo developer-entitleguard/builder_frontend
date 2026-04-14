@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
+import { getApiBaseUrl } from '@/lib/config';
 import { User, Users, Upload, Download } from 'lucide-react';
 
 interface RegistrationTypeDialogProps {
@@ -42,90 +42,50 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
       return;
     }
 
+    const builderOrganizationId = organization?.id;
+    if (!builderOrganizationId) {
+      toast({
+        title: "Error",
+        description: "Organization not found. Please log in again.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setUploading(true);
 
     try {
-      const text = await file.text();
-      const rows = text.split('\n').filter(row => row.trim());
-      const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
-      
-      // Validate headers
-      const requiredHeaders = ['customer_name', 'customer_email', 'property_address', 'property_city', 'property_state', 'property_zip'];
-      const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
-      
-      if (missingHeaders.length > 0) {
-        toast({
-          title: "Invalid CSV format",
-          description: `Missing required columns: ${missingHeaders.join(', ')}`,
-          variant: "destructive"
-        });
-        setUploading(false);
-        return;
+      // Get JWT from localStorage
+      const userData = localStorage.getItem('userData');
+      let authToken = '';
+      if (userData) {
+        try {
+          const parsed = JSON.parse(userData);
+          if (parsed.jwt) authToken = parsed.jwt;
+        } catch { /* ignore */ }
       }
 
-      // Helper to convert date formats to ISO (YYYY-MM-DD)
-      const parseDate = (dateStr: string): string | null => {
-        if (!dateStr) return null;
-        
-        // Already ISO format
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-        
-        // DD/MM/YYYY or D/M/YYYY format
-        const slashMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (slashMatch) {
-          const [, day, month, year] = slashMatch;
-          return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-        }
-        
-        // DD-MM-YYYY format
-        const dashMatch = dateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-        if (dashMatch) {
-          const [, day, month, year] = dashMatch;
-          return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-        }
-        
-        return dateStr; // Return as-is if no match
-      };
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('builderOrganizationId', builderOrganizationId);
 
-      // Parse data rows
-      const registrations = rows.slice(1).map(row => {
-        const values = row.split(',').map(v => v.trim());
-        const registration: any = {
-          builder_id: user?.id,
-          organization_id: organization?.id,
-          status: 'draft'
-        };
-        
-        headers.forEach((header, index) => {
-          if (values[index]) {
-            // Convert date fields to ISO format
-            if (header === 'settlement_date') {
-              registration[header] = parseDate(values[index]);
-            } else if (header === 'num_bedrooms' || header === 'num_rooms') {
-              const intVal = parseInt(values[index], 10);
-              registration[header] = isNaN(intVal) ? null : intVal;
-            } else if (header === 'total_built_up_area') {
-              const floatVal = parseFloat(values[index]);
-              registration[header] = isNaN(floatVal) ? null : floatVal;
-            } else {
-              registration[header] = values[index];
-            }
-          }
-        });
-        
-        return registration;
+      const response = await fetch(`${getApiBaseUrl()}/api/upload/registration-template`, {
+        method: 'POST',
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+        },
+        body: formData,
       });
 
-      // Insert registrations
-      const { error } = await supabase
-        .from('homeowner_registrations')
-        .insert(registrations);
+      const result = await response.json();
 
-      if (error) throw error;
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Failed to upload CSV');
+      }
 
       toast({
         title: "Success",
-        description: `${registrations.length} registration(s) created successfully`
+        description: result.message || "Registrations created successfully"
       });
 
       onOpenChange(false);
@@ -146,20 +106,50 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
     setSelectedType(null);
   };
 
-  const downloadTemplate = () => {
-    const headers = ["customer_name", "customer_email", "customer_phone", "property_address", "property_city", "property_state", "property_zip", "project_name", "settlement_date", "notes", "num_bedrooms", "num_rooms", "total_built_up_area"];
-    const sampleRow = ["John Smith", "john.smith@email.com", "0412345678", "123 Main Street", "Sydney", "NSW", "2000", "Sunrise Estate", "2024-06-15", "Corner lot unit", "4", "8", "250"];
-    
-    const csvContent = [headers.join(","), sampleRow.join(",")].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "registration_template.csv";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const downloadTemplate = async () => {
+    try {
+      const userData = localStorage.getItem('userData');
+      let authToken = '';
+      if (userData) {
+        try {
+          const parsed = JSON.parse(userData);
+          if (parsed.jwt) authToken = parsed.jwt;
+        } catch { /* ignore */ }
+      }
+
+      const response = await fetch(`${getApiBaseUrl()}/api/download/registration-template`, {
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to download template');
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "registration_template.csv";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Fallback: generate locally with backend-expected headers
+      const headers = ["First_name", "Last_name", "customer_email", "property_address", "property_city", "property_state", "property_zip", "customer_phone", "project_name", "settlement_date", "notes"];
+      const sampleRow = ["John", "Smith", "john.smith@email.com", "123 Main Street", "Sydney", "NSW", "2000", "0412345678", "Sunrise Estate", "2024-06-15", "Corner lot unit"];
+
+      const csvContent = [headers.join(","), sampleRow.join(",")].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "registration_template.csv";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
   };
 
   return (
@@ -214,10 +204,10 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
                 disabled={uploading}
               />
               <p className="text-xs text-muted-foreground">
-                Required columns: customer_name, customer_email, property_address, property_city, property_state, property_zip
+                Required columns: First_name, Last_name, customer_email, property_address, property_city, property_state, property_zip
               </p>
               <p className="text-xs text-muted-foreground">
-                Optional columns: customer_phone, project_name, settlement_date, notes, num_bedrooms, num_rooms, total_built_up_area
+                Optional columns: customer_phone, project_name, settlement_date, notes
               </p>
             </div>
 

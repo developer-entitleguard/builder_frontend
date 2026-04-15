@@ -17,6 +17,7 @@ import {
   useLazyCheckBOMRestrictionsQuery,
   useDeleteBuilderCustomersMutation,
 } from "@/store/api";
+import { useOrganization } from "@/hooks/useOrganization";
 import { Package, Send, X, AlertTriangle, Trash2 } from "lucide-react";
 
 interface BulkActionsBarProps {
@@ -33,6 +34,8 @@ export const BulkActionsBar = ({
   onSuccess,
 }: BulkActionsBarProps) => {
   const { toast } = useToast();
+  const { organization } = useOrganization();
+  const builderOrganizationId = organization?.id;
   const [bomDialogOpen, setBomDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedBom, setSelectedBom] = useState("");
@@ -48,9 +51,10 @@ export const BulkActionsBar = ({
     data: bomsData,
     isLoading: isLoadingBoms,
     error: bomsError,
-  } = useGetBillOfMaterialsQuery(undefined, {
-    skip: !bomDialogOpen,
-  });
+  } = useGetBillOfMaterialsQuery(
+    builderOrganizationId ? { builderId: builderOrganizationId } : ({} as { builderId: string }),
+    { skip: !bomDialogOpen || !builderOrganizationId },
+  );
 
   const boms = bomsData?.data || [];
 

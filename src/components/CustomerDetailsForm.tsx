@@ -209,10 +209,6 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
       newErrors.zipCode = `Please enter a valid postcode for ${formData.state}`;
     }
 
-    if (!formData.projectId) {
-      newErrors.projectId = 'Project is required';
-    }
-    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -504,7 +500,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="projectId">Link to Project *</Label>
+                <Label htmlFor="projectId">Link to Project</Label>
                 <Select 
                   // Radix Select does not allow empty-string item values; use undefined for "no selection"
                   value={formData.projectId || undefined} 

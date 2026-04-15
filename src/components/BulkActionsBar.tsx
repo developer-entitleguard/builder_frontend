@@ -16,9 +16,11 @@ import {
   useAssignBOMMutation,
   useLazyCheckBOMRestrictionsQuery,
   useDeleteBuilderCustomersMutation,
+  useProjectsQuery,
+  useUpdateProjectRegistrationsMutation,
 } from "@/store/api";
 import { useOrganization } from "@/hooks/useOrganization";
-import { Package, Send, X, AlertTriangle, Trash2 } from "lucide-react";
+import { Package, Send, X, AlertTriangle, Trash2, FolderKanban } from "lucide-react";
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -38,7 +40,9 @@ export const BulkActionsBar = ({
   const builderOrganizationId = organization?.id;
   const [bomDialogOpen, setBomDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [selectedBom, setSelectedBom] = useState("");
+  const [selectedProject, setSelectedProject] = useState("");
   const [loading, setLoading] = useState(false);
   const [warningModalOpen, setWarningModalOpen] = useState(false);
   const [mappedCustomers, setMappedCustomers] = useState<Array<{ customerId: string; customerName: string }>>([]);
@@ -46,6 +50,16 @@ export const BulkActionsBar = ({
   const [checkBOMRestrictions] = useLazyCheckBOMRestrictionsQuery();
   const [assignBOM, { isLoading: isAssigningBOM }] = useAssignBOMMutation();
   const [deleteBuilderCustomers, { isLoading: isDeleting }] = useDeleteBuilderCustomersMutation();
+  const [updateProjectRegistrations, { isLoading: isAssigningProject }] = useUpdateProjectRegistrationsMutation();
+
+  const {
+    data: projectsData,
+    isLoading: isLoadingProjects,
+  } = useProjectsQuery(undefined, { skip: !projectDialogOpen });
+
+  const activeProjects = (projectsData?.data ?? []).filter(
+    (p) => !["completed", "cancelled"].includes(p.status.toLowerCase())
+  );
 
   const {
     data: bomsData,
@@ -220,6 +234,43 @@ export const BulkActionsBar = ({
     }
   };
 
+  const handleAssignProject = async () => {
+    if (!selectedProject) {
+      toast({
+        title: "No project selected",
+        description: "Please select a project",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await updateProjectRegistrations({
+        projectId: selectedProject,
+        builderCustomerIds: selectedIds,
+      }).unwrap();
+
+      toast({
+        title: "Success",
+        description: `Project assigned to ${selectedCount} registration(s)`,
+      });
+
+      setProjectDialogOpen(false);
+      setSelectedProject("");
+      onClearSelection();
+      onSuccess();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to assign project",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (selectedCount === 0) return null;
 
   return (
@@ -241,6 +292,21 @@ export const BulkActionsBar = ({
           >
             <Package className="h-4 w-4 mr-2" />
             Assign BOM
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setProjectDialogOpen(true);
+            }}
+            disabled={loading}
+          >
+            <FolderKanban className="h-4 w-4 mr-2" />
+            Assign Project
           </Button>
 
           <Button
@@ -364,6 +430,56 @@ export const BulkActionsBar = ({
                 disabled={loading || isAssigningBOM || !selectedBom}
               >
                 {loading || isAssigningBOM ? "Assigning..." : "Assign BOM"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Project Dialog */}
+      <Dialog open={projectDialogOpen} onOpenChange={setProjectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Project</DialogTitle>
+            <DialogDescription>Select a project to assign to {selectedCount} registration(s)</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="project-select">Project</Label>
+              <Select value={selectedProject} onValueChange={setSelectedProject}>
+                <SelectTrigger id="project-select">
+                  <SelectValue placeholder="Select a project" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  {isLoadingProjects ? (
+                    <SelectItem value="loading" disabled>
+                      Loading projects...
+                    </SelectItem>
+                  ) : activeProjects.length === 0 ? (
+                    <SelectItem value="empty" disabled>
+                      No active projects available
+                    </SelectItem>
+                  ) : (
+                    activeProjects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setProjectDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAssignProject}
+                disabled={loading || isAssigningProject || !selectedProject}
+              >
+                {loading || isAssigningProject ? "Assigning..." : "Assign Project"}
               </Button>
             </div>
           </div>

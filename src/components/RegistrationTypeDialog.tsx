@@ -4,10 +4,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
 import { getApiBaseUrl } from '@/lib/config';
+import { useProjectsQuery } from '@/store/api/projects';
 import { User, Users, Upload, Download } from 'lucide-react';
 
 interface RegistrationTypeDialogProps {
@@ -23,6 +25,12 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
   const { organization } = useOrganization();
   const [selectedType, setSelectedType] = useState<'single' | 'bulk' | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const { data: projectsResponse, isLoading: projectsLoading } = useProjectsQuery();
+
+  const activeProjects = (projectsResponse?.data ?? []).filter(
+    (p) => !['completed', 'cancelled'].includes(p.status.toLowerCase())
+  );
 
   const handleSingleRegistration = () => {
     onOpenChange(false);
@@ -68,6 +76,9 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
       const formData = new FormData();
       formData.append('file', file);
       formData.append('builderOrganizationId', builderOrganizationId);
+      if (selectedProjectId) {
+        formData.append('projectId', selectedProjectId);
+      }
 
       const response = await fetch(`${getApiBaseUrl()}/api/upload/registration-template`, {
         method: 'POST',
@@ -90,6 +101,7 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
 
       onOpenChange(false);
       setSelectedType(null);
+      setSelectedProjectId('');
       onSuccess?.();
     } catch (error: any) {
       toast({
@@ -104,6 +116,7 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
 
   const handleBack = () => {
     setSelectedType(null);
+    setSelectedProjectId('');
   };
 
   const downloadTemplate = async () => {
@@ -194,6 +207,26 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
 
         {selectedType === 'bulk' && (
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Project</Label>
+              <Select
+                value={selectedProjectId}
+                onValueChange={(value) => setSelectedProjectId(value === '__none__' ? '' : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={projectsLoading ? "Loading projects..." : "Select a project (optional)"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {activeProjects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="csv-file">Upload CSV File</Label>
               <Input

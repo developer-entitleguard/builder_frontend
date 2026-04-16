@@ -60,6 +60,43 @@ export interface QueryFileMapDto {
   files: File;
 }
 
+export interface CreateBuilderQueryRequest {
+  builderCustomerId: string;
+  builderCustomerItemMapId?: string;
+  title: string;
+  description: string;
+  priorityLevel?: string;
+  dueDate?: string;
+  userId?: string;
+}
+
+export interface RegistrationItem {
+  id: string;
+  name: string;
+  brand: string;
+  make: string;
+  model: string;
+  category: string;
+}
+
+export interface VendorLinkData {
+  link: string;
+  vendorName: string;
+  vendorContact: string;
+}
+
+export interface VendorLinkResponse {
+  success: boolean;
+  message: string;
+  data: VendorLinkData;
+}
+
+export interface RegistrationItemsResponse {
+  success: boolean;
+  message: string;
+  data: RegistrationItem[];
+}
+
 export interface UpdateQueryRequest {
   id: string;
   statusId?: string;
@@ -82,6 +119,12 @@ export interface AddCommentRequest {
   commentedBy: string;
   id: string;
   queryId: string;
+}
+
+export interface CreateBuilderQueryResponse {
+  success: boolean;
+  message: string;
+  data?: { queryId: string };
 }
 
 export interface AddCommentResponse {
@@ -173,6 +216,28 @@ export const queryApi = api.injectEndpoints({
       },
       invalidatesTags: ['Query'],
     }),
+    createBuilderQuery: build.mutation<CreateBuilderQueryResponse, CreateBuilderQueryRequest>({
+      query: (data) => ({
+        url: '/api/builder/query/create',
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Query'],
+    }),
+    getVendorLink: build.query<VendorLinkResponse, { queryId: string }>({
+      query: ({ queryId }) => ({
+        url: '/api/builder/query/vendor-link',
+        method: 'GET',
+        params: { queryId },
+      }),
+    }),
+    getRegistrationItems: build.query<RegistrationItemsResponse, { builderCustomerId: string }>({
+      query: ({ builderCustomerId }) => ({
+        url: '/api/builder/registrations/items',
+        method: 'GET',
+        params: { builderCustomerId },
+      }),
+    }),
     addQueryComment: build.mutation<AddCommentResponse, AddCommentRequest>({
       query: (data) => {
         const formData = new FormData();
@@ -195,5 +260,9 @@ export const {
   useGetBuilderQueriesQuery,
   useLazyGetQueryByIdQuery,
   useUpdateQueryMutation,
+  useCreateBuilderQueryMutation,
+  useLazyGetVendorLinkQuery,
+  useGetRegistrationItemsQuery,
+  useLazyGetRegistrationItemsQuery,
   useAddQueryCommentMutation,
 } = queryApi;

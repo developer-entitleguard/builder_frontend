@@ -18,7 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Check, Upload, Cloud, Send } from "lucide-react";
+import { ArrowLeft, Check, Upload, Cloud, Send, LinkIcon } from "lucide-react";
+import VendorLinkModal from "@/components/VendorLinkModal";
 
 interface CaseAssessment {
   id: string;
@@ -65,6 +66,7 @@ const AwaitingAction = () => {
   const [assessment, setAssessment] = useState<string>("");
   const [newComment, setNewComment] = useState<string>("");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [vendorLinkModalOpen, setVendorLinkModalOpen] = useState(false);
   // Toast notifications
   const { toast } = useToast();
   // Comment mutation and refetch
@@ -404,7 +406,7 @@ const AwaitingAction = () => {
         <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
+              {queryData?.title || "Query Details"}
             </h1>
             <p className="text-gray-600 mt-2">
               {queryData?.createdAt 
@@ -422,6 +424,12 @@ const AwaitingAction = () => {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Review
             </Button>
+            {queryData?.vendor && (
+              <Button variant="outline" onClick={() => setVendorLinkModalOpen(true)}>
+                <LinkIcon className="h-4 w-4 mr-2" />
+                Get Vendor Link
+              </Button>
+            )}
             <Button onClick={handleMarkComplete} disabled={isUpdatingQuery}>
               <Check className="h-4 w-4 mr-2" />
               {isUpdatingQuery ? "Updating..." : "Complete"}
@@ -445,7 +453,7 @@ const AwaitingAction = () => {
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Submitted by</Label>
                     <p className="text-gray-900">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || "-"}
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || queryData?.customerName || "-"}
                     </p>
                   </div>
                   <div>
@@ -725,6 +733,14 @@ const AwaitingAction = () => {
           </div>
         </div>
       </main>
+
+      {queryData?.id && (
+        <VendorLinkModal
+          open={vendorLinkModalOpen}
+          onClose={() => setVendorLinkModalOpen(false)}
+          queryId={queryData.id}
+        />
+      )}
     </div>
   );
 };

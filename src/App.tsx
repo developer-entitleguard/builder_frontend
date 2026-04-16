@@ -24,9 +24,10 @@ import ProjectDetail from "./pages/ProjectDetail";
 import ApprovalDetail from "./pages/ApprovalDetail";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import ApprovalResponse from "./pages/ApprovalResponse";
-import PendingQueries from "./pages/PendingQueries";
-import AwaitingAction from "./pages/AwaitingAction";
-import QueriesComplete from "./pages/QueriesComplete";
+import QueryDetail from "./pages/QueryDetail";
+import CreateQuery from "./pages/CreateQuery";
+import VendorQuery from "./pages/VendorQuery";
+import QueryRedirect from "./pages/QueryRedirect";
 import { useValidateTokenQuery } from "@/store/api";
 
 const queryClient = new QueryClient();
@@ -152,21 +153,20 @@ const App = () => (
                   <QueriesManagement />
                 </ProtectedRoute>
               } />
-              <Route path="/pendingQueries" element={
+              <Route path="/queries/new" element={
                 <ProtectedRoute>
-                  <PendingQueries />
+                  <CreateQuery />
                 </ProtectedRoute>
               } />
-              <Route path="/awaitingAction" element={
+              <Route path="/queries/:id" element={
                 <ProtectedRoute>
-                  <AwaitingAction />
+                  <QueryDetail />
                 </ProtectedRoute>
               } />
-              <Route path="/queriesComplete" element={
-                <ProtectedRoute>
-                  <QueriesComplete />
-                </ProtectedRoute>
-              } />
+              {/* Legacy routes — redirect to unified query detail */}
+              <Route path="/pendingQueries" element={<ProtectedRoute><QueryRedirect /></ProtectedRoute>} />
+              <Route path="/awaitingAction" element={<ProtectedRoute><QueryRedirect /></ProtectedRoute>} />
+              <Route path="/queriesComplete" element={<ProtectedRoute><QueryRedirect /></ProtectedRoute>} />
               <Route path="/admin" element={
                 <ProtectedRoute>
                   <Admin />
@@ -202,6 +202,7 @@ const App = () => (
                   <ProjectDetail />
                 </ProtectedRoute>
               } />
+              <Route path="/vendor/query" element={<VendorQuery />} />
               <Route path="/consent" element={<ConsentConfirmation />} />
               <Route path="/accept-invitation" element={<AcceptInvitation />} />
               <Route path="/approval-response" element={<ApprovalResponse />} />

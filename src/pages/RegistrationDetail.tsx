@@ -183,6 +183,7 @@ const RegistrationDetail = () => {
     const n = apiStatusName.toUpperCase().replace(/\s+/g, ' ');
     if (n === 'ENTITLEMENT') internalStatus = 'documents_pending';
     else if (n === 'SENT' || n === 'DELIVERED') internalStatus = 'sent';
+    else if (n === 'HANDED') internalStatus = 'handed_over';
 
     // Build selected items from customerDetails dtos (category + item name/brand/model)
     const dataWithDtos = customerDetailsResponse.data as {

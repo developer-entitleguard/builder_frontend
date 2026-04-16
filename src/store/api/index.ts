@@ -67,11 +67,15 @@ export * from './builderVendor';
 // BOM upload
 export * from './bomUpload';
 
-// Query (builder queries, update, comment)
+// Query (builder queries, update, comment, create)
 export {
   useGetBuilderQueriesQuery,
   useLazyGetQueryByIdQuery,
   useUpdateQueryMutation,
+  useCreateBuilderQueryMutation,
+  useLazyGetVendorLinkQuery,
+  useGetRegistrationItemsQuery,
+  useLazyGetRegistrationItemsQuery,
   useAddQueryCommentMutation,
 } from './query';
 

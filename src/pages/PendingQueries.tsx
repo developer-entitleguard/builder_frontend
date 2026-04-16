@@ -32,6 +32,7 @@ import { CalendarIcon, ChevronDown, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getApiBaseUrl, getApiBaseUrlWithPrefix } from "@/lib/config";
 import { viewPhotoUrl } from "@/lib/api/services/files";
+import VendorLinkModal from "@/components/VendorLinkModal";
 
 interface CaseReview {
   id: string;
@@ -152,6 +153,7 @@ const PendingQueries = () => {
   const [priorityLevel, setPriorityLevel] = useState<"Low" | "Medium" | "High" | "Critical">("Medium");
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [comment, setComment] = useState<string>("");
+  const [vendorLinkModalOpen, setVendorLinkModalOpen] = useState(false);
 
   const builderId = useMemo(() => {
     const userData = localStorage.getItem("userData");
@@ -341,6 +343,12 @@ const PendingQueries = () => {
           description: result.message || "Query Updated Successfully",
         });
 
+        // Show vendor link modal when vendor was assigned
+        const hasVendor = selectedVendor?.trim() || queryData?.vendor?.id;
+        if (hasVendor) {
+          setVendorLinkModalOpen(true);
+        }
+
         if (queryData?.id) {
           try {
             const queryResult = await getQueryById({ id: queryData.id }).unwrap();
@@ -467,7 +475,7 @@ const PendingQueries = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
-            {queryData ? `Query ID: ${queryData.id}` : "Query Details"}
+            {queryData?.title || "Query Details"}
           </h1>
           <p className="text-gray-600 mt-2">
             {queryData?.createdAt 
@@ -493,19 +501,19 @@ const PendingQueries = () => {
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Submitted By</Label>
                     <p className="text-gray-900">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || "-"}
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.name || queryData?.customerName || "-"}
                     </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Contact Phone</Label>
                     <p className="text-gray-900">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.contact || "-"}
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.contact || queryData?.customerContact || "-"}
                     </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Contact Email</Label>
                     <p className="text-gray-900">
-                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.email || "-"}
+                      {queryData?.orderItem?.order?.customerSourceMap?.customer?.email || queryData?.customerEmail || "-"}
                     </p>
                   </div>
                   <div>
@@ -520,7 +528,7 @@ const PendingQueries = () => {
                     <Label className="text-sm font-medium text-gray-700">Category</Label>
                     <div className="mt-1">
                       <Badge variant="outline">
-                        {queryData?.orderItem?.productName || "-"}
+                        {queryData?.orderItem?.productName || "General Query"}
                       </Badge>
                     </div>
                   </div>
@@ -528,7 +536,7 @@ const PendingQueries = () => {
                     <Label className="text-sm font-medium text-gray-700">Location</Label>
                     <div className="mt-1">
                       <Badge variant="outline">
-                        {queryData?.orderItem?.order?.customerSourceMap?.customer?.address?.city || "-"}
+                        {queryData?.orderItem?.order?.customerSourceMap?.customer?.address?.city || queryData?.customerCity || "-"}
                       </Badge>
                     </div>
                   </div>
@@ -556,6 +564,15 @@ const PendingQueries = () => {
                           {queryData.orderItem.order.shipToAddress.city}
                           {queryData.orderItem.order.shipToAddress.state && `, ${queryData.orderItem.order.shipToAddress.state}`}
                           {queryData.orderItem.order.shipToAddress.zipCode && ` ${queryData.orderItem.order.shipToAddress.zipCode}`}
+                        </p>
+                      </>
+                    ) : queryData?.customerAddress || queryData?.customerCity ? (
+                      <>
+                        {queryData.customerAddress && <p>{queryData.customerAddress}</p>}
+                        <p>
+                          {queryData.customerCity}
+                          {queryData.customerState && `, ${queryData.customerState}`}
+                          {queryData.customerZip && ` ${queryData.customerZip}`}
                         </p>
                       </>
                     ) : (
@@ -832,6 +849,14 @@ const PendingQueries = () => {
           </div>
         </div>
       </main>
+
+      {queryData?.id && (
+        <VendorLinkModal
+          open={vendorLinkModalOpen}
+          onClose={() => setVendorLinkModalOpen(false)}
+          queryId={queryData.id}
+        />
+      )}
     </div>
   );
 };

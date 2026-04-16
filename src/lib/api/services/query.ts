@@ -52,6 +52,14 @@ export interface BuilderQuery {
   status: QueryStatus;
   createdAt?: string;
   updatedAt: string | null;
+  customerName?: string;
+  customerEmail?: string;
+  customerContact?: string;
+  customerCity?: string;
+  customerAddress?: string;
+  customerState?: string;
+  customerZip?: string;
+  builderOrganizationId?: string;
   queryFileMaps: QueryFile[];
   queryComments?: QueryComment[];
   queryhistory?: QueryHistoryEntry[];

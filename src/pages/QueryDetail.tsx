@@ -46,6 +46,8 @@ import {
 import { cn } from "@/lib/utils";
 import { viewPhotoUrl } from "@/lib/api/services/files";
 import VendorLinkModal from "@/components/VendorLinkModal";
+import AssignVendorDialog from "@/components/queries/AssignVendorDialog";
+import { canAssignVendors } from "@/lib/roles";
 
 // ── Status helpers ──────────────────────────────────────────────────
 
@@ -95,7 +97,8 @@ function getPriorityColor(priority: string) {
 const QueryDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { organization } = useOrganization();
+  const { organization, builderRole } = useOrganization();
+  const canScheduleAssign = canAssignVendors(builderRole);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -108,6 +111,7 @@ const QueryDetail = () => {
   const [comment, setComment] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [vendorLinkModalOpen, setVendorLinkModalOpen] = useState(false);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
   // ── Derived ──
@@ -834,6 +838,16 @@ const QueryDetail = () => {
                   >
                     {isUpdating ? "Assigning..." : "Assign Case"}
                   </Button>
+                  {canScheduleAssign && builderId && queryData && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setAssignDialogOpen(true)}
+                    >
+                      Assign with schedule…
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -1026,6 +1040,20 @@ const QueryDetail = () => {
           open={vendorLinkModalOpen}
           onClose={() => setVendorLinkModalOpen(false)}
           queryId={queryData.id}
+        />
+      )}
+
+      {/* Schedule-aware assign dialog (Customer Support / Admin) */}
+      {queryData.id && builderId && (
+        <AssignVendorDialog
+          open={assignDialogOpen}
+          onOpenChange={setAssignDialogOpen}
+          queryId={queryData.id}
+          builderId={builderId}
+          onAssigned={() => {
+            // Refresh the page-level query so the newly assigned vendor + due date land in the UI.
+            getQueryById({ id: queryData.id });
+          }}
         />
       )}
     </div>

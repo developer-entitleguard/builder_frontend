@@ -258,6 +258,8 @@ export interface BuilderUser {
   email: string;
   contact: string;
   role: string;
+  vendorType?: string | null;
+  specializations?: string | null;
   builderOrganization: {
     id: string;
     name: string;
@@ -276,6 +278,8 @@ export interface CreateBuilderUserRequest {
   lastName?: string;
   contact?: string;
   role: string;
+  vendorType?: string | null;
+  specializations?: string;
   builderOrganizationId: string;
 }
 
@@ -286,6 +290,8 @@ export interface UpdateBuilderUserRequest {
   lastName?: string;
   contact?: string;
   role: string;
+  vendorType?: string | null;
+  specializations?: string;
   builderOrganizationId: string;
 }
 
@@ -328,6 +334,9 @@ export interface Vendor extends BaseEntity {
   email: string;
   contact: string;
   type: string;
+  vendorType?: string | null;
+  specializations?: string | null;
+  userInfo?: { id: string; firstName?: string; lastName?: string; email?: string } | null;
   description: string | null;
   builderOrganizationId: string;
 }
@@ -337,6 +346,9 @@ export interface CreateVendorRequest {
   email: string;
   contact: string;
   type: string;
+  vendorType?: string | null;
+  specializations?: string | null;
+  userInfoId?: string | null;
   description?: string;
   builderOrganizationId: string;
 }
@@ -347,6 +359,9 @@ export interface UpdateVendorRequest {
   email: string;
   contact: string;
   type: string;
+  vendorType?: string | null;
+  specializations?: string | null;
+  userInfoId?: string | null;
   description?: string;
   builderOrganizationId: string;
 }

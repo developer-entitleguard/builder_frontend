@@ -18,6 +18,22 @@ import {
   useCreateOrUpdateBuilderUserMutation,
   useDeleteBuilderUserMutation,
 } from "@/store/api";
+import {
+  BUILDER_ROLES,
+  BUILDER_ROLE_LABELS,
+  type BuilderRole,
+  isAdministrator,
+  normalizeBuilderRole,
+} from "@/lib/roles";
+
+// Vendor roles (INTERNAL_VENDOR / EXTERNAL_VENDOR) are intentionally excluded —
+// vendors are created and managed under the Vendors tab. Internal vendors get
+// their login auto-provisioned there; external vendors don't need a login.
+const BUILDER_ROLE_VALUES = [
+  BUILDER_ROLES.ADMINISTRATOR,
+  BUILDER_ROLES.PROJECT_MANAGER,
+  BUILDER_ROLES.CUSTOMER_SUPPORT,
+] as const;
 
 const userSchema = z.object({
   email: z.string().refine((email) => validateEmail(email), {
@@ -27,7 +43,7 @@ const userSchema = z.object({
   phone: z.string().optional().refine((phone) => !phone || validatePhone(phone), {
     message: "Please enter a valid Australian phone number",
   }),
-  role: z.enum(['admin', 'user']),
+  role: z.enum(BUILDER_ROLE_VALUES),
 });
 
 type UserFormData = z.infer<typeof userSchema>;
@@ -42,7 +58,7 @@ interface User {
   company_name?: string;
   contact_person?: string;
   phone?: string;
-  role: string;
+  role: BuilderRole;
   created_at: string;
 }
 
@@ -72,7 +88,7 @@ export function UserManagement({ organizationId }: UserManagementProps) {
     resolver: zodResolver(userSchema),
     defaultValues: {
       email: "",
-      role: "user",
+      role: BUILDER_ROLES.PROJECT_MANAGER,
       contact_person: "",
       phone: "",
     },
@@ -80,16 +96,28 @@ export function UserManagement({ organizationId }: UserManagementProps) {
 
   useEffect(() => {
     const list = builderUsersResponse?.data ?? [];
-    const mapped: User[] = list.map((u) => ({
-      id: u.id,
-      email: u.email,
-      company_name: u.builderOrganization?.name,
-      contact_person: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || "Team Member",
-      phone: u.contact ?? "",
-      role: (u.role || "user").toLowerCase(),
-      // API doesn't provide createdAt for users; keep UI stable with a valid date
-      created_at: new Date().toISOString(),
-    }));
+    // Vendor-role accounts (INTERNAL_VENDOR / EXTERNAL_VENDOR) are managed in
+    // the Vendors tab — hide them here so the User Management list stays focused
+    // on the people that this screen can actually create or edit.
+    const mapped: User[] = list
+      .map((u) => {
+        const canonical = normalizeBuilderRole(u.role) ?? BUILDER_ROLES.PROJECT_MANAGER;
+        return {
+          id: u.id,
+          email: u.email,
+          company_name: u.builderOrganization?.name,
+          contact_person: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || "Team Member",
+          phone: u.contact ?? "",
+          role: canonical,
+          // API doesn't provide createdAt for users; keep UI stable with a valid date
+          created_at: new Date().toISOString(),
+        };
+      })
+      .filter(
+        (u) =>
+          u.role !== BUILDER_ROLES.INTERNAL_VENDOR &&
+          u.role !== BUILDER_ROLES.EXTERNAL_VENDOR
+      );
     setUsers(mapped);
   }, [builderUsersResponse?.data]);
 
@@ -109,6 +137,8 @@ export function UserManagement({ organizationId }: UserManagementProps) {
         lastName,
         contact: data.phone || "",
         role: data.role,
+        vendorType: null,
+        specializations: "",
         builderOrganizationId: builderId,
       }).unwrap();
 
@@ -137,7 +167,7 @@ export function UserManagement({ organizationId }: UserManagementProps) {
       email: user.email,
       contact_person: user.contact_person || "",
       phone: user.phone || "",
-      role: user.role as 'admin' | 'user',
+      role: user.role,
     });
     setIsAddDialogOpen(true);
   };
@@ -167,20 +197,20 @@ export function UserManagement({ organizationId }: UserManagementProps) {
       email: "",
       contact_person: "",
       phone: "",
-      role: "user",
+      role: BUILDER_ROLES.PROJECT_MANAGER,
     });
   };
 
-  const getRoleIcon = (role: string) => {
-    return role === "admin" ? (
+  const getRoleIcon = (role: BuilderRole) => {
+    return isAdministrator(role) ? (
       <Shield className="h-4 w-4" />
     ) : (
       <User className="h-4 w-4" />
     );
   };
 
-  const getRoleBadgeVariant = (role: string) => {
-    return role === "admin" ? "default" : "secondary";
+  const getRoleBadgeVariant = (role: BuilderRole) => {
+    return isAdministrator(role) ? "default" : "secondary";
   };
 
   if (loading) {
@@ -266,15 +296,18 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Role</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select a role" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="user">User</SelectItem>
-                            <SelectItem value="admin">Admin</SelectItem>
+                            {BUILDER_ROLE_VALUES.map((role) => (
+                              <SelectItem key={role} value={role}>
+                                {BUILDER_ROLE_LABELS[role]}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -296,6 +329,11 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                     </FormItem>
                   )}
                 />
+
+                <p className="text-xs text-muted-foreground">
+                  Need to add a vendor? Internal and external vendors are managed under
+                  <strong> Vendors</strong> — internal vendors get their login auto-provisioned there.
+                </p>
 
                 <div className="flex justify-end gap-2 pt-4">
                   <Button
@@ -362,12 +400,12 @@ export function UserManagement({ organizationId }: UserManagementProps) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge 
+                    <Badge
                       variant={getRoleBadgeVariant(user.role)}
                       className="flex items-center gap-1 w-fit"
                     >
                       {getRoleIcon(user.role)}
-                      {user.role}
+                      {BUILDER_ROLE_LABELS[user.role]}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">

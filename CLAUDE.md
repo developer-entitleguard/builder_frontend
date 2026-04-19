@@ -67,4 +67,24 @@ Open `http://localhost:5173` in a browser. The login screen should appear. Use a
 - JWT tokens are stored in `localStorage` under the key `userData`. If you see 401 errors after login, clear localStorage and try again.
 - The Vite proxy config is in `vite.config.ts` and covers all the required backend routes. Do not change this file.
 
+### Role model (post-Phase 1)
+
+Builder users are now classified with one of five canonical roles, defined in `src/lib/roles.ts`:
+
+- `ADMINISTRATOR` — full access; sees the Admin tab.
+- `PROJECT_MANAGER` — manages projects, registrations, BOMs and bulk uploads.
+- `CUSTOMER_SUPPORT` — triages tickets, assigns vendors with `AssignVendorDialog`, sees the warranty-expiring widget.
+- `INTERNAL_VENDOR` — uses `/my-schedule` to manage availability and accept booked work.
+- `EXTERNAL_VENDOR` — uses `/my-assignments` to update query status only.
+
+Use `useOrganization().builderRole` for the precise role; the legacy `currentRole` / `isAdmin` flags remain for backwards-compatibility (administrator → `'admin'`, everyone else → `'user'`). New role-gated routes use `<RoleGate roles={[...]}>` from `src/components/RoleGate.tsx`.
+
+### New routes by role
+
+- `/dashboard` — role-routed via `pages/RoleDashboard.tsx`.
+- `/projects/import` — bulk project CSV upload (Project Manager + Admin).
+- `/tickets`, `/tickets/:id` — receptionist ticket triage / convert-to-query (Customer Support + Admin).
+- `/my-schedule` — internal vendor self-service calendar.
+- `/my-assignments` — vendor task list with status updates.
+
 --

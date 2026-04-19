@@ -26,6 +26,7 @@ import {
   KeyRound
 } from 'lucide-react';
 import Header from '@/components/Header';
+import WarrantyTracker from '@/components/dashboards/widgets/WarrantyTracker';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -593,6 +594,9 @@ const RegistrationDetail = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Warranty status (Phase 3) */}
+          {id && <WarrantyTracker registrationId={id} />}
 
           {/* Property Information */}
           <Card>

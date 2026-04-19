@@ -6,10 +6,12 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { OrganizationProvider } from "@/hooks/useOrganization";
 import OrganizationGate from "@/components/OrganizationGate";
+import RoleGate from "@/components/RoleGate";
+import { BUILDER_ROLES } from "@/lib/roles";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
-import Dashboard from "./pages/Dashboard";
+import Dashboard from "./pages/RoleDashboard";
 import Onboarding from "./pages/Onboarding";
 import ItemsManagement from "./pages/ItemsManagement";
 import QueriesManagement from "./pages/QueriesManagement";
@@ -28,6 +30,10 @@ import QueryDetail from "./pages/QueryDetail";
 import CreateQuery from "./pages/CreateQuery";
 import VendorQuery from "./pages/VendorQuery";
 import QueryRedirect from "./pages/QueryRedirect";
+import MySchedule from "./pages/MySchedule";
+import MyAssignments from "./pages/MyAssignments";
+import TicketsTriage from "./pages/TicketsTriage";
+import TicketDetail from "./pages/TicketDetail";
 import { useValidateTokenQuery } from "@/store/api";
 
 const queryClient = new QueryClient();
@@ -169,7 +175,9 @@ const App = () => (
               <Route path="/queriesComplete" element={<ProtectedRoute><QueryRedirect /></ProtectedRoute>} />
               <Route path="/admin" element={
                 <ProtectedRoute>
-                  <Admin />
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                    <Admin />
+                  </RoleGate>
                 </ProtectedRoute>
               } />
               <Route path="/superadmin" element={
@@ -200,6 +208,34 @@ const App = () => (
               <Route path="/projects/:id" element={
                 <ProtectedRoute>
                   <ProjectDetail />
+                </ProtectedRoute>
+              } />
+              <Route path="/tickets" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.CUSTOMER_SUPPORT]}>
+                    <TicketsTriage />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/tickets/:id" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.CUSTOMER_SUPPORT]}>
+                    <TicketDetail />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/my-schedule" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.INTERNAL_VENDOR, BUILDER_ROLES.ADMINISTRATOR]}>
+                    <MySchedule />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/my-assignments" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.EXTERNAL_VENDOR, BUILDER_ROLES.INTERNAL_VENDOR, BUILDER_ROLES.ADMINISTRATOR]}>
+                    <MyAssignments />
+                  </RoleGate>
                 </ProtectedRoute>
               } />
               <Route path="/vendor/query" element={<VendorQuery />} />

@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Users, Mail, Phone, Building2 } from "lucide-react";
+import { Plus, Edit, Trash2, Users, Mail, Phone, Building2, Briefcase } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,12 +20,15 @@ import {
 } from "@/store/api";
 
 const vendorTypes = ['Tradesman', 'Plumber', 'Electrician', 'Landscaper', 'Sellers', 'Others'] as const;
+const vendorClassifications = ['INTERNAL', 'EXTERNAL'] as const;
 
 const vendorSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   contact_email: z.string().email("Please enter a valid email"),
   contact_phone: z.string().min(8, "Phone number must be at least 8 characters"),
   type: z.enum(vendorTypes),
+  vendorType: z.enum(vendorClassifications),
+  specializations: z.string().optional(),
   description: z.string().optional()
 });
 
@@ -37,6 +40,9 @@ interface Vendor {
   contact_email: string;
   contact_phone: string;
   type: string;
+  vendorType: 'INTERNAL' | 'EXTERNAL' | null;
+  specializations: string;
+  hasLogin: boolean;
   description: string | null;
   created_at: string;
 }
@@ -71,10 +77,15 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
     watch,
     formState: { errors, isSubmitting }
   } = useForm<VendorFormData>({
-    resolver: zodResolver(vendorSchema)
+    resolver: zodResolver(vendorSchema),
+    defaultValues: {
+      vendorType: 'EXTERNAL',
+      specializations: '',
+    }
   });
 
   const watchedType = watch('type');
+  const watchedVendorType = watch('vendorType');
 
   useEffect(() => {
     const list = vendorsResponse?.data ?? [];
@@ -84,6 +95,9 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
       contact_email: v.email,
       contact_phone: v.contact,
       type: v.type,
+      vendorType: (v.vendorType as Vendor["vendorType"]) ?? null,
+      specializations: v.specializations ?? "",
+      hasLogin: !!v.userInfo?.id,
       description: v.description ?? null,
       created_at: v.created_at ?? new Date().toISOString(),
     }));
@@ -94,35 +108,26 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
     try {
       if (!builderId) throw new Error("Missing organization id.");
 
+      const payload = {
+        name: data.name,
+        email: data.contact_email,
+        contact: data.contact_phone,
+        type: data.type,
+        vendorType: data.vendorType,
+        specializations: data.specializations || null,
+        // Backend auto-creates / links the user_info row for INTERNAL vendors
+        // using `email`. No FK needed from the UI.
+        userInfoId: null,
+        description: data.description || null,
+        builderOrganizationId: builderId,
+      };
+
       if (editingVendor) {
-        await createOrUpdateVendor({
-          id: editingVendor.id,
-          name: data.name,
-          email: data.contact_email,
-          contact: data.contact_phone,
-          type: data.type,
-          description: data.description || null,
-          builderOrganizationId: builderId,
-        }).unwrap();
-        
-        toast({
-          title: "Vendor updated",
-          description: "Vendor has been updated successfully"
-        });
+        await createOrUpdateVendor({ id: editingVendor.id, ...payload }).unwrap();
+        toast({ title: "Vendor updated", description: "Vendor has been updated successfully" });
       } else {
-        await createOrUpdateVendor({
-          name: data.name,
-          email: data.contact_email,
-          contact: data.contact_phone,
-          type: data.type,
-          description: data.description || null,
-          builderOrganizationId: builderId,
-        }).unwrap();
-        
-        toast({
-          title: "Vendor added",
-          description: "New vendor has been added successfully"
-        });
+        await createOrUpdateVendor(payload).unwrap();
+        toast({ title: "Vendor added", description: "New vendor has been added successfully" });
       }
 
       refetchVendors();
@@ -144,6 +149,8 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
     setValue('contact_email', vendor.contact_email);
     setValue('contact_phone', vendor.contact_phone);
     setValue('type', vendor.type as any);
+    setValue('vendorType', (vendor.vendorType ?? 'EXTERNAL') as any);
+    setValue('specializations', vendor.specializations);
     setValue('description', vendor.description || '');
     setDialogOpen(true);
   };
@@ -262,7 +269,7 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="type">Type *</Label>
+                  <Label htmlFor="type">Trade *</Label>
                   <Select value={watchedType} onValueChange={(value) => setValue('type', value as any)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select vendor type" />
@@ -278,6 +285,45 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
                   {errors.type && (
                     <p className="text-sm text-destructive">{errors.type.message}</p>
                   )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Classification *</Label>
+                  <Select
+                    value={watchedVendorType}
+                    onValueChange={(value) => setValue('vendorType', value as any)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Internal or external?" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="INTERNAL">Internal (in-house)</SelectItem>
+                      <SelectItem value="EXTERNAL">External (third party)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Internal vendors get calendar self-service; external vendors only see assigned queries.
+                  </p>
+                </div>
+
+                {watchedVendorType === 'INTERNAL' && (
+                  <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                    A login will be auto-provisioned for this internal vendor using
+                    the contact email above. They'll receive a set-password email
+                    and can sign in to manage their schedule on <strong>My Schedule</strong>.
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="specializations">Specializations</Label>
+                  <Input
+                    id="specializations"
+                    {...register('specializations')}
+                    placeholder="Comma-separated, e.g. Plumbing, HVAC"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Used by Customer Support to filter when assigning queries.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -326,12 +372,28 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
               <div key={vendor.id} className="border rounded-lg p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
                       <div className="flex items-center gap-2">
                         {getTypeIcon(vendor.type)}
                         <h4 className="font-semibold text-foreground">{vendor.name}</h4>
                       </div>
                       <Badge variant="secondary">{vendor.type}</Badge>
+                      {vendor.vendorType && (
+                        <Badge variant={vendor.vendorType === 'INTERNAL' ? 'default' : 'outline'}>
+                          {vendor.vendorType === 'INTERNAL' ? 'Internal' : 'External'}
+                        </Badge>
+                      )}
+                      {vendor.vendorType === 'INTERNAL' && (
+                        <Badge variant={vendor.hasLogin ? 'secondary' : 'destructive'} className="text-[10px]">
+                          {vendor.hasLogin ? 'Login active' : 'Login pending'}
+                        </Badge>
+                      )}
+                      {vendor.specializations && (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <Briefcase className="h-3 w-3" />
+                          {vendor.specializations}
+                        </span>
+                      )}
                     </div>
                     <div className="space-y-1 text-sm text-muted-foreground">
                       <div className="flex items-center gap-2">

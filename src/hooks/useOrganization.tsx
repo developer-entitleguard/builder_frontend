@@ -1,6 +1,12 @@
 import { useState, useEffect, createContext, useContext, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  BUILDER_ROLES,
+  type BuilderRole,
+  isAdministrator,
+  normalizeBuilderRole,
+} from "@/lib/roles";
 
 interface Organization {
   id: string;
@@ -26,6 +32,11 @@ interface OrganizationContextType {
   organizations: UserOrganizationRole[];
   currentOrganization: Organization | null;
   currentRole: 'admin' | 'user' | 'superadmin' | null;
+  /**
+   * Precise builder role from the new 5-role enum (Phase 1).
+   * Null for Supabase superadmin or when no builder JWT is present.
+   */
+  builderRole: BuilderRole | null;
   loading: boolean;
   hasAccess: boolean;
   hasMultipleOrgs: boolean;
@@ -55,6 +66,7 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
   const [organizations, setOrganizations] = useState<UserOrganizationRole[]>([]);
   const [currentOrganization, setCurrentOrganizationState] = useState<Organization | null>(null);
   const [currentRole, setCurrentRole] = useState<'admin' | 'user' | 'superadmin' | null>(null);
+  const [builderRole, setBuilderRole] = useState<BuilderRole | null>(null);
   const [impersonatedOrganization, setImpersonatedOrgState] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -100,10 +112,15 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
         data.builder_organization ??
         data.userInfo?.builderOrganization ??
         data.user_info?.builder_organization;
-      const role = (data.role ?? data.userInfo?.role ?? data.user_info?.role ?? "user") as
-        | "admin"
-        | "user"
-        | "superadmin";
+      const rawRole =
+        data.role ?? data.userInfo?.role ?? data.user_info?.role ?? "user";
+      const canonicalBuilderRole =
+        normalizeBuilderRole(typeof rawRole === "string" ? rawRole : null) ??
+        BUILDER_ROLES.PROJECT_MANAGER;
+      // Legacy 3-tuple kept for existing call sites; ADMINISTRATOR maps to "admin".
+      const role: "admin" | "user" | "superadmin" = isAdministrator(canonicalBuilderRole)
+        ? "admin"
+        : "user";
       let mapped: Organization;
       if (org?.id) {
         mapped = {
@@ -131,6 +148,7 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
       setOrganizations([{ organization: mapped, role }]);
       setCurrentOrganizationState(mapped);
       setCurrentRole(role);
+      setBuilderRole(canonicalBuilderRole);
       setImpersonatedOrgState(null);
       localStorage.setItem(SELECTED_ORG_KEY, mapped.id);
       return true;
@@ -154,6 +172,7 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
       setOrganizations([]);
       setCurrentOrganizationState(null);
       setCurrentRole(null);
+      setBuilderRole(null);
       setImpersonatedOrgState(null);
       setLoading(false);
     }
@@ -276,6 +295,7 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
     organizations,
     currentOrganization,
     currentRole,
+    builderRole,
     loading,
     hasAccess: !!user || organizations.length > 0 || isSuperAdmin,
     hasMultipleOrgs: organizations.length > 1,

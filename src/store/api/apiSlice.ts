@@ -59,13 +59,18 @@ export const api = createApi({
     'BuilderUser',
     'BuilderOrganization',
     'Vendor',
+    'VendorSchedule',
+    'VendorAvailability',
     'BuilderCustomer',
     'CustomerDetails',
     'CustomerItem',
     'ItemMap',
     'Projects',
     'Approvals',
-    'ProjectPricing'
+    'ProjectPricing',
+    'Ticket',
+    'ProjectImport',
+    'Warranty'
   ],
   endpoints: () => ({}),
 });

@@ -19,20 +19,21 @@ export const builderUsersApi = api.injectEndpoints({
       BuilderUserResponse,
       CreateBuilderUserRequest | UpdateBuilderUserRequest
     >({
-      query: (data) => {
-        const params = new URLSearchParams();
-        params.set('email', data.email);
-        params.set('firstName', data.firstName);
-        params.set('lastName', data.lastName || '');
-        params.set('contact', data.contact || '');
-        params.set('role', data.role);
-        params.set('builderOrganizationId', data.builderOrganizationId);
-        if ('id' in data && data.id) params.set('id', data.id);
-        return {
-          url: `/api/builder/user?${params.toString()}`,
-          method: 'POST',
-        };
-      },
+      query: (data) => ({
+        url: `/api/builder/user`,
+        method: 'POST',
+        body: {
+          ...('id' in data && data.id ? { id: data.id } : {}),
+          email: data.email,
+          firstName: data.firstName,
+          lastName: data.lastName || '',
+          contact: data.contact || '',
+          role: data.role,
+          vendorType: data.vendorType ?? null,
+          specializations: data.specializations ?? '',
+          builderOrganizationId: data.builderOrganizationId,
+        },
+      }),
       invalidatesTags: ['BuilderUser'],
     }),
     deleteBuilderUser: build.mutation<

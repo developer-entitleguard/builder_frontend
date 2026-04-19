@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useProjects, Project, ProjectStatus, PropertyType } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
-import { 
-  Plus, 
+import { useOrganization } from "@/hooks/useOrganization";
+import { canManageProjects } from "@/lib/roles";
+import { ImportProjectsDialog } from "@/components/projects/ImportProjectsDialog";
+import {
+  Plus,
   FolderOpen,
   Home,
   Building2,
@@ -18,7 +21,8 @@ import {
   PlusCircle,
   Settings,
   Calendar,
-  MapPin
+  MapPin,
+  FileSpreadsheet,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -94,9 +98,9 @@ const ProjectCard = ({ project }: { project: Project }) => {
   );
 };
 
-const EmptyState = () => {
+const EmptyState = ({ onImportClick, canImport }: { onImportClick?: () => void; canImport: boolean }) => {
   const navigate = useNavigate();
-  
+
   return (
     <div className="text-center py-16">
       <div className="mx-auto w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
@@ -106,10 +110,18 @@ const EmptyState = () => {
       <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
         Get started by creating your first project to manage activities and track progress.
       </p>
-      <Button onClick={() => navigate('/projects/new')}>
-        <Plus className="h-4 w-4 mr-2" />
-        Create Your First Project
-      </Button>
+      <div className="flex justify-center gap-2">
+        <Button onClick={() => navigate('/projects/new')}>
+          <Plus className="h-4 w-4 mr-2" />
+          Create Your First Project
+        </Button>
+        {canImport && onImportClick && (
+          <Button variant="outline" onClick={onImportClick}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Import from CSV
+          </Button>
+        )}
+      </div>
     </div>
   );
 };
@@ -117,7 +129,10 @@ const EmptyState = () => {
 const Projects = () => {
   const { user, loading: authLoading } = useAuth();
   const { currentProjects, completedProjects, loading, fetchProjects } = useProjects();
+  const { effectiveOrganization, builderRole } = useOrganization();
   const navigate = useNavigate();
+  const [importOpen, setImportOpen] = useState(false);
+  const canImport = canManageProjects(builderRole);
 
   useEffect(() => {
     // Redirect only when neither Supabase user nor builder JWT is present
@@ -156,14 +171,22 @@ const Projects = () => {
             <h1 className="text-3xl font-bold text-foreground">Projects</h1>
             <p className="text-muted-foreground mt-1">Manage your construction projects</p>
           </div>
-          <Button onClick={() => navigate('/projects/new')}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create New Project
-          </Button>
+          <div className="flex items-center gap-2">
+            {canImport && (
+              <Button variant="outline" onClick={() => setImportOpen(true)}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Import Projects from CSV
+              </Button>
+            )}
+            <Button onClick={() => navigate('/projects/new')}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create New Project
+            </Button>
+          </div>
         </div>
 
         {!hasProjects ? (
-          <EmptyState />
+          <EmptyState canImport={canImport} onImportClick={() => setImportOpen(true)} />
         ) : (
           <Tabs defaultValue="current" className="w-full">
             <TabsList className="mb-6">
@@ -205,6 +228,15 @@ const Projects = () => {
           </Tabs>
         )}
       </main>
+
+      {canImport && (
+        <ImportProjectsDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          builderId={effectiveOrganization?.id}
+          onCompleted={fetchProjects}
+        />
+      )}
     </div>
   );
 };

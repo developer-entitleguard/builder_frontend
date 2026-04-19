@@ -6,7 +6,25 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { RegistrationTypeDialog } from "@/components/RegistrationTypeDialog";
 import OrganizationSelector from "@/components/OrganizationSelector";
-import { Building2, LogOut, LayoutDashboard, FolderKanban, Shield, Eye } from "lucide-react";
+import {
+  canAssignVendors,
+  canManageProjects,
+  isAdministrator,
+  isExternalVendor,
+  isInternalVendor,
+  readBuilderRoleFromStorage,
+} from "@/lib/roles";
+import {
+  Building2,
+  LogOut,
+  LayoutDashboard,
+  FolderKanban,
+  Shield,
+  Eye,
+  CalendarDays,
+  Headphones,
+  ClipboardList,
+} from "lucide-react";
 
 const hasBuilderAuth = (): boolean => {
   try {
@@ -19,29 +37,28 @@ const hasBuilderAuth = (): boolean => {
   }
 };
 
-const isBuilderAdmin = (): boolean => {
-  try {
-    const userData = localStorage.getItem("userData");
-    if (!userData) return false;
-    const parsed = JSON.parse(userData);
-    const role = parsed?.role ?? parsed?.userInfo?.role;
-    return typeof role === "string" && role.toLowerCase() === "admin";
-  } catch {
-    return false;
-  }
-};
-
 const Header = () => {
   const { user, signOut } = useAuth();
-  const { isAdmin, isSuperAdmin, currentOrganization, hasMultipleOrgs, impersonatedOrganization, isImpersonating, setImpersonatedOrganization } = useOrganization();
+  const { isAdmin, isSuperAdmin, builderRole, currentOrganization, hasMultipleOrgs, impersonatedOrganization, isImpersonating, setImpersonatedOrganization } = useOrganization();
   const location = useLocation();
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  // Fall back to localStorage if context hasn't hydrated yet (e.g. on hard refresh
+  // before useOrganization re-reads userData).
+  const effectiveBuilderRole = builderRole ?? readBuilderRoleFromStorage();
   const isAuthenticated = !!user || hasBuilderAuth();
-  const canShowAdminTab = isAdmin || isBuilderAdmin();
+  const canShowAdminTab = isAdmin || isAdministrator(effectiveBuilderRole);
+  const isVendor = isInternalVendor(effectiveBuilderRole) || isExternalVendor(effectiveBuilderRole);
 
-  const showOrgNavItems = !isSuperAdmin || isImpersonating;
+  const showOrgNavItems = (!isSuperAdmin || isImpersonating) && !isVendor;
+  const showProjectsTab = canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null;
+  const showQueriesTab = !isExternalVendor(effectiveBuilderRole);
+  const showItemsTab = effectiveBuilderRole === null || canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === "CUSTOMER_SUPPORT";
+  const showNewRegistrationButton = effectiveBuilderRole === null || canManageProjects(effectiveBuilderRole);
+  const showTicketsTab = canAssignVendors(effectiveBuilderRole);
+  const showMyScheduleTab = isInternalVendor(effectiveBuilderRole);
+  const showMyAssignmentsTab = isExternalVendor(effectiveBuilderRole);
 
   const handleStopImpersonation = () => {
     setImpersonatedOrganization(null);
@@ -125,52 +142,96 @@ const Header = () => {
               <nav className="flex space-x-2">
                 {showOrgNavItems && (
                   <>
-                    <Button 
-                      variant={location.pathname.startsWith('/projects') ? "default" : "ghost"} 
-                      size="sm" 
-                      asChild
-                    >
-                      <Link to="/projects">
-                        <FolderKanban className="h-4 w-4 mr-1" />
-                        Projects
-                      </Link>
-                    </Button>
-                    <Button 
-                      variant={location.pathname === '/onboarding' ? "default" : "ghost"} 
-                      size="sm" 
-                      onClick={() => setDialogOpen(true)}
-                    >
-                      New Registration
-                    </Button>
-                    <Button 
-                      variant={location.pathname === '/items' ? "default" : "ghost"} 
-                      size="sm" 
-                      asChild
-                    >
-                      <Link to="/items">Warranty Items</Link>
-                    </Button>
-                    <Button 
-                      variant={location.pathname === '/queries' ? "default" : "ghost"} 
-                      size="sm" 
-                      asChild
-                    >
-                      <Link to="/queries">Queries</Link>
-                    </Button>
+                    {showProjectsTab && (
+                      <Button
+                        variant={location.pathname.startsWith('/projects') ? "default" : "ghost"}
+                        size="sm"
+                        asChild
+                      >
+                        <Link to="/projects">
+                          <FolderKanban className="h-4 w-4 mr-1" />
+                          Projects
+                        </Link>
+                      </Button>
+                    )}
+                    {showNewRegistrationButton && (
+                      <Button
+                        variant={location.pathname === '/onboarding' ? "default" : "ghost"}
+                        size="sm"
+                        onClick={() => setDialogOpen(true)}
+                      >
+                        New Registration
+                      </Button>
+                    )}
+                    {showItemsTab && (
+                      <Button
+                        variant={location.pathname === '/items' ? "default" : "ghost"}
+                        size="sm"
+                        asChild
+                      >
+                        <Link to="/items">Warranty Items</Link>
+                      </Button>
+                    )}
+                    {showQueriesTab && (
+                      <Button
+                        variant={location.pathname === '/queries' ? "default" : "ghost"}
+                        size="sm"
+                        asChild
+                      >
+                        <Link to="/queries">Queries</Link>
+                      </Button>
+                    )}
+                    {showTicketsTab && (
+                      <Button
+                        variant={location.pathname.startsWith('/tickets') ? "default" : "ghost"}
+                        size="sm"
+                        asChild
+                      >
+                        <Link to="/tickets">
+                          <Headphones className="h-4 w-4 mr-1" />
+                          Tickets
+                        </Link>
+                      </Button>
+                    )}
                   </>
                 )}
+                {showMyScheduleTab && (
+                  <Button
+                    variant={location.pathname === '/my-schedule' ? "default" : "ghost"}
+                    size="sm"
+                    asChild
+                  >
+                    <Link to="/my-schedule">
+                      <CalendarDays className="h-4 w-4 mr-1" />
+                      My Schedule
+                    </Link>
+                  </Button>
+                )}
+                {showMyAssignmentsTab && (
+                  <Button
+                    variant={location.pathname === '/my-assignments' ? "default" : "ghost"}
+                    size="sm"
+                    asChild
+                  >
+                    <Link to="/my-assignments">
+                      <ClipboardList className="h-4 w-4 mr-1" />
+                      My Assignments
+                    </Link>
+                  </Button>
+                )}
                 {canShowAdminTab && showOrgNavItems && (
-                  <Button 
-                    variant={location.pathname === '/admin' ? "default" : "ghost"} 
-                    size="sm" 
+                  <Button
+                    variant={location.pathname === '/admin' ? "default" : "ghost"}
+                    size="sm"
                     asChild
                   >
                     <Link to="/admin">Admin</Link>
                   </Button>
                 )}
                 {isSuperAdmin && (
-                  <Button 
-                    variant={location.pathname === '/superadmin' ? "default" : "ghost"} 
-                    size="sm" 
+                  <Button
+                    variant={location.pathname === '/superadmin' ? "default" : "ghost"}
+                    size="sm"
                     asChild
                   >
                     <Link to="/superadmin">

@@ -12,6 +12,10 @@ import './builderCustomer';
 import './builderOrganization';
 import './builderUsers';
 import './builderVendor';
+import './vendorSchedule';
+import './roleDashboards';
+import './projectImport';
+import './tickets';
 import './bomUpload';
 import './query';
 import './projects';
@@ -63,6 +67,10 @@ export * from './builderCustomer';
 export * from './builderOrganization';
 export * from './builderUsers';
 export * from './builderVendor';
+export * from './vendorSchedule';
+export * from './roleDashboards';
+export * from './projectImport';
+export * from './tickets';
 
 // BOM upload
 export * from './bomUpload';

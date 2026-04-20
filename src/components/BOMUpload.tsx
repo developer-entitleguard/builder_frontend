@@ -11,7 +11,12 @@ import { Upload, Download } from "lucide-react";
 import InfoCircleOutlined from "@ant-design/icons/es/icons/InfoCircleOutlined";
 
 interface BOMUploadProps {
-  onSuccess: () => void;
+  /**
+   * Called after a successful upload. Receives the id of the freshly created
+   * BOM (returned by the backend in the response `data` field) so callers can
+   * auto-select it. Undefined when the backend didn't include the id.
+   */
+  onSuccess: (newBomId?: string) => void;
 }
 
 interface ParsedBomCsvItem {
@@ -145,7 +150,7 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
           ? undefined
           : Number(formData.warrantyYears);
 
-      await uploadTemplate({
+      const response = await uploadTemplate({
         file: formData.file,
         bomName: formData.name,
         projectName: formData.projectName || undefined,
@@ -161,7 +166,10 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
       });
       setDialogOpen(false);
       setFormData({ name: "", projectName: "", warrantyYears: "", file: null });
-      onSuccess();
+      // The backend returns the new BOM id in `data`. Pass it up so the parent
+      // can auto-select the freshly created item set.
+      const newBomId = typeof response?.data === "string" ? response.data : undefined;
+      onSuccess(newBomId);
     } catch (error: unknown) {
       const message = error && typeof error === "object" && "data" in error
         ? String((error as { data?: { message?: string } }).data?.message ?? "Failed to upload Bill of Materials")
@@ -177,14 +185,14 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">
+        <Button>
           <Upload className="w-4 h-4 mr-2" />
-          Upload item set via CSV
+          Create new BOM items set
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Upload item set via CSV</DialogTitle>
+          <DialogTitle>Create new BOM items set</DialogTitle>
           <DialogDescription>
           Upload a CSV file to bulk-add warranty items. Required columns: name, category. Optional: make, brand, model, description, price, warranty_url, notes, installed_by, warranty_years.
           </DialogDescription>

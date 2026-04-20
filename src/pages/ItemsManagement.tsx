@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -260,6 +260,18 @@ const ItemsManagement = () => {
     refetchBillMaterials();
   }, [refetchBOMs, refetchBillMaterials]);
 
+  /** Called from BOMUpload after a successful upload. Auto-selects the new BOM. */
+  const handleBomUploaded = useCallback(
+    (newBomId?: string) => {
+      refetchBOMs();
+      refetchBillMaterials();
+      if (newBomId) {
+        setSelectedBomId(newBomId);
+      }
+    },
+    [refetchBOMs, refetchBillMaterials],
+  );
+
   const resetForm = () => {
     setFormData({
       name: "",
@@ -449,14 +461,8 @@ const ItemsManagement = () => {
             <p className="text-muted-foreground mt-1">Build and manage reusable sets of installed items and their warranties. Attach a set to any homeowner registration at handover.</p>
           </div>
           <div className="flex gap-2">
-            <BOMUpload onSuccess={refetchItems} />
+            <BOMUpload onSuccess={handleBomUploaded} />
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={resetForm} disabled={!selectedBomId}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Item
-                </Button>
-              </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingItem ? 'Edit Item' : 'Add Warranty Item'}</DialogTitle>
@@ -661,22 +667,36 @@ const ItemsManagement = () => {
           </Card>
         ) : (
           <>
-            <div className="mb-6">
-              <Label htmlFor="bomSelect">Select item set</Label>
-              <Select value={selectedBomId} onValueChange={(value) => {
-                setSelectedBomId(value);
-              }}>
-                <SelectTrigger className="w-full max-w-md">
-                  <SelectValue placeholder="Select a Bill of Materials" />
-                </SelectTrigger>
-                <SelectContent>
-                  {boms.map((bom) => (
-                    <SelectItem key={bom.id} value={bom.id}>
-                      {bom.name} {bom.project_name && `- ${bom.project_name}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-end gap-3">
+              <div className="flex-1 max-w-md">
+                <Label htmlFor="bomSelect">Select item set</Label>
+                <Select value={selectedBomId} onValueChange={(value) => {
+                  setSelectedBomId(value);
+                }}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a Bill of Materials" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {boms.map((bom) => (
+                      <SelectItem key={bom.id} value={bom.id}>
+                        {bom.name} {bom.project_name && `- ${bom.project_name}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  resetForm();
+                  setDialogOpen(true);
+                }}
+                disabled={!selectedBomId}
+                className="shrink-0"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Item
+              </Button>
             </div>
 
             {items.length === 0 ? (

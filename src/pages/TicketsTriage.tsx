@@ -4,8 +4,10 @@ import Header from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useListTicketsQuery, type Ticket } from "@/store/api/tickets";
 
@@ -21,6 +23,7 @@ const STATUS_VARIANT: Record<Ticket["status"], "default" | "destructive" | "outl
   TRIAGED: "secondary",
   CONVERTED: "outline",
   CLOSED: "outline",
+  CANCELLED: "destructive",
 };
 
 const TicketsTriage = () => {
@@ -30,9 +33,18 @@ const TicketsTriage = () => {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [search, setSearch] = useState("");
+  const [includeClosed, setIncludeClosed] = useState(false);
+
+  const showClosedOrCancelled =
+    includeClosed || statusFilter === "CLOSED" || statusFilter === "CANCELLED";
 
   const { data, isLoading } = useListTicketsQuery(
-    { builderId: builderId ?? "", status: statusFilter || undefined, priority: priorityFilter || undefined },
+    {
+      builderId: builderId ?? "",
+      status: statusFilter || undefined,
+      priority: priorityFilter || undefined,
+      includeClosed: showClosedOrCancelled,
+    },
     { skip: !builderId },
   );
 
@@ -59,32 +71,46 @@ const TicketsTriage = () => {
         </div>
 
         <Card>
-          <CardContent className="p-4 grid gap-3 md:grid-cols-3">
-            <Input
-              placeholder="Search name, email, phone, description"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <Select value={statusFilter || "ALL"} onValueChange={(v) => setStatusFilter(v === "ALL" ? "" : v)}>
-              <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All statuses</SelectItem>
-                <SelectItem value="NEW">New</SelectItem>
-                <SelectItem value="TRIAGED">Triaged</SelectItem>
-                <SelectItem value="CONVERTED">Converted</SelectItem>
-                <SelectItem value="CLOSED">Closed</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={priorityFilter || "ALL"} onValueChange={(v) => setPriorityFilter(v === "ALL" ? "" : v)}>
-              <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All priorities</SelectItem>
-                <SelectItem value="LOW">Low</SelectItem>
-                <SelectItem value="MEDIUM">Medium</SelectItem>
-                <SelectItem value="HIGH">High</SelectItem>
-                <SelectItem value="URGENT">Urgent</SelectItem>
-              </SelectContent>
-            </Select>
+          <CardContent className="p-4 space-y-3">
+            <div className="grid gap-3 md:grid-cols-3">
+              <Input
+                placeholder="Search name, email, phone, description"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <Select value={statusFilter || "ALL"} onValueChange={(v) => setStatusFilter(v === "ALL" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All statuses</SelectItem>
+                  <SelectItem value="NEW">New</SelectItem>
+                  <SelectItem value="TRIAGED">Triaged</SelectItem>
+                  <SelectItem value="CONVERTED">Converted</SelectItem>
+                  <SelectItem value="CLOSED">Closed</SelectItem>
+                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={priorityFilter || "ALL"} onValueChange={(v) => setPriorityFilter(v === "ALL" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All priorities</SelectItem>
+                  <SelectItem value="LOW">Low</SelectItem>
+                  <SelectItem value="MEDIUM">Medium</SelectItem>
+                  <SelectItem value="HIGH">High</SelectItem>
+                  <SelectItem value="URGENT">Urgent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="include-closed"
+                checked={includeClosed}
+                onCheckedChange={setIncludeClosed}
+                disabled={statusFilter === "CLOSED" || statusFilter === "CANCELLED"}
+              />
+              <Label htmlFor="include-closed" className="text-sm font-normal cursor-pointer">
+                Show closed &amp; cancelled tickets
+              </Label>
+            </div>
           </CardContent>
         </Card>
 

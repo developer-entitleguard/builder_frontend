@@ -48,6 +48,12 @@ import { viewPhotoUrl } from "@/lib/api/services/files";
 import VendorLinkModal from "@/components/VendorLinkModal";
 import AssignVendorDialog from "@/components/queries/AssignVendorDialog";
 import { canAssignVendors } from "@/lib/roles";
+import {
+  ATTACHMENT_ACCEPT,
+  ATTACHMENT_HELP_TEXT,
+  classifyAttachment,
+  validateAttachmentBatch,
+} from "@/lib/queryAttachments";
 
 // ── Status helpers ──────────────────────────────────────────────────
 
@@ -363,27 +369,15 @@ const QueryDetail = () => {
   const handleFileUpload = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*,.pdf";
+    input.accept = ATTACHMENT_ACCEPT;
     input.multiple = true;
     input.onchange = (e) => {
       const files = (e.target as HTMLInputElement).files;
       if (!files) return;
       const arr = Array.from(files);
-      if (uploadedFiles.length + arr.length > 5) {
-        toast({
-          title: "Error",
-          description: "Maximum 5 files allowed",
-          variant: "destructive",
-        });
-        return;
-      }
-      const oversized = arr.filter((f) => f.size > 10 * 1024 * 1024);
-      if (oversized.length > 0) {
-        toast({
-          title: "Error",
-          description: `Files exceed 10MB: ${oversized.map((f) => f.name).join(", ")}`,
-          variant: "destructive",
-        });
+      const check = validateAttachmentBatch(arr, uploadedFiles.length);
+      if (!check.ok) {
+        toast({ title: "Error", description: check.error, variant: "destructive" });
         return;
       }
       setUploadedFiles((prev) => [...prev, ...arr]);
@@ -636,33 +630,48 @@ const QueryDetail = () => {
                     {queryFiles.map((fileMap) => {
                       const fileId = fileMap.files?.id;
                       const fileName = fileMap.files?.name || "File";
-                      const fileType = (fileMap.files?.fileType || fileMap.files?.name || "").toLowerCase();
-                      const isImage = fileType.endsWith(".jpg") || fileType.endsWith(".jpeg") || fileType.endsWith(".png") || fileType.endsWith(".gif") || fileType.endsWith(".webp") || fileType.startsWith("image");
+                      const kind = classifyAttachment({
+                        mimeType: fileMap.files?.fileType,
+                        name: fileMap.files?.name,
+                      });
                       if (!fileId) return null;
-                      return isImage ? (
-                        <div
-                          key={fileMap.id}
-                          className="aspect-square rounded-lg overflow-hidden border cursor-pointer"
-                          onClick={() => window.open(viewPhotoUrl(fileId), "_blank")}
-                        >
-                          <img
-                            src={viewPhotoUrl(fileId)}
-                            alt={fileName}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : (
+                      const url = viewPhotoUrl(fileId);
+                      if (kind === "image") {
+                        return (
+                          <div
+                            key={fileMap.id}
+                            className="aspect-square rounded-lg overflow-hidden border cursor-pointer"
+                            onClick={() => window.open(url, "_blank")}
+                          >
+                            <img src={url} alt={fileName} className="w-full h-full object-cover" />
+                          </div>
+                        );
+                      }
+                      if (kind === "video") {
+                        return (
+                          <div
+                            key={fileMap.id}
+                            className="aspect-square rounded-lg overflow-hidden border bg-black"
+                          >
+                            <video
+                              src={url}
+                              controls
+                              preload="metadata"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        );
+                      }
+                      return (
                         <a
                           key={fileMap.id}
-                          href={viewPhotoUrl(fileId)}
+                          href={url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex flex-col items-center justify-center aspect-square rounded-lg border bg-gray-50 hover:bg-gray-100 p-3 text-center"
                         >
                           <FileText className="h-8 w-8 text-gray-400 mb-2" />
-                          <span className="text-xs text-gray-600 truncate w-full">
-                            {fileName}
-                          </span>
+                          <span className="text-xs text-gray-600 truncate w-full">{fileName}</span>
                         </a>
                       );
                     })}
@@ -690,14 +699,12 @@ const QueryDetail = () => {
                     onClick={handleFileUpload}
                   >
                     <Cloud className="h-10 w-10 mx-auto text-gray-400 mb-2" />
-                    <p className="text-gray-600">Select file or take a photo</p>
+                    <p className="text-gray-600">Select a photo, video or PDF</p>
                     <Button variant="outline" size="sm" className="mt-3">
                       <Upload className="h-4 w-4 mr-2" />
                       Browse Files
                     </Button>
-                    <p className="text-xs text-gray-400 mt-2">
-                      Maximum 5 files (JPG, PNG, PDF) up to 10MB each
-                    </p>
+                    <p className="text-xs text-gray-400 mt-2">{ATTACHMENT_HELP_TEXT}</p>
                   </div>
                   {uploadedFiles.length > 0 && (
                     <div className="mt-4 space-y-2">

@@ -24,6 +24,11 @@ import {
   useUpdateQueryMutation,
   useLazyGetRegistrationItemsQuery,
 } from "@/store/api";
+import {
+  ATTACHMENT_ACCEPT,
+  ATTACHMENT_HELP_TEXT,
+  validateAttachmentBatch,
+} from "@/lib/queryAttachments";
 
 interface RegistrationOption {
   id: string;
@@ -132,27 +137,15 @@ const CreateQuery = () => {
   const handleFileSelect = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*,.pdf";
+    input.accept = ATTACHMENT_ACCEPT;
     input.multiple = true;
     input.onchange = (e) => {
       const files = (e.target as HTMLInputElement).files;
       if (files) {
         const fileArray = Array.from(files);
-        if (attachedFiles.length + fileArray.length > 5) {
-          toast({
-            title: "Error",
-            description: "Maximum 5 files allowed.",
-            variant: "destructive",
-          });
-          return;
-        }
-        const oversized = fileArray.filter((f) => f.size > 10 * 1024 * 1024);
-        if (oversized.length > 0) {
-          toast({
-            title: "Error",
-            description: `Files exceed 10MB limit: ${oversized.map((f) => f.name).join(", ")}`,
-            variant: "destructive",
-          });
+        const check = validateAttachmentBatch(fileArray, attachedFiles.length);
+        if (!check.ok) {
+          toast({ title: "Error", description: check.error, variant: "destructive" });
           return;
         }
         setAttachedFiles((prev) => [...prev, ...fileArray]);
@@ -445,9 +438,7 @@ const CreateQuery = () => {
                     ? `Add More (${attachedFiles.length}/5)`
                     : "Attach Files"}
                 </Button>
-                <p className="text-xs text-muted-foreground">
-                  Images and PDFs accepted. Max 5 files, 10MB each.
-                </p>
+                <p className="text-xs text-muted-foreground">{ATTACHMENT_HELP_TEXT}</p>
               </div>
             </div>
 

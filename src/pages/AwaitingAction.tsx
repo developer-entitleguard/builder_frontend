@@ -18,8 +18,14 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Check, Upload, Cloud, Send, LinkIcon } from "lucide-react";
+import { ArrowLeft, Check, Upload, Cloud, Send, LinkIcon, FileText } from "lucide-react";
 import VendorLinkModal from "@/components/VendorLinkModal";
+import {
+  ATTACHMENT_ACCEPT,
+  ATTACHMENT_HELP_TEXT,
+  classifyAttachment,
+  validateAttachmentBatch,
+} from "@/lib/queryAttachments";
 
 interface CaseAssessment {
   id: string;
@@ -358,29 +364,15 @@ const AwaitingAction = () => {
   const handleFileUpload = () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*,.pdf';
+    input.accept = ATTACHMENT_ACCEPT;
     input.multiple = true;
     input.onchange = (e) => {
       const files = (e.target as HTMLInputElement).files;
       if (files) {
         const fileArray = Array.from(files);
-        // Validate file count (max 5)
-        if (uploadedFiles.length + fileArray.length > 5) {
-          toast({
-            title: "Error",
-            description: "Maximum 5 files allowed. Please select fewer files.",
-            variant: "destructive",
-          });
-          return;
-        }
-        // Validate file size (max 10MB each)
-        const oversizedFiles = fileArray.filter(file => file.size > 10 * 1024 * 1024);
-        if (oversizedFiles.length > 0) {
-          toast({
-            title: "Error",
-            description: `Some files exceed 10MB limit: ${oversizedFiles.map(f => f.name).join(', ')}`,
-            variant: "destructive",
-          });
+        const check = validateAttachmentBatch(fileArray, uploadedFiles.length);
+        if (!check.ok) {
+          toast({ title: "Error", description: check.error, variant: "destructive" });
           return;
         }
         setUploadedFiles(prev => [...prev, ...fileArray]);
@@ -492,11 +484,11 @@ const AwaitingAction = () => {
               </CardContent>
             </Card>
 
-            {/* Attached Images */}
+            {/* Attached Documents */}
             <Card>
               <CardHeader>
                 <CardTitle>
-                  Attached Images ({queryData?.queryFileMaps?.length || 0})
+                  Attached Documents ({queryData?.queryFileMaps?.length || 0})
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -505,32 +497,70 @@ const AwaitingAction = () => {
                     {queryData.queryFileMaps.map((fileMap) => {
                       const fileId = fileMap.files?.id;
                       const fileName = fileMap.files?.name || 'Query file';
-                      
-                      const imageUrl = fileId ? viewPhotoUrl(fileId) : null;
-                      
-                      return (
-                        <div key={fileMap.id} className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
-                          {imageUrl ? (
-                            <img 
-                              src={imageUrl} 
+                      const kind = classifyAttachment({
+                        mimeType: fileMap.files?.fileType,
+                        name: fileMap.files?.name,
+                      });
+                      if (!fileId) {
+                        return (
+                          <div key={fileMap.id} className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center text-gray-400">
+                            No file
+                          </div>
+                        );
+                      }
+                      const url = viewPhotoUrl(fileId);
+                      if (kind === "image") {
+                        return (
+                          <div
+                            key={fileMap.id}
+                            className="aspect-square rounded-lg overflow-hidden border cursor-pointer"
+                            onClick={() => window.open(url, "_blank")}
+                          >
+                            <img
+                              src={url}
                               alt={fileName}
-                              className="w-full h-full object-cover rounded-lg"
+                              className="w-full h-full object-cover"
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement;
                                 target.src = "/placeholder.svg";
-                                target.onerror = null; 
+                                target.onerror = null;
                               }}
                             />
-                          ) : (
-                            <div className="text-gray-400">No image</div>
-                          )}
-                        </div>
+                          </div>
+                        );
+                      }
+                      if (kind === "video") {
+                        return (
+                          <div
+                            key={fileMap.id}
+                            className="aspect-square rounded-lg overflow-hidden border bg-black"
+                          >
+                            <video
+                              src={url}
+                              controls
+                              preload="metadata"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        );
+                      }
+                      return (
+                        <a
+                          key={fileMap.id}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-col items-center justify-center aspect-square rounded-lg border bg-gray-50 hover:bg-gray-100 p-3 text-center"
+                        >
+                          <FileText className="h-8 w-8 text-gray-400 mb-2" />
+                          <span className="text-xs text-gray-600 truncate w-full">{fileName}</span>
+                        </a>
                       );
                     })}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500">
-                    No images attached
+                    No documents attached
                   </div>
                 )}
               </CardContent>
@@ -557,18 +587,16 @@ const AwaitingAction = () => {
 
                 <div>
                   <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                    Upload Additional Images
+                    Upload Additional Files
                   </Label>
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors">
                     <Cloud className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 mb-4">Select file or take a photo</p>
+                    <p className="text-gray-600 mb-4">Select a photo, video or PDF</p>
                     <Button variant="outline" onClick={handleFileUpload}>
                       <Upload className="h-4 w-4 mr-2" />
                       Browse Files
                     </Button>
-                    <p className="text-sm text-gray-500 mt-2">
-                      Maximum 5 files (JPG, PNG, PDF) up to 10MB each
-                    </p>
+                    <p className="text-sm text-gray-500 mt-2">{ATTACHMENT_HELP_TEXT}</p>
                   </div>
                   {uploadedFiles.length > 0 && (
                     <div className="mt-4 space-y-2">

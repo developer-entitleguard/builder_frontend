@@ -26,7 +26,8 @@ export interface Ticket {
   agentId: string | null;
   callRecordingUrl: string | null;
   sourceTimestamp: string | null;
-  status: 'NEW' | 'TRIAGED' | 'CONVERTED' | 'CLOSED';
+  status: 'NEW' | 'TRIAGED' | 'CONVERTED' | 'CLOSED' | 'CANCELLED';
+  closureReason: string | null;
   linkedRegistrationId: string | null;
   linkedQueryId: string | null;
   createdAt: string | null;
@@ -37,12 +38,17 @@ export const ticketsApi = api.injectEndpoints({
   endpoints: (build) => ({
     listTickets: build.query<
       DefaultListResponse<Ticket[]>,
-      { builderId: string; status?: string; priority?: string }
+      { builderId: string; status?: string; priority?: string; includeClosed?: boolean }
     >({
-      query: ({ builderId, status, priority }) => ({
+      query: ({ builderId, status, priority, includeClosed }) => ({
         url: `/api/tickets`,
         method: 'GET',
-        params: { builderId, status, priority },
+        params: {
+          builderId,
+          status,
+          priority,
+          includeClosed: includeClosed ? 'true' : undefined,
+        },
       }),
       providesTags: ['Ticket'],
     }),
@@ -81,6 +87,24 @@ export const ticketsApi = api.injectEndpoints({
         'Query',
       ],
     }),
+
+    cancelTicket: build.mutation<ApiResponseDto, { id: string; reason: string }>({
+      query: ({ id, reason }) => ({
+        url: `/api/tickets/${id}/cancel`,
+        method: 'POST',
+        body: { reason },
+      }),
+      invalidatesTags: (_r, _e, arg) => [{ type: 'Ticket', id: arg.id }, 'Ticket'],
+    }),
+
+    closeTicket: build.mutation<ApiResponseDto, { id: string; reason: string }>({
+      query: ({ id, reason }) => ({
+        url: `/api/tickets/${id}/close`,
+        method: 'POST',
+        body: { reason },
+      }),
+      invalidatesTags: (_r, _e, arg) => [{ type: 'Ticket', id: arg.id }, 'Ticket'],
+    }),
   }),
 });
 
@@ -89,4 +113,6 @@ export const {
   useGetTicketQuery,
   useLinkTicketToRegistrationMutation,
   useConvertTicketToQueryMutation,
+  useCancelTicketMutation,
+  useCloseTicketMutation,
 } = ticketsApi;

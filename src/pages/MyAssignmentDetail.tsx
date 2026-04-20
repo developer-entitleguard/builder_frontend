@@ -20,6 +20,12 @@ import {
 } from "lucide-react";
 import { viewPhotoUrl } from "@/lib/api/services/files";
 import {
+  ATTACHMENT_ACCEPT,
+  ATTACHMENT_HELP_TEXT,
+  classifyAttachment,
+  validateAttachmentBatch,
+} from "@/lib/queryAttachments";
+import {
   useLazyGetQueryByIdQuery,
   useUpdateQueryMutation,
   useAddQueryCommentMutation,
@@ -125,18 +131,15 @@ const MyAssignmentDetail = () => {
   const handleFilePick = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*,.pdf";
+    input.accept = ATTACHMENT_ACCEPT;
     input.multiple = true;
     input.onchange = (e) => {
       const files = (e.target as HTMLInputElement).files;
       if (!files) return;
       const arr = Array.from(files);
-      if (stagedFiles.length + arr.length > 5) {
-        toast({
-          title: "Too many files",
-          description: "Maximum 5 files per upload.",
-          variant: "destructive",
-        });
+      const check = validateAttachmentBatch(arr, stagedFiles.length);
+      if (!check.ok) {
+        toast({ title: "Upload rejected", description: check.error, variant: "destructive" });
         return;
       }
       setStagedFiles((prev) => [...prev, ...arr]);
@@ -147,10 +150,13 @@ const MyAssignmentDetail = () => {
   const handleUploadFiles = async () => {
     if (!queryId || stagedFiles.length === 0) return;
     try {
-      const queryFileMapDto = stagedFiles.map((f) => ({
-        type: f.type.startsWith("image/") ? "image" : "document",
-        files: f,
-      }));
+      const queryFileMapDto = stagedFiles.map((f) => {
+        const kind = classifyAttachment({ mimeType: f.type, name: f.name });
+        return {
+          type: kind === "other" ? "document" : kind,
+          files: f,
+        };
+      });
       const res = await updateQuery({
         id: queryId,
         userId,
@@ -393,31 +399,42 @@ const MyAssignmentDetail = () => {
                     {queryFiles.map((fileMap) => {
                       const fileId = fileMap.files?.id;
                       const fileName = fileMap.files?.name || "File";
-                      const ft = (fileMap.files?.fileType || fileMap.files?.name || "").toLowerCase();
-                      const isImage =
-                        ft.endsWith(".jpg") ||
-                        ft.endsWith(".jpeg") ||
-                        ft.endsWith(".png") ||
-                        ft.endsWith(".gif") ||
-                        ft.endsWith(".webp") ||
-                        ft.startsWith("image");
+                      const kind = classifyAttachment({
+                        mimeType: fileMap.files?.fileType,
+                        name: fileMap.files?.name,
+                      });
                       if (!fileId) return null;
-                      return isImage ? (
-                        <div
-                          key={fileMap.id}
-                          className="aspect-square rounded-lg overflow-hidden border cursor-pointer"
-                          onClick={() => window.open(viewPhotoUrl(fileId), "_blank")}
-                        >
-                          <img
-                            src={viewPhotoUrl(fileId)}
-                            alt={fileName}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : (
+                      const url = viewPhotoUrl(fileId);
+                      if (kind === "image") {
+                        return (
+                          <div
+                            key={fileMap.id}
+                            className="aspect-square rounded-lg overflow-hidden border cursor-pointer"
+                            onClick={() => window.open(url, "_blank")}
+                          >
+                            <img src={url} alt={fileName} className="w-full h-full object-cover" />
+                          </div>
+                        );
+                      }
+                      if (kind === "video") {
+                        return (
+                          <div
+                            key={fileMap.id}
+                            className="aspect-square rounded-lg overflow-hidden border bg-black"
+                          >
+                            <video
+                              src={url}
+                              controls
+                              preload="metadata"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        );
+                      }
+                      return (
                         <a
                           key={fileMap.id}
-                          href={viewPhotoUrl(fileId)}
+                          href={url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex flex-col items-center justify-center aspect-square rounded-lg border bg-gray-50 hover:bg-gray-100 p-3 text-center"
@@ -446,14 +463,12 @@ const MyAssignmentDetail = () => {
                     onClick={handleFilePick}
                   >
                     <Cloud className="h-10 w-10 mx-auto text-gray-400 mb-2" />
-                    <p className="text-gray-600">Select a file or take a photo</p>
+                    <p className="text-gray-600">Select a photo, video or PDF</p>
                     <Button variant="outline" size="sm" className="mt-3" type="button">
                       <Upload className="h-4 w-4 mr-2" />
                       Browse Files
                     </Button>
-                    <p className="text-xs text-gray-400 mt-2">
-                      Up to 5 files (JPG, PNG, PDF) per upload
-                    </p>
+                    <p className="text-xs text-gray-400 mt-2">{ATTACHMENT_HELP_TEXT}</p>
                   </div>
                   {stagedFiles.length > 0 && (
                     <div className="mt-4 space-y-2">

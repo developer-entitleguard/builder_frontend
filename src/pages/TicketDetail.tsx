@@ -5,16 +5,28 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useOrganization } from "@/hooks/useOrganization";
 import {
+  useCancelTicketMutation,
+  useCloseTicketMutation,
   useConvertTicketToQueryMutation,
   useGetTicketQuery,
   useLinkTicketToRegistrationMutation,
 } from "@/store/api/tickets";
 import { useDashboardRegistrationsQuery } from "@/store/api";
-import { ArrowLeft, ArrowRight, LinkIcon, Wand2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, LinkIcon, Wand2, XCircle, Ban } from "lucide-react";
 
 interface DashRegistration {
   id: string;
@@ -42,6 +54,13 @@ const TicketDetail = () => {
 
   const [linkMut, { isLoading: linking }] = useLinkTicketToRegistrationMutation();
   const [convertMut, { isLoading: converting }] = useConvertTicketToQueryMutation();
+  const [cancelMut, { isLoading: cancelling }] = useCancelTicketMutation();
+  const [closeMut, { isLoading: closingTicket }] = useCloseTicketMutation();
+
+  // Single reason dialog used by both Cancel and Close; `closureMode` decides
+  // which mutation to fire on submit.
+  const [closureMode, setClosureMode] = useState<"cancel" | "close" | null>(null);
+  const [closureReason, setClosureReason] = useState("");
 
   const [search, setSearch] = useState("");
   const filteredRegs = useMemo(() => {
@@ -89,6 +108,40 @@ const TicketDetail = () => {
     } catch (e) {
       toast({
         title: "Convert failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openClosureDialog = (mode: "cancel" | "close") => {
+    setClosureMode(mode);
+    setClosureReason("");
+  };
+
+  const handleClosureSubmit = async () => {
+    if (!closureMode) return;
+    const reason = closureReason.trim();
+    if (!reason) {
+      toast({ title: "Reason required", variant: "destructive" });
+      return;
+    }
+    try {
+      const mutation = closureMode === "cancel" ? cancelMut : closeMut;
+      const res = await mutation({ id, reason }).unwrap();
+      if (!res.success) {
+        toast({ title: "Update failed", description: res.message, variant: "destructive" });
+        return;
+      }
+      toast({
+        title: closureMode === "cancel" ? "Ticket cancelled" : "Ticket closed",
+        description: reason,
+      });
+      setClosureMode(null);
+      setClosureReason("");
+    } catch (e) {
+      toast({
+        title: "Update failed",
         description: e instanceof Error ? e.message : "Unknown error",
         variant: "destructive",
       });
@@ -195,25 +248,106 @@ const TicketDetail = () => {
           </Card>
         )}
 
-        {ticket && ticket.status !== "CONVERTED" && (
+        {ticket && (ticket.status === "CLOSED" || ticket.status === "CANCELLED") && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                {ticket.status === "CLOSED" ? "Ticket closed" : "Ticket cancelled"}
+              </CardTitle>
+              <CardDescription>
+                {ticket.closureReason
+                  ? `Reason: ${ticket.closureReason}`
+                  : "No reason recorded."}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+
+        {ticket && ticket.status !== "CONVERTED" && ticket.status !== "CLOSED" && ticket.status !== "CANCELLED" && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Wand2 className="h-4 w-4" />
-                Convert to query
+                Resolve ticket
               </CardTitle>
               <CardDescription>
-                Creates a new builder query, attaches the call recording (if any) as a comment, and marks the ticket as converted.
+                Convert to a query to route it to a vendor, or close/cancel it without converting.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-wrap gap-2">
               <Button onClick={handleConvert} disabled={converting}>
                 {converting ? "Converting…" : "Convert to query"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => openClosureDialog("close")}
+                disabled={closingTicket}
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                Close
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => openClosureDialog("cancel")}
+                disabled={cancelling}
+              >
+                <Ban className="h-4 w-4 mr-2" />
+                Cancel
               </Button>
             </CardContent>
           </Card>
         )}
       </div>
+
+      <Dialog open={closureMode !== null} onOpenChange={(o) => !o && setClosureMode(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {closureMode === "cancel" ? "Cancel ticket" : "Close ticket"}
+            </DialogTitle>
+            <DialogDescription>
+              {closureMode === "cancel"
+                ? "Use this when the caller withdrew the request or the ticket isn't a real issue. Provide a short reason for the audit log."
+                : "Use this when the issue was resolved over the phone without creating a query. Provide a short reason for the audit log."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="closure-reason">Reason</Label>
+            <Textarea
+              id="closure-reason"
+              value={closureReason}
+              onChange={(e) => setClosureReason(e.target.value)}
+              placeholder={
+                closureMode === "cancel"
+                  ? "e.g. Caller confirmed it was a wrong number"
+                  : "e.g. Explained thermostat reset over the phone; caller confirmed resolved"
+              }
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClosureMode(null)}>
+              Back
+            </Button>
+            <Button
+              onClick={handleClosureSubmit}
+              disabled={
+                (closureMode === "cancel" ? cancelling : closingTicket)
+                || !closureReason.trim()
+              }
+              variant={closureMode === "cancel" ? "destructive" : "default"}
+            >
+              {closureMode === "cancel"
+                ? cancelling
+                  ? "Cancelling…"
+                  : "Confirm cancel"
+                : closingTicket
+                  ? "Closing…"
+                  : "Confirm close"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

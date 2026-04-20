@@ -12,6 +12,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/RoleDashboard";
+import Registrations from "./pages/Registrations";
 import Onboarding from "./pages/Onboarding";
 import ItemsManagement from "./pages/ItemsManagement";
 import QueriesManagement from "./pages/QueriesManagement";
@@ -32,6 +33,7 @@ import VendorQuery from "./pages/VendorQuery";
 import QueryRedirect from "./pages/QueryRedirect";
 import MySchedule from "./pages/MySchedule";
 import MyAssignments from "./pages/MyAssignments";
+import MyAssignmentDetail from "./pages/MyAssignmentDetail";
 import TicketsTriage from "./pages/TicketsTriage";
 import TicketDetail from "./pages/TicketDetail";
 import { useValidateTokenQuery } from "@/store/api";
@@ -144,6 +146,17 @@ const App = () => (
                   <Dashboard />
                 </ProtectedRoute>
               } />
+              <Route path="/registrations" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[
+                    BUILDER_ROLES.ADMINISTRATOR,
+                    BUILDER_ROLES.PROJECT_MANAGER,
+                    BUILDER_ROLES.CUSTOMER_SUPPORT,
+                  ]}>
+                    <Registrations />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
               <Route path="/onboarding" element={
                 <ProtectedRoute>
                   <Onboarding />
@@ -235,6 +248,13 @@ const App = () => (
                 <ProtectedRoute>
                   <RoleGate roles={[BUILDER_ROLES.EXTERNAL_VENDOR, BUILDER_ROLES.INTERNAL_VENDOR, BUILDER_ROLES.ADMINISTRATOR]}>
                     <MyAssignments />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/my-assignments/:queryId" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.EXTERNAL_VENDOR, BUILDER_ROLES.INTERNAL_VENDOR, BUILDER_ROLES.ADMINISTRATOR]}>
+                    <MyAssignmentDetail />
                   </RoleGate>
                 </ProtectedRoute>
               } />

@@ -109,11 +109,11 @@ const ResetPassword = () => {
             <div className="p-1">
               <img
                 src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png"
-                alt="Entitle Guard for Builders Logo"
+                alt="EG BuildOS Logo"
                 className="h-8 w-8 rounded-lg"
               />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Entitle Guard for Builders</h1>
+            <h1 className="text-2xl font-bold text-foreground">EG BuildOS</h1>
           </div>
           <p className="text-muted-foreground">Because Builders Deserve Clarity.</p>
         </div>

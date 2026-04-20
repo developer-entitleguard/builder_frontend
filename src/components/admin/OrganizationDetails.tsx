@@ -11,18 +11,36 @@ import { validatePhone, validateABN } from "@/utils/validation";
 import { Building, Save, Edit } from "lucide-react";
 import { useGetBuilderOrganizationQuery, useUpdateBuilderOrganizationMutation } from "@/store/api";
 
-const organizationSchema = z.object({
-  name: z.string().min(1, "Organization name is required"),
-  address: z.string().min(1, "Address is required"),
-  contact_email: z.string().email("Invalid email address"),
-  contact_phone: z.string().refine((phone) => validatePhone(phone), {
-    message: "Please enter a valid Australian phone number",
-  }),
-  abn: z.string().optional().refine((abn) => !abn || validateABN(abn), {
-    message: "Please enter a valid ABN (11 digits)",
-  }),
-  description: z.string().optional(),
-});
+const organizationSchema = z
+  .object({
+    name: z.string().min(1, "Organization name is required"),
+    address: z.string().min(1, "Address is required"),
+    contact_email: z.string().email("Invalid email address"),
+    contact_phone: z.string().refine((phone) => validatePhone(phone), {
+      message: "Please enter a valid Australian phone number",
+    }),
+    abn: z.string().optional().refine((abn) => !abn || validateABN(abn), {
+      message: "Please enter a valid ABN (11 digits)",
+    }),
+    description: z.string().optional(),
+    workingHoursStart: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:mm (24h)"),
+    workingHoursEnd: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:mm (24h)"),
+  })
+  .refine((v) => v.workingHoursEnd > v.workingHoursStart, {
+    path: ["workingHoursEnd"],
+    message: "End time must be after start time",
+  });
+
+const toHHmm = (raw: string | null | undefined, fallback: string): string => {
+  if (!raw) return fallback;
+  const [h, m] = raw.split(":");
+  if (!h || !m) return fallback;
+  return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
+};
 
 type OrganizationFormData = z.infer<typeof organizationSchema>;
 
@@ -73,6 +91,8 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
       contact_phone: effectiveOrg?.contact_phone || effectiveOrg?.contact || "",
       abn: effectiveOrg?.abn || "",
       description: effectiveOrg?.description || "",
+      workingHoursStart: toHHmm(effectiveOrg?.workingHoursStart, "09:00"),
+      workingHoursEnd: toHHmm(effectiveOrg?.workingHoursEnd, "18:00"),
     },
   });
 
@@ -86,6 +106,8 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
       contact_phone: effectiveOrg?.contact_phone || effectiveOrg?.contact || "",
       abn: effectiveOrg?.abn || "",
       description: effectiveOrg?.description || "",
+      workingHoursStart: toHHmm(effectiveOrg?.workingHoursStart, "09:00"),
+      workingHoursEnd: toHHmm(effectiveOrg?.workingHoursEnd, "18:00"),
     });
   }, [effectiveOrg, form]);
 
@@ -103,6 +125,8 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
         email: data.contact_email,
         abn: data.abn || null,
         description: data.description || null,
+        workingHoursStart: `${data.workingHoursStart}:00`,
+        workingHoursEnd: `${data.workingHoursEnd}:00`,
       }).unwrap();
 
       toast({
@@ -157,6 +181,13 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
           <div>
             <label className="font-medium text-muted-foreground">ABN</label>
             <p className="mt-1">{effectiveOrg?.abn || "Not provided"}</p>
+          </div>
+          <div>
+            <label className="font-medium text-muted-foreground">Vendor working hours</label>
+            <p className="mt-1">
+              {toHHmm(effectiveOrg?.workingHoursStart, "09:00")} – {toHHmm(effectiveOrg?.workingHoursEnd, "18:00")}
+              <span className="text-xs text-muted-foreground ml-2">Mon–Fri</span>
+            </p>
           </div>
           {effectiveOrg?.description && (
             <div className="col-span-full">
@@ -257,6 +288,38 @@ export function OrganizationDetails({ organization }: OrganizationDetailsProps) 
             </FormItem>
           )}
         />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="workingHoursStart"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Vendor working hours — start</FormLabel>
+                <FormControl>
+                  <Input type="time" step={300} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="workingHoursEnd"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Vendor working hours — end</FormLabel>
+                <FormControl>
+                  <Input type="time" step={300} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground -mt-2">
+          Internal vendors are available these hours every Mon–Fri. They can block specific times off.
+        </p>
 
         <div className="flex gap-2">
           <Button type="submit" disabled={isSaving}>

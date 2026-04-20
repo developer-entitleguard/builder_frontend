@@ -310,6 +310,8 @@ export interface BuilderOrganization {
   abn: string | null;
   description: string;
   isActive: boolean;
+  workingHoursStart?: string | null; // HH:mm:ss
+  workingHoursEnd?: string | null;
 }
 
 export interface UpdateBuilderOrganizationRequest {
@@ -320,6 +322,8 @@ export interface UpdateBuilderOrganizationRequest {
   email: string;
   abn?: string | null;
   description?: string | null;
+  workingHoursStart?: string | null;
+  workingHoursEnd?: string | null;
 }
 
 export interface BuilderOrganizationResponse {

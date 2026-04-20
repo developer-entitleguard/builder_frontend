@@ -13,12 +13,34 @@ export interface VendorScheduleSlot {
   queryId: string | null;
 }
 
+export interface FreeWindow {
+  startTime: string;  // HH:mm:ss
+  endTime: string;
+}
+
+/**
+ * Per-day availability, computed on the backend as:
+ *   workingHours − UNAVAILABLE rows − BOOKED rows.
+ * `workingDay` is false for weekends (unless there's an explicit AVAILABLE override).
+ */
+export interface VendorDayAvailability {
+  date: string;
+  workingDay: boolean;
+  workingHoursStart: string | null;
+  workingHoursEnd: string | null;
+  freeWindows: FreeWindow[];
+  blocks: VendorScheduleSlot[];
+  bookings: VendorScheduleSlot[];
+}
+
 export interface VendorAvailabilityRow {
   vendorId: string;
   vendorName: string | null;
   vendorType: 'INTERNAL' | 'EXTERNAL' | null;
   specializations: string | null;
-  slots: VendorScheduleSlot[];
+  workingHoursStart: string | null;
+  workingHoursEnd: string | null;
+  freeWindows: FreeWindow[];
 }
 
 interface DefaultListResponse<T> {
@@ -49,7 +71,12 @@ export interface UpdateSlotBody {
 
 export interface AssignQueryBody {
   vendorId: string;
+  /** Legacy path — book an existing AVAILABLE slot. */
   slotId?: string;
+  /** New path — book a fresh slot inside a computed free window. */
+  date?: string;       // yyyy-MM-dd
+  startTime?: string;  // HH:mm or HH:mm:ss
+  endTime?: string;
   notes?: string;
 }
 
@@ -60,6 +87,24 @@ export interface MyVendorProfile {
   contact: string;
   vendorType: 'INTERNAL' | 'EXTERNAL' | null;
   specializations: string | null;
+  /** Per-vendor override; null means "use org default". */
+  workingHoursStart: string | null;
+  workingHoursEnd: string | null;
+  /** Comma-separated ISO weekday numbers ("1,2,3,4,5") or null when using org default. */
+  workingWeekdays: string | null;
+  /** Convenience: the org the vendor belongs to (carries the org-level working hours). */
+  builderOrganization?: {
+    id: string;
+    workingHoursStart: string | null;
+    workingHoursEnd: string | null;
+  } | null;
+}
+
+export interface UpdateWorkingScheduleBody {
+  workingHoursStart: string | null; // HH:mm or HH:mm:ss
+  workingHoursEnd: string | null;
+  /** ISO weekday numbers (1=Mon … 7=Sun). Null or empty → clear override, org default applies. */
+  workingWeekdays: number[] | null;
 }
 
 export interface MyAssignedQuery {
@@ -84,12 +129,20 @@ export const vendorScheduleApi = api.injectEndpoints({
       query: () => ({ url: `/api/vendor/me`, method: 'GET' }),
       providesTags: ['Vendor'],
     }),
+    updateMyWorkingSchedule: build.mutation<ApiResponseDto, UpdateWorkingScheduleBody>({
+      query: (body) => ({
+        url: `/api/vendor/me/working-schedule`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: ['Vendor', 'VendorSchedule', 'VendorAvailability'],
+    }),
     getMyAssignedQueries: build.query<DefaultListResponse<MyAssignedQuery[]>, void>({
       query: () => ({ url: `/api/vendor/me/queries`, method: 'GET' }),
       providesTags: ['Query'],
     }),
     getVendorSchedule: build.query<
-      DefaultListResponse<VendorScheduleSlot[]>,
+      DefaultListResponse<VendorDayAvailability[]>,
       { vendorId: string; from?: string; to?: string }
     >({
       query: ({ vendorId, from, to }) => ({
@@ -132,6 +185,17 @@ export const vendorScheduleApi = api.injectEndpoints({
       ],
     }),
 
+    deleteVendorSlot: build.mutation<ApiResponseDto, { slotId: string; vendorId: string }>({
+      query: ({ slotId }) => ({
+        url: `/api/vendor/schedule/${slotId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, _error, arg) => [
+        { type: 'VendorSchedule', id: arg.vendorId },
+        'VendorAvailability',
+      ],
+    }),
+
     getVendorAvailability: build.query<
       DefaultListResponse<VendorAvailabilityRow[]>,
       { builderId: string; date?: string; specialization?: string }
@@ -160,10 +224,12 @@ export const vendorScheduleApi = api.injectEndpoints({
 
 export const {
   useGetMyVendorProfileQuery,
+  useUpdateMyWorkingScheduleMutation,
   useGetMyAssignedQueriesQuery,
   useGetVendorScheduleQuery,
   useCreateVendorSlotsMutation,
   useUpdateVendorSlotMutation,
+  useDeleteVendorSlotMutation,
   useGetVendorAvailabilityQuery,
   useAssignQueryToVendorMutation,
 } = vendorScheduleApi;

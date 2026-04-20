@@ -142,11 +142,11 @@ Thanks`);
             <div className="flex items-center">
               <img 
                 src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
-                alt="Entitle Guard for Builders Logo" 
+                alt="EG BuildOS Logo" 
                 className="h-10 w-10 rounded-lg mr-3"
               />
               <div>
-                <span className="text-xl font-semibold text-white">Entitle Guard for Builders</span>
+                <span className="text-xl font-semibold text-white">EG BuildOS</span>
                 <p className="text-xs text-white/70">Handover Made Simple. Entitlements Made Clear.</p>
               </div>
             </div>
@@ -414,11 +414,11 @@ Thanks`);
             <div className="flex items-center">
               <img 
                 src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
-                alt="Entitle Guard for Builders Logo" 
+                alt="EG BuildOS Logo" 
                 className="h-8 w-8 rounded mr-3"
               />
               <div>
-                <span className="text-white font-medium">Entitle Guard for Builders</span>
+                <span className="text-white font-medium">EG BuildOS</span>
                 <p className="text-xs text-slate-400">Handover Made Simple. Entitlements Made Clear.</p>
               </div>
             </div>

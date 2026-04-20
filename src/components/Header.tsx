@@ -4,8 +4,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
-import { RegistrationTypeDialog } from "@/components/RegistrationTypeDialog";
 import OrganizationSelector from "@/components/OrganizationSelector";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   canAssignVendors,
   canManageProjects,
@@ -14,17 +26,7 @@ import {
   isInternalVendor,
   readBuilderRoleFromStorage,
 } from "@/lib/roles";
-import {
-  Building2,
-  LogOut,
-  LayoutDashboard,
-  FolderKanban,
-  Shield,
-  Eye,
-  CalendarDays,
-  Headphones,
-  ClipboardList,
-} from "lucide-react";
+import { Menu, ChevronDown } from "lucide-react";
 
 const hasBuilderAuth = (): boolean => {
   try {
@@ -37,12 +39,27 @@ const hasBuilderAuth = (): boolean => {
   }
 };
 
+interface NavItem {
+  label: string;
+  to: string;
+  activePrefix?: string;
+}
+
 const Header = () => {
   const { user, signOut } = useAuth();
-  const { isAdmin, isSuperAdmin, builderRole, currentOrganization, hasMultipleOrgs, impersonatedOrganization, isImpersonating, setImpersonatedOrganization } = useOrganization();
+  const {
+    isAdmin,
+    isSuperAdmin,
+    builderRole,
+    currentOrganization,
+    hasMultipleOrgs,
+    impersonatedOrganization,
+    isImpersonating,
+    setImpersonatedOrganization,
+  } = useOrganization();
   const location = useLocation();
   const navigate = useNavigate();
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Fall back to localStorage if context hasn't hydrated yet (e.g. on hard refresh
   // before useOrganization re-reads userData).
@@ -55,7 +72,10 @@ const Header = () => {
   const showProjectsTab = canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null;
   const showQueriesTab = !isExternalVendor(effectiveBuilderRole);
   const showItemsTab = effectiveBuilderRole === null || canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === "CUSTOMER_SUPPORT";
-  const showNewRegistrationButton = effectiveBuilderRole === null || canManageProjects(effectiveBuilderRole);
+  const showRegistrationsTab =
+    effectiveBuilderRole === null
+    || canManageProjects(effectiveBuilderRole)
+    || effectiveBuilderRole === "CUSTOMER_SUPPORT";
   const showTicketsTab = canAssignVendors(effectiveBuilderRole);
   const showMyScheduleTab = isInternalVendor(effectiveBuilderRole);
   const showMyAssignmentsTab = isExternalVendor(effectiveBuilderRole);
@@ -73,15 +93,60 @@ const Header = () => {
     }
   };
 
+  // Flat list used for the mobile drawer — respects the same visibility flags.
+  const mobileNavItems: NavItem[] = [];
+  mobileNavItems.push({ label: "Dashboard", to: "/dashboard" });
+  if (showOrgNavItems) {
+    if (showProjectsTab) {
+      mobileNavItems.push({ label: "Projects", to: "/projects", activePrefix: "/projects" });
+    }
+    if (showRegistrationsTab) {
+      mobileNavItems.push({
+        label: "Registrations",
+        to: "/registrations",
+        activePrefix: "/registrations",
+      });
+    }
+    if (showItemsTab) {
+      mobileNavItems.push({ label: "Warranty Items", to: "/items" });
+    }
+    if (showQueriesTab) {
+      mobileNavItems.push({ label: "Queries", to: "/queries", activePrefix: "/queries" });
+    }
+    if (showTicketsTab) {
+      mobileNavItems.push({
+        label: "Phone Tickets",
+        to: "/tickets",
+        activePrefix: "/tickets",
+      });
+    }
+  }
+  if (showMyScheduleTab) {
+    mobileNavItems.push({ label: "My Schedule", to: "/my-schedule" });
+  }
+  if (showMyAssignmentsTab) {
+    mobileNavItems.push({ label: "My Assignments", to: "/my-assignments" });
+  }
+  if (canShowAdminTab && showOrgNavItems) {
+    mobileNavItems.push({ label: "Admin", to: "/admin" });
+  }
+  if (isSuperAdmin) {
+    mobileNavItems.push({ label: "Super Admin", to: "/superadmin" });
+  }
+
+  const isActiveNavItem = (item: NavItem) => {
+    if (item.activePrefix) return location.pathname.startsWith(item.activePrefix);
+    return location.pathname === item.to;
+  };
+
   return (
     <header className="bg-card border-b border-border shadow-soft">
       {impersonatedOrganization && (
         <div className="bg-primary/10 border-b border-primary/20 px-4 py-1 text-center">
           <span className="text-sm text-primary flex items-center justify-center gap-2">
-            <Eye className="h-3 w-3" />
             Impersonating: <strong>{impersonatedOrganization.name}</strong>
-            <button 
-              onClick={handleStopImpersonation} 
+            <button
+              onClick={handleStopImpersonation}
               className="underline ml-2 hover:text-primary/80"
             >
               Stop
@@ -91,170 +156,232 @@ const Header = () => {
       )}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 min-w-0">
             <Link
               to="/dashboard"
-              className="flex items-center space-x-3 hover:opacity-80 transition-opacity"
+              className="flex items-center space-x-3 hover:opacity-80 transition-opacity min-w-0"
             >
-              <div className="p-1">
+              <div className="p-1 shrink-0">
                 <img
                   src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png"
-                  alt="Entitle Guard for Builders Logo"
+                  alt="EG BuildOS Logo"
                   className="h-10 w-10 rounded-lg"
                 />
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-foreground">
-                  Entitle Guard for Builders
-                </h1>
-              </div>
+              <h1 className="text-xl font-bold text-foreground truncate">
+                EG BuildOS
+              </h1>
             </Link>
           </div>
-          
-          {isAuthenticated && (
-            <div className="flex items-center space-x-4">
-              {hasMultipleOrgs && <OrganizationSelector />}
-              
-              {currentOrganization && !hasMultipleOrgs && !isSuperAdmin && (
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <Building2 className="h-4 w-4 mr-1" />
-                  {currentOrganization.name}
-                </div>
-              )}
 
-              {isSuperAdmin && (
-                <Badge variant="outline" className="text-primary border-primary">
-                  <Shield className="h-3 w-3 mr-1" />
-                  Super Admin
-                </Badge>
-              )}
-              
-              <Button 
-                asChild 
-                variant={location.pathname === '/dashboard' ? "default" : "secondary"}
-              >
-                <Link to="/dashboard">
-                  <LayoutDashboard className="h-4 w-4 mr-2" />
-                  Dashboard
-                </Link>
-              </Button>
-              
-              <nav className="flex space-x-2">
-                {showOrgNavItems && (
-                  <>
-                    {showProjectsTab && (
-                      <Button
-                        variant={location.pathname.startsWith('/projects') ? "default" : "ghost"}
-                        size="sm"
-                        asChild
-                      >
-                        <Link to="/projects">
-                          <FolderKanban className="h-4 w-4 mr-1" />
-                          Projects
-                        </Link>
-                      </Button>
-                    )}
-                    {showNewRegistrationButton && (
-                      <Button
-                        variant={location.pathname === '/onboarding' ? "default" : "ghost"}
-                        size="sm"
-                        onClick={() => setDialogOpen(true)}
-                      >
-                        New Registration
-                      </Button>
-                    )}
-                    {showItemsTab && (
-                      <Button
-                        variant={location.pathname === '/items' ? "default" : "ghost"}
-                        size="sm"
-                        asChild
-                      >
-                        <Link to="/items">Warranty Items</Link>
-                      </Button>
-                    )}
-                    {showQueriesTab && (
-                      <Button
-                        variant={location.pathname === '/queries' ? "default" : "ghost"}
-                        size="sm"
-                        asChild
-                      >
-                        <Link to="/queries">Queries</Link>
-                      </Button>
-                    )}
-                    {showTicketsTab && (
-                      <Button
-                        variant={location.pathname.startsWith('/tickets') ? "default" : "ghost"}
-                        size="sm"
-                        asChild
-                      >
-                        <Link to="/tickets">
-                          <Headphones className="h-4 w-4 mr-1" />
-                          Tickets
-                        </Link>
-                      </Button>
-                    )}
-                  </>
+          {isAuthenticated && (
+            <>
+              {/* ── Desktop nav ── */}
+              <div className="hidden md:flex items-center space-x-4">
+                {hasMultipleOrgs && <OrganizationSelector />}
+
+                {currentOrganization && !hasMultipleOrgs && !isSuperAdmin && (
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    {currentOrganization.name}
+                  </div>
                 )}
-                {showMyScheduleTab && (
-                  <Button
-                    variant={location.pathname === '/my-schedule' ? "default" : "ghost"}
-                    size="sm"
-                    asChild
-                  >
-                    <Link to="/my-schedule">
-                      <CalendarDays className="h-4 w-4 mr-1" />
-                      My Schedule
-                    </Link>
-                  </Button>
-                )}
-                {showMyAssignmentsTab && (
-                  <Button
-                    variant={location.pathname === '/my-assignments' ? "default" : "ghost"}
-                    size="sm"
-                    asChild
-                  >
-                    <Link to="/my-assignments">
-                      <ClipboardList className="h-4 w-4 mr-1" />
-                      My Assignments
-                    </Link>
-                  </Button>
-                )}
-                {canShowAdminTab && showOrgNavItems && (
-                  <Button
-                    variant={location.pathname === '/admin' ? "default" : "ghost"}
-                    size="sm"
-                    asChild
-                  >
-                    <Link to="/admin">Admin</Link>
-                  </Button>
-                )}
+
                 {isSuperAdmin && (
-                  <Button
-                    variant={location.pathname === '/superadmin' ? "default" : "ghost"}
-                    size="sm"
-                    asChild
-                  >
-                    <Link to="/superadmin">
-                      <Shield className="h-4 w-4 mr-1" />
-                      Super Admin
-                    </Link>
-                  </Button>
+                  <Badge variant="outline" className="text-primary border-primary">
+                    Super Admin
+                  </Badge>
                 )}
-              </nav>
-              
-              <Button variant="outline" size="sm" onClick={handleSignOut}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
-            </div>
+
+                <Button
+                  asChild
+                  variant={location.pathname === '/dashboard' ? "default" : "secondary"}
+                >
+                  <Link to="/dashboard">Dashboard</Link>
+                </Button>
+
+                <nav className="flex space-x-2">
+                  {showOrgNavItems && (
+                    <>
+                      {(showProjectsTab || showRegistrationsTab) && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant={
+                                location.pathname.startsWith("/projects") ||
+                                location.pathname.startsWith("/registrations")
+                                  ? "default"
+                                  : "ghost"
+                              }
+                              size="sm"
+                            >
+                              Builds
+                              <ChevronDown className="h-3 w-3 ml-1 opacity-70" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            {showProjectsTab && (
+                              <DropdownMenuItem asChild>
+                                <Link to="/projects" className="cursor-pointer">
+                                  Projects
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            {showRegistrationsTab && (
+                              <DropdownMenuItem asChild>
+                                <Link to="/registrations" className="cursor-pointer">
+                                  Registrations
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                      {showItemsTab && (
+                        <Button
+                          variant={location.pathname === '/items' ? "default" : "ghost"}
+                          size="sm"
+                          asChild
+                        >
+                          <Link to="/items">Warranty Items</Link>
+                        </Button>
+                      )}
+                      {(showQueriesTab || showTicketsTab) && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant={
+                                location.pathname.startsWith("/queries") ||
+                                location.pathname.startsWith("/tickets")
+                                  ? "default"
+                                  : "ghost"
+                              }
+                              size="sm"
+                            >
+                              Support
+                              <ChevronDown className="h-3 w-3 ml-1 opacity-70" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            {showQueriesTab && (
+                              <DropdownMenuItem asChild>
+                                <Link to="/queries" className="cursor-pointer">
+                                  Queries
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            {showTicketsTab && (
+                              <DropdownMenuItem asChild>
+                                <Link to="/tickets" className="cursor-pointer">
+                                  Phone Tickets
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </>
+                  )}
+                  {showMyScheduleTab && (
+                    <Button
+                      variant={location.pathname === '/my-schedule' ? "default" : "ghost"}
+                      size="sm"
+                      asChild
+                    >
+                      <Link to="/my-schedule">My Schedule</Link>
+                    </Button>
+                  )}
+                  {showMyAssignmentsTab && (
+                    <Button
+                      variant={location.pathname === '/my-assignments' ? "default" : "ghost"}
+                      size="sm"
+                      asChild
+                    >
+                      <Link to="/my-assignments">My Assignments</Link>
+                    </Button>
+                  )}
+                  {canShowAdminTab && showOrgNavItems && (
+                    <Button
+                      variant={location.pathname === '/admin' ? "default" : "ghost"}
+                      size="sm"
+                      asChild
+                    >
+                      <Link to="/admin">Admin</Link>
+                    </Button>
+                  )}
+                  {isSuperAdmin && (
+                    <Button
+                      variant={location.pathname === '/superadmin' ? "default" : "ghost"}
+                      size="sm"
+                      asChild
+                    >
+                      <Link to="/superadmin">Super Admin</Link>
+                    </Button>
+                  )}
+                </nav>
+
+                <Button variant="outline" size="sm" onClick={handleSignOut}>
+                  Sign Out
+                </Button>
+              </div>
+
+              {/* ── Mobile nav trigger ── */}
+              <div className="md:hidden flex items-center gap-2">
+                {hasMultipleOrgs && <OrganizationSelector />}
+                <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                  <SheetTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label="Open menu">
+                      <Menu className="h-5 w-5" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="w-[88vw] sm:w-[360px] flex flex-col">
+                    <SheetHeader>
+                      <SheetTitle>Menu</SheetTitle>
+                    </SheetHeader>
+                    {currentOrganization && !isSuperAdmin && (
+                      <div className="text-sm text-muted-foreground py-2 border-b">
+                        <span className="truncate">{currentOrganization.name}</span>
+                      </div>
+                    )}
+                    {isSuperAdmin && (
+                      <Badge variant="outline" className="self-start text-primary border-primary">
+                        Super Admin
+                      </Badge>
+                    )}
+                    <nav className="flex-1 flex flex-col gap-1 py-2 overflow-y-auto">
+                      {mobileNavItems.map((item) => {
+                        const active = isActiveNavItem(item);
+                        return (
+                          <Link
+                            key={item.to}
+                            to={item.to}
+                            onClick={() => setMobileOpen(false)}
+                            className={`rounded-md px-3 py-2 text-sm transition-colors ${
+                              active
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-accent"
+                            }`}
+                          >
+                            {item.label}
+                          </Link>
+                        );
+                      })}
+                    </nav>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setMobileOpen(false);
+                        handleSignOut();
+                      }}
+                    >
+                      Sign Out
+                    </Button>
+                  </SheetContent>
+                </Sheet>
+              </div>
+            </>
           )}
         </div>
       </div>
-
-      <RegistrationTypeDialog 
-        open={dialogOpen} 
-        onOpenChange={setDialogOpen}
-      />
     </header>
   );
 };

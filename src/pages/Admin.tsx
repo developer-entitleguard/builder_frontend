@@ -55,7 +55,7 @@ export default function Admin() {
       </div>
 
       <Tabs defaultValue="organization" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 h-auto">
           <TabsTrigger value="organization">Organization Details</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>
           <TabsTrigger value="vendors">Vendor Management</TabsTrigger>

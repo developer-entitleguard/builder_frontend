@@ -170,7 +170,16 @@ const QueryDetail = () => {
       { builderId: builderId ?? "" },
       { skip: !builderId || !isPending }
     );
-  const vendors = (vendorsData as { data?: Array<{ id: string; name: string; type?: string; contact?: string }> })?.data ?? [];
+  const vendors = (vendorsData as {
+    data?: Array<{ id: string; name: string; type?: string; contact?: string; vendorType?: 'INTERNAL' | 'EXTERNAL' | null }>;
+  })?.data ?? [];
+
+  // What classification is the vendor currently picked in the dropdown?
+  const effectiveVendorId = selectedVendor || queryData?.vendor?.id || "";
+  const selectedVendorClassification =
+    vendors.find((v) => v.id === effectiveVendorId)?.vendorType ?? null;
+  const isInternalVendorPicked = selectedVendorClassification === "INTERNAL";
+  const isExternalVendorPicked = selectedVendorClassification === "EXTERNAL";
 
   // ── Target status IDs ──
   const assignedToVendorStatusId = statuses.find(
@@ -762,8 +771,29 @@ const QueryDetail = () => {
                         ) : (
                           vendors.map((vendor) => (
                             <SelectItem key={vendor.id} value={vendor.id}>
-                              {vendor.name}{" "}
-                              {vendor.type && `(${vendor.type})`}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span>{vendor.name}</span>
+                                {vendor.type && (
+                                  <span className="text-xs text-muted-foreground">
+                                    ({vendor.type})
+                                  </span>
+                                )}
+                                {vendor.vendorType === "INTERNAL" && (
+                                  <Badge variant="default" className="text-[10px] px-1.5 py-0">
+                                    Internal
+                                  </Badge>
+                                )}
+                                {vendor.vendorType === "EXTERNAL" && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                    External
+                                  </Badge>
+                                )}
+                                {!vendor.vendorType && (
+                                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                    Unclassified
+                                  </Badge>
+                                )}
+                              </div>
                             </SelectItem>
                           ))
                         )}
@@ -801,52 +831,69 @@ const QueryDetail = () => {
                     </div>
                   </div>
 
-                  <div>
-                    <Label>Due Date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !dueDate && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {dueDate ? (
-                            format(dueDate, "PPP")
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={dueDate}
-                          onSelect={setDueDate}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
+                  {/* External vendors get a manual due date — internal vendors
+                      inherit theirs from the booked schedule slot. */}
+                  {isExternalVendorPicked && (
+                    <div>
+                      <Label>Due Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !dueDate && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {dueDate ? (
+                              format(dueDate, "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={dueDate}
+                            onSelect={setDueDate}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  )}
 
-                  <Button
-                    className="w-full"
-                    onClick={handleAssignCase}
-                    disabled={isUpdating || !queryData}
-                  >
-                    {isUpdating ? "Assigning..." : "Assign Case"}
-                  </Button>
-                  {canScheduleAssign && builderId && queryData && (
+                  {isExternalVendorPicked && (
+                    <Button
+                      className="w-full"
+                      onClick={handleAssignCase}
+                      disabled={isUpdating || !queryData}
+                    >
+                      {isUpdating ? "Assigning..." : "Assign Case"}
+                    </Button>
+                  )}
+
+                  {isInternalVendorPicked && canScheduleAssign && builderId && queryData && (
                     <Button
                       type="button"
-                      variant="outline"
                       className="w-full"
                       onClick={() => setAssignDialogOpen(true)}
                     >
                       Assign with schedule…
                     </Button>
+                  )}
+
+                  {!selectedVendorClassification && effectiveVendorId && (
+                    <p className="text-xs text-muted-foreground">
+                      Vendor classification isn't set — ask an admin to mark this vendor as Internal or External under Admin → Vendors.
+                    </p>
+                  )}
+                  {!effectiveVendorId && (
+                    <p className="text-xs text-muted-foreground">
+                      Pick a vendor to continue. Internal vendors get a scheduled booking; external vendors get a manual due date.
+                    </p>
                   )}
                 </CardContent>
               </Card>

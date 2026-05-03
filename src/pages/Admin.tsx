@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { OrganizationDetails } from "@/components/admin/OrganizationDetails";
 import { UserManagement } from "@/components/admin/UserManagement";
 import VendorManagement from "@/components/admin/VendorManagement";
+import SupplierManagement from "@/components/admin/SupplierManagement";
 import { Shield, ArrowLeft, Truck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -55,10 +56,11 @@ export default function Admin() {
       </div>
 
       <Tabs defaultValue="organization" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 h-auto">
+        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-4 h-auto">
           <TabsTrigger value="organization">Organization Details</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>
           <TabsTrigger value="vendors">Vendor Management</TabsTrigger>
+          <TabsTrigger value="suppliers">Supplier Management</TabsTrigger>
         </TabsList>
 
         <TabsContent value="organization" className="space-y-4">
@@ -85,6 +87,10 @@ export default function Admin() {
 
         <TabsContent value="vendors" className="space-y-4">
           <VendorManagement organizationId={organization?.id} />
+        </TabsContent>
+
+        <TabsContent value="suppliers" className="space-y-4">
+          <SupplierManagement />
         </TabsContent>
       </Tabs>
     </div>

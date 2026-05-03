@@ -19,7 +19,10 @@ import {
   useDeleteBuilderVendorMutation,
 } from "@/store/api";
 
-const vendorTypes = ['Tradesman', 'Plumber', 'Electrician', 'Landscaper', 'Sellers', 'Others'] as const;
+// Per PRD §9.2: 'Sellers' removed post-V7 migration. Goods sellers now live in
+// the Supplier Management tab. The backend still accepts 'Sellers' as a free-text
+// value for any historical row not yet migrated, but the UI no longer offers it.
+const vendorTypes = ['Tradesman', 'Plumber', 'Electrician', 'Landscaper', 'Others'] as const;
 const vendorClassifications = ['INTERNAL', 'EXTERNAL'] as const;
 
 const vendorSchema = z.object({
@@ -180,6 +183,8 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
       'Plumber': <Building2 className="h-4 w-4" />,
       'Electrician': <Building2 className="h-4 w-4" />,
       'Landscaper': <Building2 className="h-4 w-4" />,
+      // 'Sellers' kept in the icon map for legacy rows that still carry that
+      // value (pre-V7 migration leftovers), even though it's no longer offered.
       'Sellers': <Users className="h-4 w-4" />,
       'Others': <Building2 className="h-4 w-4" />
     };

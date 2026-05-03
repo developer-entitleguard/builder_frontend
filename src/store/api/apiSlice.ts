@@ -61,6 +61,7 @@ export const api = createApi({
     'Vendor',
     'VendorSchedule',
     'VendorAvailability',
+    'Supplier',
     'BuilderCustomer',
     'CustomerDetails',
     'CustomerItem',

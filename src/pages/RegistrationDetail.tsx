@@ -4,7 +4,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { useCreateBuilderCustomerMutation, useGetCustomerDetailsQuery, useDeleteBuilderCustomerMutation, useGetStatusesByTypeQuery, useCreateCustomerEntitlementMutation } from '@/store/api';
+import { useCreateBuilderCustomerMutation, useGetCustomerDetailsQuery, useDeleteBuilderCustomerMutation, useGetStatusesByTypeQuery, useCreateCustomerEntitlementMutation, useGetBuilderCustomerTermsQuery, useUpdateBuilderCustomerTermsMutation } from '@/store/api';
+import { TermsVersionPicker } from '@/components/TermsVersionPicker';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -117,6 +118,15 @@ const RegistrationDetail = () => {
     { skip: !id || !builderId || !isBuilderFlow }
   );
   const [deleteBuilderCustomer] = useDeleteBuilderCustomerMutation();
+  // Phase 4 of PRD_Org_Terms_And_Conditions. Pull the current T&C assignment
+  // off the registration; the GET endpoint is intentionally minimal so it
+  // doesn't block on the much heavier customer-details fetch.
+  const {
+    data: registrationTerms,
+    refetch: refetchRegistrationTerms,
+  } = useGetBuilderCustomerTermsQuery(id ?? "", { skip: !id || !isBuilderFlow });
+  const [updateRegistrationTerms, { isLoading: updatingRegistrationTerms }] =
+    useUpdateBuilderCustomerTermsMutation();
   const { data: builderStatuses } = useGetStatusesByTypeQuery(
     { type: 'BUILDER' },
     { skip: !builderId }
@@ -831,6 +841,34 @@ const RegistrationDetail = () => {
               })()}
             </CardContent>
           </Card>
+
+          <TermsVersionPicker
+            value={registrationTerms?.termsVersionId ?? null}
+            locked={registrationTerms?.locked || isHandedStatus}
+            lockedReason="Registration is handed over. The customer's snapshot now lives on the order and cannot be changed."
+            disabled={updatingRegistrationTerms}
+            onChange={async (next) => {
+              if (!id) return;
+              try {
+                await updateRegistrationTerms({ customerId: id, termsVersionId: next }).unwrap();
+                toast({ title: 'T&C updated' });
+                refetchRegistrationTerms();
+              } catch (err) {
+                const message =
+                  typeof err === 'object' && err && 'data' in err
+                    ? ((err as { data?: { message?: string } | string }).data &&
+                      typeof (err as { data?: { message?: string } | string }).data === 'object'
+                        ? ((err as { data?: { message?: string } }).data?.message ?? null)
+                        : ((err as { data?: string }).data ?? null))
+                    : null;
+                toast({
+                  title: 'T&C update failed',
+                  description: message ?? 'Something went wrong',
+                  variant: 'destructive',
+                });
+              }
+            }}
+          />
         </div>
       </main>
 

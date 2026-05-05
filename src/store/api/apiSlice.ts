@@ -71,7 +71,9 @@ export const api = createApi({
     'ProjectPricing',
     'Ticket',
     'ProjectImport',
-    'Warranty'
+    'Warranty',
+    // PRD_Org_Terms_And_Conditions Phase 4.
+    'OrgTerms',
   ],
   endpoints: () => ({}),
 });

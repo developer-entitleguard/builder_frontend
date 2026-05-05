@@ -1,4 +1,4 @@
-import { useState } from "react";
+// Phase 4 of PRD_Org_Terms_And_Conditions adds the "Terms & Conditions" tab.
 import { useOrganization } from "@/hooks/useOrganization";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,7 +8,8 @@ import { OrganizationDetails } from "@/components/admin/OrganizationDetails";
 import { UserManagement } from "@/components/admin/UserManagement";
 import VendorManagement from "@/components/admin/VendorManagement";
 import SupplierManagement from "@/components/admin/SupplierManagement";
-import { Shield, ArrowLeft, Truck } from "lucide-react";
+import { OrgTermsManagement } from "@/components/admin/OrgTermsManagement";
+import { Shield, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function Admin() {
@@ -56,11 +57,12 @@ export default function Admin() {
       </div>
 
       <Tabs defaultValue="organization" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-4 h-auto">
+        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-5 h-auto">
           <TabsTrigger value="organization">Organization Details</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>
           <TabsTrigger value="vendors">Vendor Management</TabsTrigger>
           <TabsTrigger value="suppliers">Supplier Management</TabsTrigger>
+          <TabsTrigger value="terms">Terms &amp; Conditions</TabsTrigger>
         </TabsList>
 
         <TabsContent value="organization" className="space-y-4">
@@ -91,6 +93,10 @@ export default function Admin() {
 
         <TabsContent value="suppliers" className="space-y-4">
           <SupplierManagement />
+        </TabsContent>
+
+        <TabsContent value="terms" className="space-y-4">
+          <OrgTermsManagement />
         </TabsContent>
       </Tabs>
     </div>

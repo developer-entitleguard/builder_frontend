@@ -18,6 +18,7 @@ import ItemsManagement from "./pages/ItemsManagement";
 import QueriesManagement from "./pages/QueriesManagement";
 import RegistrationDetail from "./pages/RegistrationDetail";
 import Admin from "./pages/Admin";
+import TermsVersions from "./pages/TermsVersions";
 import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 import ConsentConfirmation from "./pages/ConsentConfirmation";
@@ -165,6 +166,12 @@ const App = () => (
               <Route path="/items" element={
                 <ProtectedRoute>
                   <ItemsManagement />
+                </ProtectedRoute>
+              } />
+              {/* Catalog → Terms & Conditions (PRD_Org_Terms_And_Conditions Phase 4 nav restructure) */}
+              <Route path="/terms-versions" element={
+                <ProtectedRoute>
+                  <TermsVersions />
                 </ProtectedRoute>
               } />
               <Route path="/queries" element={

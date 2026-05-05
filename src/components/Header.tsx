@@ -108,7 +108,11 @@ const Header = () => {
       });
     }
     if (showItemsTab) {
-      mobileNavItems.push({ label: "Warranty Items", to: "/items" });
+      // Catalog group (PRD_Org_Terms_And_Conditions Phase 4 nav restructure):
+      // mobile is a flat list, so the items appear as siblings rather than
+      // collapsed under a parent.
+      mobileNavItems.push({ label: "Items", to: "/items" });
+      mobileNavItems.push({ label: "Terms & Conditions", to: "/terms-versions" });
     }
     if (showQueriesTab) {
       mobileNavItems.push({ label: "Queries", to: "/queries", activePrefix: "/queries" });
@@ -237,13 +241,34 @@ const Header = () => {
                         </DropdownMenu>
                       )}
                       {showItemsTab && (
-                        <Button
-                          variant={location.pathname === '/items' ? "default" : "ghost"}
-                          size="sm"
-                          asChild
-                        >
-                          <Link to="/items">Warranty Items</Link>
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant={
+                                location.pathname === '/items' ||
+                                location.pathname.startsWith('/terms-versions')
+                                  ? "default"
+                                  : "ghost"
+                              }
+                              size="sm"
+                            >
+                              Catalog
+                              <ChevronDown className="h-3 w-3 ml-1 opacity-70" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            <DropdownMenuItem asChild>
+                              <Link to="/items" className="cursor-pointer">
+                                Items
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/terms-versions" className="cursor-pointer">
+                                Terms &amp; Conditions
+                              </Link>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                       {(showQueriesTab || showTicketsTab) && (
                         <DropdownMenu>

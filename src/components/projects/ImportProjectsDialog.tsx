@@ -19,6 +19,7 @@ import {
   useRollbackProjectImportMutation,
   useUploadProjectsMutation,
 } from "@/store/api/projectImport";
+import { useProjectImportTemplateDownload } from "@/lib/api/services/templateDownload";
 
 interface ImportProjectsDialogProps {
   open: boolean;
@@ -49,6 +50,8 @@ export const ImportProjectsDialog = ({
 
   const [uploadProjects, { isLoading: uploading }] = useUploadProjectsMutation();
   const [rollback, { isLoading: rollingBack }] = useRollbackProjectImportMutation();
+  const { download: downloadTemplate, isLoading: downloadingTemplate } =
+    useProjectImportTemplateDownload();
 
   const { data: statusResp, refetch: refetchStatus } = useGetProjectImportStatusQuery(
     { batchId: batchId ?? "" },
@@ -181,11 +184,15 @@ export const ImportProjectsDialog = ({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>1. Download the template</Label>
-            <Button asChild variant="outline" size="sm">
-              <a href="/api/download/project-template" download>
-                <Download className="h-4 w-4 mr-2" />
-                project-import-template.csv
-              </a>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={downloadTemplate}
+              disabled={downloadingTemplate}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              project-import-template.csv
             </Button>
             <p className="text-xs text-muted-foreground">
               Columns:{" "}

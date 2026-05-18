@@ -233,7 +233,6 @@ const Projects = () => {
         <ImportProjectsDialog
           open={importOpen}
           onOpenChange={setImportOpen}
-          builderId={effectiveOrganization?.id}
           onCompleted={fetchProjects}
         />
       )}

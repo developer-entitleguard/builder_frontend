@@ -25,13 +25,12 @@ export const projectImportApi = api.injectEndpoints({
   endpoints: (build) => ({
     uploadProjects: build.mutation<
       DefaultListResponse<{ batchId: string; status: string }>,
-      { builderId: string; file: File }
+      { file: File }
     >({
-      queryFn: async ({ builderId, file }) => {
+      queryFn: async ({ file }) => {
         try {
           const form = new FormData();
           form.append('file', file);
-          form.append('builderId', builderId);
           const userData = localStorage.getItem('userData');
           let jwt: string | undefined;
           try {
@@ -39,7 +38,7 @@ export const projectImportApi = api.injectEndpoints({
           } catch {
             jwt = undefined;
           }
-          const res = await fetch(`/api/upload/projects?builderId=${encodeURIComponent(builderId)}`, {
+          const res = await fetch(`/api/upload/projects`, {
             method: 'POST',
             headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
             body: form,

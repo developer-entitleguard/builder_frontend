@@ -24,7 +24,6 @@ import { useProjectImportTemplateDownload } from "@/lib/api/services/templateDow
 interface ImportProjectsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  builderId: string | undefined;
   /** Called after a successful upload — typically refetches the projects list. */
   onCompleted?: () => void;
 }
@@ -40,7 +39,6 @@ const STATUS_BADGE: Record<string, "default" | "secondary" | "destructive" | "ou
 export const ImportProjectsDialog = ({
   open,
   onOpenChange,
-  builderId,
   onCompleted,
 }: ImportProjectsDialogProps) => {
   const { toast } = useToast();
@@ -117,16 +115,8 @@ export const ImportProjectsDialog = ({
       toast({ title: "Pick a CSV first" });
       return;
     }
-    if (!builderId) {
-      toast({
-        title: "No organisation selected",
-        description: "Pick an organisation before uploading.",
-        variant: "destructive",
-      });
-      return;
-    }
     try {
-      const res = await uploadProjects({ builderId, file }).unwrap();
+      const res = await uploadProjects({ file }).unwrap();
       if (!res.success) {
         toast({ title: "Upload failed", description: res.message, variant: "destructive" });
         return;
@@ -275,7 +265,7 @@ export const ImportProjectsDialog = ({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
-          <Button onClick={handleUpload} disabled={uploading || !file || !builderId}>
+          <Button onClick={handleUpload} disabled={uploading || !file}>
             <Upload className="h-4 w-4 mr-2" />
             {uploading ? "Uploading…" : "Upload"}
           </Button>

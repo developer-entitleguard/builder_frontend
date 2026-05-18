@@ -53,7 +53,8 @@ export interface CreateProjectData {
   activities_visible_to_homeowner?: boolean;
 }
 
-const mapPropertyType = (value: string): PropertyType => {
+const mapPropertyType = (value: string | null | undefined): PropertyType => {
+  if (!value) return "custom";
   const key = value.toLowerCase();
   switch (key) {
     case "house":
@@ -75,7 +76,8 @@ const mapPropertyType = (value: string): PropertyType => {
   }
 };
 
-const mapStatus = (value: string): ProjectStatus => {
+const mapStatus = (value: string | null | undefined): ProjectStatus => {
+  if (!value) return "planning";
   const key = value.toLowerCase().replace(/\s+/g, "_");
   switch (key) {
     case "planning":

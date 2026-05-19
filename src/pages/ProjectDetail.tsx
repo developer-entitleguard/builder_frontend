@@ -61,7 +61,8 @@ const hasBuilderAuth = (): boolean => {
   }
 };
 
-const mapPropertyTypeLocal = (value: string): PropertyType => {
+const mapPropertyTypeLocal = (value: string | null | undefined): PropertyType => {
+  if (!value) return "custom";
   const key = value.toLowerCase();
   switch (key) {
     case "house":
@@ -83,7 +84,8 @@ const mapPropertyTypeLocal = (value: string): PropertyType => {
   }
 };
 
-const mapStatusLocal = (value: string): ProjectStatus => {
+const mapStatusLocal = (value: string | null | undefined): ProjectStatus => {
+  if (!value) return "planning";
   const key = value.toLowerCase().replace(/\s+/g, "");
   switch (key) {
     case "planning":
@@ -174,9 +176,10 @@ const ProjectDetail = () => {
   // Resolve the current project's statusId from the statuses API
   const resolveStatusId = (): string | null => {
     if (!project) return null;
-    const normalizedStatus = project.status.toLowerCase().replace(/[\s_]/g, "");
+    const normalizedStatus = (project.status ?? "").toLowerCase().replace(/[\s_]/g, "");
+    if (!normalizedStatus) return null;
     const match = projectStatuses.find(
-      s => s.name.toLowerCase().replace(/[\s_]/g, "") === normalizedStatus
+      s => (s.name ?? "").toLowerCase().replace(/[\s_]/g, "") === normalizedStatus
     );
     return match?.id ?? null;
   };
@@ -208,10 +211,12 @@ const ProjectDetail = () => {
     const success = await updateProject(id, finalData);
 
     if (success) {
-      const newStatus = finalData.status ?? project.status;
+      const newStatus = finalData.status ?? project.status ?? "";
+      const normalizedNew = newStatus.toLowerCase().replace(/[\s_]/g, "");
       const newStatusId = finalData.statusId ??
-        projectStatuses.find(s => s.name.toLowerCase().replace(/[\s_]/g, "") === newStatus.toLowerCase().replace(/[\s_]/g, ""))?.id ??
-        null;
+        (normalizedNew
+          ? projectStatuses.find(s => (s.name ?? "").toLowerCase().replace(/[\s_]/g, "") === normalizedNew)?.id ?? null
+          : null);
       setProject({
         ...project,
         name: finalData.name,

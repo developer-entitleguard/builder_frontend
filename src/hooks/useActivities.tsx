@@ -117,7 +117,7 @@ export const useActivities = (projectId: string | undefined) => {
   const pendingStatusId = useMemo(() => {
     if (!activityStatusesResponse?.data) return undefined;
     const pending = activityStatusesResponse.data.find(
-      (s) => s.name.toUpperCase() === "PENDING"
+      (s) => (s.name ?? "").toUpperCase() === "PENDING"
     );
     return pending?.id;
   }, [activityStatusesResponse]);

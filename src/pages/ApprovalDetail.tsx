@@ -222,7 +222,7 @@ const ApprovalDetail = () => {
       const statuses = statusResponse?.success && Array.isArray(statusResponse.data) ? statusResponse.data : [];
       const actionToName: Record<string, string> = { approved: "Approved", rejected: "Rejected", cancelled: "Cancelled" };
       const name = actionToName[confirmDialog.action];
-      const statusId = statuses.find((s) => s.name.toLowerCase() === confirmDialog.action)?.id
+      const statusId = statuses.find((s) => (s.name ?? "").toLowerCase() === confirmDialog.action)?.id
         ?? statuses.find((s) => s.name === name)?.id;
       if (!statusId) {
         toast({ title: "Error", description: "Could not resolve status.", variant: "destructive" });

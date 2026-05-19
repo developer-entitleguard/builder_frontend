@@ -114,7 +114,7 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
 
     const targetName = mapProjectStatusToApiName(project.status);
     const match = projectStatuses.find(
-      (s) => s.name.toUpperCase() === targetName
+      (s) => (s.name ?? "").toUpperCase() === targetName
     );
 
     if (match) {

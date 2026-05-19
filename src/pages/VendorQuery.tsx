@@ -178,10 +178,10 @@ const VendorQuery = () => {
   const done = isComplete(queryData?.status?.name);
 
   const completedStatusId = statuses.find(
-    (s) => s.name.toUpperCase() === "COMPLETED"
+    (s) => (s.name ?? "").toUpperCase() === "COMPLETED"
   )?.id;
   const createdStatusId = statuses.find(
-    (s) => s.name.toUpperCase() === "CREATED"
+    (s) => (s.name ?? "").toUpperCase() === "CREATED"
   )?.id;
 
   // ── Handlers ──

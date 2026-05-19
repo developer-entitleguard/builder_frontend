@@ -104,7 +104,7 @@ export const RequestApprovalDialog = ({
   });
   const pendingStatusId =
     approvalStatusResponse?.data.find(
-      (s) => s.name.toUpperCase() === "PENDING"
+      (s) => (s.name ?? "").toUpperCase() === "PENDING"
     )?.id ?? null;
 
   const handleRegistrationChange = (regId: string) => {

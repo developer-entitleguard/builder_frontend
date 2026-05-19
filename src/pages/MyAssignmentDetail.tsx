@@ -108,13 +108,13 @@ const MyAssignmentDetail = () => {
   const done = isComplete(queryData?.status?.name);
 
   const completedStatusId = statuses.find(
-    (s) => s.name.toUpperCase().replace(/\s+/g, "_") === "COMPLETED" || s.name.toUpperCase() === "DONE"
+    (s) => (s.name ?? "").toUpperCase().replace(/\s+/g, "_") === "COMPLETED" || (s.name ?? "").toUpperCase() === "DONE"
   )?.id;
   const createdStatusId = statuses.find(
-    (s) => s.name.toUpperCase() === "CREATED"
+    (s) => (s.name ?? "").toUpperCase() === "CREATED"
   )?.id;
   const inProgressStatusId = statuses.find(
-    (s) => s.name.toUpperCase().replace(/\s+/g, "_") === "IN_PROGRESS"
+    (s) => (s.name ?? "").toUpperCase().replace(/\s+/g, "_") === "IN_PROGRESS"
   )?.id;
 
   const queryFiles = (queryData as unknown as { queryFileMaps?: Array<{ id: string; type: string; files: { id: string; name: string; fileType?: string; filePath?: string } }> })?.queryFileMaps ?? [];

@@ -58,7 +58,7 @@ export const BulkActionsBar = ({
   } = useProjectsQuery(undefined, { skip: !projectDialogOpen });
 
   const activeProjects = (projectsData?.data ?? []).filter(
-    (p) => !["completed", "cancelled"].includes(p.status.toLowerCase())
+    (p) => !["completed", "cancelled"].includes((p.status ?? "").toLowerCase())
   );
 
   const {

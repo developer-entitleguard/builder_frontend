@@ -190,13 +190,13 @@ const QueryDetail = () => {
   // ── Target status IDs ──
   const assignedToVendorStatusId = statuses.find(
     (s) =>
-      s.name.toUpperCase().replace(/\s+/g, "_") === "ASSIGNED_TO_VENDOR"
+      (s.name ?? "").toUpperCase().replace(/\s+/g, "_") === "ASSIGNED_TO_VENDOR"
   )?.id;
   const createdStatusId = statuses.find(
-    (s) => s.name.toUpperCase() === "CREATED"
+    (s) => (s.name ?? "").toUpperCase() === "CREATED"
   )?.id;
   const doneStatusId = statuses.find(
-    (s) => s.name.toUpperCase() === "DONE"
+    (s) => (s.name ?? "").toUpperCase() === "DONE"
   )?.id;
 
   // ── Fetch query ──

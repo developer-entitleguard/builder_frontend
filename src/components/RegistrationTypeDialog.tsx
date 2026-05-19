@@ -29,7 +29,7 @@ export const RegistrationTypeDialog = ({ open, onOpenChange, onSuccess }: Regist
   const { data: projectsResponse, isLoading: projectsLoading } = useProjectsQuery();
 
   const activeProjects = (projectsResponse?.data ?? []).filter(
-    (p) => !['completed', 'cancelled'].includes(p.status.toLowerCase())
+    (p) => !['completed', 'cancelled'].includes((p.status ?? '').toLowerCase())
   );
 
   const handleSingleRegistration = () => {

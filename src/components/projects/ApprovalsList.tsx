@@ -94,7 +94,7 @@ export const ApprovalsList = ({
 
   const selectedStatusId =
     statusFilter !== "all"
-      ? statusOptions.find((s) => s.name.toLowerCase() === statusFilter)?.id
+      ? statusOptions.find((s) => (s.name ?? "").toLowerCase() === statusFilter)?.id
       : undefined;
   const { data: approvalsResponse, isLoading: apiLoading } = useGetProjectApprovalsQuery({
     projectId,
@@ -149,11 +149,13 @@ export const ApprovalsList = ({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
-            {statusOptions.map((status) => (
-              <SelectItem key={status.id} value={status.name.toLowerCase()}>
-                {status.name.charAt(0) + status.name.slice(1).toLowerCase()}
-              </SelectItem>
-            ))}
+            {statusOptions
+              .filter((status) => !!status.name)
+              .map((status) => (
+                <SelectItem key={status.id} value={status.name.toLowerCase()}>
+                  {status.name.charAt(0) + status.name.slice(1).toLowerCase()}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
 

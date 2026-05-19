@@ -82,9 +82,9 @@ export const LinkRegistrationDialog = ({
   }, [registrationsResponse]);
 
   const filteredRegistrations = registrations.filter(reg =>
-    reg.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    reg.customer_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    reg.property_address.toLowerCase().includes(searchTerm.toLowerCase())
+    (reg.customer_name ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (reg.customer_email ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (reg.property_address ?? "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const toggleSelection = (id: string) => {

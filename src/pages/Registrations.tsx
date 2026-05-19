@@ -78,7 +78,8 @@ const STATUS_ORDER: string[] = [
 ];
 
 const prettyStatusLabel = (reg: HomeownerRegistration): string => {
-  const raw = reg.status_name ?? reg.status;
+  const raw = reg.status_name ?? reg.status ?? "";
+  if (!raw) return "Draft";
   return raw
     .replace(/_/g, " ")
     .toLowerCase()
@@ -283,7 +284,8 @@ const Registrations = () => {
     return projects.find((p) => p.id === projectId)?.name || "Unknown Project";
   };
 
-  const apiStatusToFilterValue = (name: string): string => {
+  const apiStatusToFilterValue = (name: string | null | undefined): string => {
+    if (!name) return "unknown";
     const n = name.toUpperCase().replace(/\s+/g, " ");
     if (n === "DRAFT") return "draft";
     if (n === "ENTITLEMENT") return "documents_pending";
@@ -296,10 +298,12 @@ const Registrations = () => {
 
   const statusOptions = useMemo(() => {
     const list = statusesData?.data ?? [];
-    return list.map((s) => ({
-      value: apiStatusToFilterValue(s.name),
-      label: s.name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-    }));
+    return list
+      .filter((s): s is typeof s & { name: string } => !!s?.name)
+      .map((s) => ({
+        value: apiStatusToFilterValue(s.name),
+        label: s.name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      }));
   }, [statusesData?.data]);
 
   // ── Split handed vs. still-in-progress ──

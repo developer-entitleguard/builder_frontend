@@ -14,6 +14,7 @@ import { useDeleteActivitiesMutation } from "@/store/api/activities";
 import { AddActivityDialog } from "./AddActivityDialog";
 import { ActivityDetail } from "./ActivityDetail";
 import { ActivityTypeDialog } from "./ActivityTypeDialog";
+import { GenerateActivitiesDialog } from "./GenerateActivitiesDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +36,8 @@ import {
   FolderPlus,
   Trash2,
   Pencil,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Sparkles
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -97,6 +99,7 @@ export const ActivityList = ({
   onRefreshCategories
 }: ActivityListProps) => {
   const [typeDialogOpen, setTypeDialogOpen] = useState(false);
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [singleDialogOpen, setSingleDialogOpen] = useState(false);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -226,9 +229,13 @@ export const ActivityList = ({
         </div>
         <h3 className="text-lg font-semibold mb-2">No activities yet</h3>
         <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-          Start by adding a category, then add activities within it. Or import activities from a CSV file.
+          Generate a list with AI from a short description, add a category and activities manually, or import from a CSV file.
         </p>
         <div className="flex items-center justify-center gap-3">
+          <Button onClick={() => setGenerateDialogOpen(true)}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            Generate activities from a prompt
+          </Button>
           <Button variant="outline" onClick={() => setIsAddingCategory(true)}>
             <FolderPlus className="h-4 w-4 mr-2" />
             Add Category
@@ -253,6 +260,15 @@ export const ActivityList = ({
           </div>
         )}
 
+        <GenerateActivitiesDialog
+          open={generateDialogOpen}
+          onOpenChange={setGenerateDialogOpen}
+          projectId={projectId}
+          onSuccess={() => {
+            onRefresh?.();
+            onRefreshCategories?.();
+          }}
+        />
         <ActivityTypeDialog
           open={typeDialogOpen}
           onOpenChange={setTypeDialogOpen}

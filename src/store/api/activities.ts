@@ -137,6 +137,22 @@ export const activitiesApi = api.injectEndpoints({
       ],
     }),
 
+    // POST /api/builder/projects/:projectId/activities/generate (AI generation)
+    generateActivities: build.mutation<
+      BuilderActivitiesResponse,
+      { projectId: string; prompt: string }
+    >({
+      query: ({ projectId, prompt }) => ({
+        url: `/api/builder/projects/${projectId}/activities/generate`,
+        method: "POST",
+        body: { prompt },
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: "Activities", id: projectId },
+        { type: "ActivityCategories", id: projectId },
+      ],
+    }),
+
     // PUT /api/builder/projects/:projectId/activities/:id
     updateActivity: build.mutation<
       BuilderActivityResponse,
@@ -219,6 +235,7 @@ export const {
   useGetActivityUpdatesQuery,
   usePostActivityUpdateMutation,
   useCreateActivityMutation,
+  useGenerateActivitiesMutation,
   useUpdateActivityMutation,
   useDeleteActivityMutation,
   useDeleteActivitiesMutation,

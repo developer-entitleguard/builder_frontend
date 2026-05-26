@@ -34,6 +34,9 @@ const PROMPT_TEMPLATE = `Your project's type, location, BAL rating and any regis
 
 Example: "Double-storey 4-bedroom home with an attached garage and a pool on a sloping block. Premium kitchen and bathroom finishes. Exclude landscaping."`;
 
+const GENERIC_ERROR =
+  "We couldn't generate activities right now. Please try again in a moment.";
+
 type Feedback = { type: "guidance" | "error"; message: string };
 
 export const GenerateActivitiesDialog = ({
@@ -72,34 +75,34 @@ export const GenerateActivitiesDialog = ({
     try {
       const result = await generateActivities({ projectId, prompt: trimmed }).unwrap();
 
-      // success === false is used for "description not usable" — show the AI's
-      // guidance inline and keep the dialog open so the builder can revise.
       if (!result?.success) {
-        setFeedback({
-          type: "guidance",
-          message: result?.message || PROMPT_TEMPLATE,
-        });
+        // Only the flagged "insufficient input" case is shown as actionable
+        // guidance; anything else is a system error with a generic message.
+        const reason =
+          result?.data && !Array.isArray(result.data)
+            ? result.data.reason
+            : undefined;
+
+        if (reason === "INSUFFICIENT_INPUT") {
+          setFeedback({ type: "guidance", message: result.message || PROMPT_TEMPLATE });
+        } else {
+          setFeedback({ type: "error", message: GENERIC_ERROR });
+        }
         return;
       }
 
+      const count = Array.isArray(result.data) ? result.data.length : 0;
       toast({
         title: "Activities generated",
-        description:
-          result.message ||
-          `Added ${result.data?.length ?? 0} activities to this project.`,
+        description: result.message || `Added ${count} activities to this project.`,
       });
 
       reset();
       onOpenChange(false);
       onSuccess?.();
-    } catch (error: unknown) {
-      setFeedback({
-        type: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Something went wrong while generating activities. Please try again.",
-      });
+    } catch {
+      // Never surface raw/internal error detail to the UI.
+      setFeedback({ type: "error", message: GENERIC_ERROR });
     }
   };
 

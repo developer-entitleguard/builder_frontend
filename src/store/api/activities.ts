@@ -57,6 +57,14 @@ export interface BuilderActivityUpdate {
   [key: string]: unknown;
 }
 
+export interface GenerateActivitiesResponse {
+  success: boolean;
+  message: string;
+  // Array on success; a small marker object (e.g. { reason }) on a soft failure
+  // such as insufficient input; null on a system error.
+  data: BuilderActivityApi[] | { reason?: string } | null;
+}
+
 export interface CreateBuilderActivityBody {
   // New builder API fields (requestDto) from swagger
   categoryId?: string | null;
@@ -139,7 +147,7 @@ export const activitiesApi = api.injectEndpoints({
 
     // POST /api/builder/projects/:projectId/activities/generate (AI generation)
     generateActivities: build.mutation<
-      BuilderActivitiesResponse,
+      GenerateActivitiesResponse,
       { projectId: string; prompt: string }
     >({
       query: ({ projectId, prompt }) => ({

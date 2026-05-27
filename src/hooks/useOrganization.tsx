@@ -59,6 +59,17 @@ interface OrganizationContextType {
 const SELECTED_ORG_KEY = 'selected_organization_id';
 const IMPERSONATED_ORG_KEY = 'impersonated_organization_id';
 
+/**
+ * Same-tab event dispatched whenever `localStorage.userData` is written or
+ * removed (login, signout, session refresh). The browser only fires the
+ * built-in `storage` event for OTHER tabs, so without this custom event the
+ * provider would have no way to react to its own tab's auth changes —
+ * leading to a stale `currentRole=null` after login and an "Access denied"
+ * flash on /admin until the user hard-refreshes. Pages that write `userData`
+ * MUST dispatch this event so the provider stays in sync.
+ */
+export const USER_DATA_EVENT = 'userdata-updated';
+
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
 
 export const OrganizationProvider = ({ children }: { children: React.ReactNode }) => {
@@ -157,6 +168,20 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  /**
+   * Resets context state to its logged-out shape. Extracted so both the
+   * Supabase-no-session path and the userdata-cleared event handler can
+   * share the exact same reset — keeps the two branches from drifting.
+   */
+  const resetToLoggedOut = useCallback(() => {
+    setOrganizations([]);
+    setCurrentOrganizationState(null);
+    setCurrentRole(null);
+    setBuilderRole(null);
+    setImpersonatedOrgState(null);
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     // Prefer builder JWT-based auth when present, regardless of Supabase user state
     const fromBuilder = initFromBuilderAuth();
@@ -169,14 +194,37 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
       fetchUserOrganizations();
     } else {
       setLoading(true);
-      setOrganizations([]);
-      setCurrentOrganizationState(null);
-      setCurrentRole(null);
-      setBuilderRole(null);
-      setImpersonatedOrgState(null);
-      setLoading(false);
+      resetToLoggedOut();
     }
-  }, [user, initFromBuilderAuth]);
+  }, [user, initFromBuilderAuth, resetToLoggedOut]);
+
+  /**
+   * Re-sync from localStorage whenever auth state changes in this tab
+   * (custom {@link USER_DATA_EVENT} dispatched by Auth/Header) or in another
+   * tab (native `storage` event). Without this listener the provider's
+   * one-shot mount effect leaves `currentRole=null` after a login that
+   * happened later in the session, which surfaces as a false "Access
+   * denied" alert on guarded pages until the user hard-refreshes.
+   */
+  useEffect(() => {
+    const reload = () => {
+      const fromBuilder = initFromBuilderAuth();
+      if (!fromBuilder) {
+        resetToLoggedOut();
+      } else {
+        setLoading(false);
+      }
+    };
+    const storageHandler = (e: StorageEvent) => {
+      if (e.key === 'userData') reload();
+    };
+    window.addEventListener(USER_DATA_EVENT, reload);
+    window.addEventListener('storage', storageHandler);
+    return () => {
+      window.removeEventListener(USER_DATA_EVENT, reload);
+      window.removeEventListener('storage', storageHandler);
+    };
+  }, [initFromBuilderAuth, resetToLoggedOut]);
 
   // Auto-select organization when organizations load
   useEffect(() => {

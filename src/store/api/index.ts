@@ -16,6 +16,7 @@ import './builderSupplier';
 import './vendorSchedule';
 import './roleDashboards';
 import './projectImport';
+import './builderOnboarding';
 import './tickets';
 import './bomUpload';
 import './query';
@@ -74,6 +75,7 @@ export * from './builderSupplier';
 export * from './vendorSchedule';
 export * from './roleDashboards';
 export * from './projectImport';
+export * from './builderOnboarding';
 export * from './tickets';
 
 // BOM upload

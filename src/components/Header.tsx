@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
-import { useOrganization } from "@/hooks/useOrganization";
+import { USER_DATA_EVENT, useOrganization } from "@/hooks/useOrganization";
 import OrganizationSelector from "@/components/OrganizationSelector";
 import {
   DropdownMenu,
@@ -87,6 +87,9 @@ const Header = () => {
   const handleSignOut = () => {
     if (hasBuilderAuth()) {
       localStorage.removeItem("userData");
+      // Tell OrganizationProvider to reset its in-memory state. Otherwise a
+      // re-login in the same tab would race against stale context state.
+      window.dispatchEvent(new Event(USER_DATA_EVENT));
       navigate("/auth", { replace: true });
     } else {
       signOut();
@@ -105,6 +108,13 @@ const Header = () => {
         label: "Registrations",
         to: "/registrations",
         activePrefix: "/registrations",
+      });
+    }
+    if (showProjectsTab) {
+      mobileNavItems.push({
+        label: "Bulk Onboarding",
+        to: "/onboarding/bulk",
+        activePrefix: "/onboarding/bulk",
       });
     }
     if (showItemsTab) {
@@ -234,6 +244,13 @@ const Header = () => {
                               <DropdownMenuItem asChild>
                                 <Link to="/registrations" className="cursor-pointer">
                                   Registrations
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            {showProjectsTab && (
+                              <DropdownMenuItem asChild>
+                                <Link to="/onboarding/bulk" className="cursor-pointer">
+                                  Bulk Onboarding
                                 </Link>
                               </DropdownMenuItem>
                             )}

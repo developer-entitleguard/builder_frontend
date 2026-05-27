@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { USER_DATA_EVENT } from '@/hooks/useOrganization';
 import { useSignInMutation, useSendVerifyMailMutation } from '@/store/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -119,6 +120,11 @@ const Auth = () => {
             builderOrganization: builderOrg,
           })
         );
+        // Notify OrganizationProvider so it picks up the new role + org
+        // before we navigate. Without this the provider's mount effect (which
+        // already ran with an empty localStorage) leaves currentRole=null,
+        // and guarded pages like /admin briefly flash "Access denied".
+        window.dispatchEvent(new Event(USER_DATA_EVENT));
         toast({
           title: "Welcome back!",
           description: response.message ?? "You have been signed in successfully."

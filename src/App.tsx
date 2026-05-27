@@ -24,6 +24,7 @@ import NotFound from "./pages/NotFound";
 import ConsentConfirmation from "./pages/ConsentConfirmation";
 import Projects from "./pages/Projects";
 import ProjectCreate from "./pages/ProjectCreate";
+import BuilderOnboarding from "./pages/BuilderOnboarding";
 import ProjectDetail from "./pages/ProjectDetail";
 import ApprovalDetail from "./pages/ApprovalDetail";
 import AcceptInvitation from "./pages/AcceptInvitation";
@@ -218,6 +219,14 @@ const App = () => (
               <Route path="/projects/new" element={
                 <ProtectedRoute>
                   <ProjectCreate />
+                </ProtectedRoute>
+              } />
+              {/* Bulk onboarding — gated to ADMINISTRATOR / PROJECT_MANAGER. */}
+              <Route path="/onboarding/bulk" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                    <BuilderOnboarding />
+                  </RoleGate>
                 </ProtectedRoute>
               } />
               <Route path="/projects/:projectId/approvals/:approvalId" element={

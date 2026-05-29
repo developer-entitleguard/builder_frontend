@@ -8,6 +8,8 @@ import { useCreateBuilderCustomerMutation, useGetCustomerDetailsQuery, useDelete
 import { TermsVersionPicker } from '@/components/TermsVersionPicker';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RegistrationComplianceTab } from '@/components/compliance/RegistrationComplianceTab';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft,
@@ -410,12 +412,23 @@ const RegistrationDetail = () => {
 
     try {
       if (isBuilderFlow) {
-        await createCustomerEntitlement({ builderCustomerId: registration.id }).unwrap();
+        const res = await createCustomerEntitlement({ builderCustomerId: registration.id }).unwrap();
+        // The backend gates handover on outstanding compliance documents and
+        // returns success=false with a human-readable reason when blocked.
+        if (res && res.success === false) {
+          toast({
+            title: "Handover blocked",
+            description: res.message || "Outstanding compliance documents must be resolved first.",
+            variant: "destructive",
+          });
+          return;
+        }
         toast({
           title: "Entitlement created",
           description: "The homeowner entitlement has been created for this handed over property.",
         });
         setHandoverDialogOpen(false);
+        await refetchCustomerDetails();
       } else {
         const { error } = await supabase
           .from('homeowner_registrations')
@@ -559,6 +572,13 @@ const RegistrationDetail = () => {
           </div>
         </div>
 
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            {isBuilderFlow && <TabsTrigger value="compliance">Compliance</TabsTrigger>}
+          </TabsList>
+
+          <TabsContent value="overview">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Customer Information */}
           <Card>
@@ -870,6 +890,14 @@ const RegistrationDetail = () => {
             }}
           />
         </div>
+          </TabsContent>
+
+          {isBuilderFlow && id && (
+            <TabsContent value="compliance">
+              <RegistrationComplianceTab registrationId={id} readOnly={isHandedStatus} />
+            </TabsContent>
+          )}
+        </Tabs>
       </main>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

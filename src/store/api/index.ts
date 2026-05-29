@@ -28,6 +28,8 @@ import './pricing';
 import './terms';
 // PRD_Org_Terms_And_Conditions Phase 4 — builder org-scoped customer-facing T&C.
 import './orgTerms';
+// PRD_Compliance_Documents — project/registration compliance docs + handover gating.
+import './complianceDocuments';
 
 // Export the main API slice
 export { api } from './apiSlice';
@@ -109,6 +111,9 @@ export * from './pricing';
 // Terms
 export * from './terms';
 export * from './orgTerms';
+
+// Compliance documents
+export * from './complianceDocuments';
 
 // Re-export types
 export type * from '@/lib/api/types';

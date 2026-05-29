@@ -74,6 +74,10 @@ export const api = createApi({
     'Warranty',
     // PRD_Org_Terms_And_Conditions Phase 4.
     'OrgTerms',
+    // PRD_Compliance_Documents — project/registration compliance docs + handover gating.
+    'ComplianceDocuments',
+    'ComplianceAttachments',
+    'HandoverReadiness',
   ],
   endpoints: () => ({}),
 });

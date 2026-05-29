@@ -10,6 +10,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { canManageProjects } from "@/lib/roles";
 import { ImportProjectsDialog } from "@/components/projects/ImportProjectsDialog";
+import { Progress } from "@/components/ui/progress";
+import { useGetProjectComplianceCompletenessQuery } from "@/store/api/complianceDocuments";
 import {
   Plus,
   FolderOpen,
@@ -56,6 +58,28 @@ const statusConfig: Record<ProjectStatus, { color: string; label: string }> = {
   cancelled: { color: "bg-red-100 text-red-700", label: "Cancelled" }
 };
 
+const ProjectComplianceSummary = ({ projectId }: { projectId: string }) => {
+  const { data } = useGetProjectComplianceCompletenessQuery(
+    { projectId },
+    { skip: !hasBuilderAuth() }
+  );
+  const completeness = data?.data;
+  if (!completeness || completeness.total === 0) return null;
+
+  return (
+    <div className="mt-3 pt-3 border-t">
+      <div className="flex items-center justify-between text-xs mb-1">
+        <span className="text-muted-foreground">Compliance</span>
+        <span className="font-medium">
+          {completeness.requiredReceived}/{completeness.required} required
+          {completeness.readyForHandover ? " · Ready" : ""}
+        </span>
+      </div>
+      <Progress value={completeness.completenessPercent} className="h-1.5" />
+    </div>
+  );
+};
+
 const ProjectCard = ({ project }: { project: Project }) => {
   const typeConfig = propertyTypeConfig[project.property_type];
   const TypeIcon = typeConfig.icon;
@@ -73,14 +97,14 @@ const ProjectCard = ({ project }: { project: Project }) => {
               {status.label}
             </Badge>
           </div>
-          
+
           <h3 className="font-semibold text-lg mb-1 text-foreground">{project.name}</h3>
-          
+
           <div className="flex items-center text-sm text-muted-foreground mb-2">
             <MapPin className="h-3.5 w-3.5 mr-1" />
             <span className="truncate">{project.address}, {project.city}</span>
           </div>
-          
+
           <div className="flex items-center text-sm text-muted-foreground">
             <Badge variant="outline" className="text-xs">
               {typeConfig.label}
@@ -92,6 +116,8 @@ const ProjectCard = ({ project }: { project: Project }) => {
               </span>
             )}
           </div>
+
+          <ProjectComplianceSummary projectId={project.id} />
         </CardContent>
       </Card>
     </Link>

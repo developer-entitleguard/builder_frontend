@@ -16,6 +16,7 @@ import { ActivityList } from "@/components/projects/ActivityList";
 import { ApprovalsList } from "@/components/projects/ApprovalsList";
 import { ProjectRegistrations } from "@/components/projects/ProjectRegistrations";
 import { ProjectPricing } from "@/components/projects/ProjectPricing";
+import { ProjectComplianceSection } from "@/components/compliance/ProjectComplianceSection";
 import { EditProjectDialog } from "@/components/projects/EditProjectDialog";
 import { 
   ArrowLeft,
@@ -322,6 +323,9 @@ const ProjectDetail = () => {
             <TabsTrigger value="approvals">
               Approvals ({approvalsCount})
             </TabsTrigger>
+            <TabsTrigger value="compliance">
+              Compliance
+            </TabsTrigger>
             <TabsTrigger value="pricing" className="flex items-center gap-1">
               <DollarSign className="h-4 w-4" />
               Pricing
@@ -364,6 +368,10 @@ const ProjectDetail = () => {
             />
           </TabsContent>
           
+          <TabsContent value="compliance">
+            <ProjectComplianceSection projectId={id!} />
+          </TabsContent>
+
           <TabsContent value="pricing">
             <ProjectPricing
               project={project}

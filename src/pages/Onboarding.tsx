@@ -11,6 +11,8 @@ import CustomerDetailsForm, { type CustomerDetailsFormData, type CustomerDetails
 import ItemsSelectionForm from "@/components/ItemsSelectionForm";
 import ReviewApprovalForm from "@/components/ReviewApprovalForm";
 import SendConfirmationForm from "@/components/SendConfirmationForm";
+import { RegistrationComplianceTab } from "@/components/compliance/RegistrationComplianceTab";
+import { Check, Circle } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -78,6 +80,18 @@ const Onboarding = () => {
   const effectiveUserId = user?.id ?? getBuilderId();
   const builderId = organization?.id ?? getBuilderId();
   const editingId = searchParams.get('id');
+
+  const isBuilderFlow = hasBuilderAuth();
+  const steps = isBuilderFlow
+    ? ['customer', 'items', 'documents', 'review', 'send']
+    : ['customer', 'items', 'review', 'send'];
+  const stepLabels: Record<string, string> = {
+    customer: 'Customer',
+    items: 'Items',
+    documents: 'Documents',
+    review: 'Review',
+    send: 'Send',
+  };
 
   // Builder flow: load customer from API when opening with ?id= (customer id)
   const { data: customerDetailsResponse, isLoading: isLoadingCustomer, error: customerError } = useGetCustomerDetailsQuery(
@@ -431,7 +445,6 @@ const Onboarding = () => {
   };
 
   const handleNextStep = () => {
-    const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex < steps.length - 1) {
       setCurrentStep(steps[currentIndex + 1]);
@@ -439,11 +452,22 @@ const Onboarding = () => {
   };
 
   const handlePreviousStep = () => {
-    const steps = ['customer', 'items', 'review', 'send'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex > 0) {
       setCurrentStep(steps[currentIndex - 1]);
     }
+  };
+
+  const goToStep = (stepId: string) => {
+    if (isBuilderFlow && ['documents', 'review', 'send'].includes(stepId) && !registrationId) {
+      toast({
+        title: "Save customer details first",
+        description: "Complete the Customer step before managing documents or sending.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCurrentStep(stepId);
   };
 
   const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
@@ -558,6 +582,23 @@ const Onboarding = () => {
             onSaveCustomerBeforeContinue={hasBuilderAuth() ? saveCustomerFromFormData : undefined}
           />
         );
+      case 'documents':
+        return (
+          <div className="space-y-6">
+            {registrationId ? (
+              <RegistrationComplianceTab registrationId={registrationId} readOnly={isReadOnly} />
+            ) : (
+              <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+                Save customer details first to manage compliance documents for this registration.
+              </div>
+            )}
+            {!isReadOnly && (
+              <div className="flex justify-end">
+                <Button onClick={handleNextStep}>Continue</Button>
+              </div>
+            )}
+          </div>
+        );
       case 'review':
         return (
           <ReviewApprovalForm
@@ -611,34 +652,43 @@ const Onboarding = () => {
                   Save & Exit
                 </Button>
                 <div className="text-sm text-muted-foreground">
-                  Step {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) + 1} of 5
+                  Step {steps.indexOf(currentStep) + 1} of {steps.length}
                 </div>
               </div>
             </div>
-            
-            {/* Navigation */}
-            <div className="flex items-center justify-between">
-              <div>
-                {['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) > 0 && (
-                  <Button variant="outline" onClick={handlePreviousStep}>
-                    Previous
-                  </Button>
-                )}
-              </div>
-              <div className="flex space-x-2">
-                {['customer', 'items', 'documents', 'review', 'send'].map((step, index) => (
-                  <div
+
+            {/* Step navigation tabs */}
+            <div className="flex flex-wrap items-center gap-2 border-b pb-4">
+              {steps.map((step, index) => {
+                const currentIndex = steps.indexOf(currentStep);
+                const isCompleted = index < currentIndex;
+                const isCurrent = step === currentStep;
+                return (
+                  <button
                     key={step}
-                    className={`w-3 h-3 rounded-full ${
-                      ['customer', 'items', 'documents', 'review', 'send'].indexOf(currentStep) >= index
-                        ? 'bg-primary'
-                        : 'bg-muted'
+                    type="button"
+                    onClick={() => goToStep(step)}
+                    className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                      isCurrent
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-muted'
                     }`}
-                  />
-                ))}
-              </div>
+                  >
+                    <span className="flex h-5 w-5 items-center justify-center">
+                      {isCompleted ? (
+                        <Check className="h-4 w-4 text-green-600" />
+                      ) : isCurrent ? (
+                        <Circle className="h-3 w-3 fill-current" />
+                      ) : (
+                        <Circle className="h-3 w-3" />
+                      )}
+                    </span>
+                    {stepLabels[step]}
+                  </button>
+                );
+              })}
             </div>
-            
+
             {renderCurrentStep()}
           </div>
         )}

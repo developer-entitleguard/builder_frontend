@@ -73,6 +73,19 @@ export interface OnboardingImportListEntry {
   filePath?: string | null;
   createdAt: string | null;
   createdBy?: string | null;
+  /** Active rows in this batch whose invite hasn't been sent yet. */
+  pendingInvites?: number;
+  /** Active rows that have already had their invitation email sent. */
+  sentInvites?: number;
+}
+
+export interface SendInvitesResult {
+  batchId: string;
+  sent: number;
+  alreadySent: number;
+  skippedNoEmail: number;
+  failed: number;
+  failureMessages: string[];
 }
 
 /**
@@ -206,6 +219,58 @@ export const builderOnboardingApi = api.injectEndpoints({
         'BuilderCustomer',
       ],
     }),
+
+    /**
+     * Retroactively run the handover step (Customer + Orders/OrderItems +
+     * HANDED status — no email) for every BuilderCustomer in the batch
+     * that's missing one today. Used to heal batches imported before the
+     * handover became inline. Idempotent: rows already at HANDED are
+     * skipped. Sends NO email — that's a separate step
+     * ({@link useSendBuilderOnboardingInvitesMutation}).
+     */
+    finalizeBuilderOnboarding: build.mutation<
+      DefaultListResponse<{
+        batchId: string;
+        processed: number;
+        skipped: number;
+        failed: number;
+        failureMessages: string[];
+      }>,
+      { batchId: string }
+    >({
+      query: ({ batchId }) => ({
+        url: `/api/builder/onboarding/imports/${batchId}/finalize`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: 'ProjectImport', id: arg.batchId },
+        'ProjectImport',
+        'Projects',
+        'Registration',
+        'BuilderCustomer',
+      ],
+    }),
+
+    /**
+     * Phase 2 of the onboarding flow. Fires the onboarding-invite email
+     * ("{{builder}} has registered your property with Entitle Guard") to
+     * every active BuilderCustomer in the batch whose invite hasn't been
+     * sent yet. Backend tracks {@code inviteSentAt} per row so re-clicking
+     * the button is safe — already-emailed rows are silently skipped.
+     */
+    sendBuilderOnboardingInvites: build.mutation<
+      DefaultListResponse<SendInvitesResult>,
+      { batchId: string }
+    >({
+      query: ({ batchId }) => ({
+        url: `/api/builder/onboarding/imports/${batchId}/send-invites`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: 'ProjectImport', id: arg.batchId },
+        'ProjectImport',
+      ],
+    }),
   }),
 });
 
@@ -241,4 +306,6 @@ export const {
   useGetBuilderOnboardingStatusQuery,
   useListBuilderOnboardingImportsQuery,
   useRollbackBuilderOnboardingMutation,
+  useFinalizeBuilderOnboardingMutation,
+  useSendBuilderOnboardingInvitesMutation,
 } = builderOnboardingApi;

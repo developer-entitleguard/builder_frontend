@@ -30,10 +30,12 @@ import {
 import {
   downloadOnboardingTemplate,
   useCommitBuilderOnboardingMutation,
+  useFinalizeBuilderOnboardingMutation,
   useGetBuilderOnboardingStatusQuery,
   useListBuilderOnboardingImportsQuery,
   usePreviewBuilderOnboardingMutation,
   useRollbackBuilderOnboardingMutation,
+  useSendBuilderOnboardingInvitesMutation,
   type OnboardingPreview,
   type OnboardingRow,
 } from "@/store/api/builderOnboarding";
@@ -116,6 +118,8 @@ const BuilderOnboarding = () => {
   const [previewMutate, { isLoading: previewing }] = usePreviewBuilderOnboardingMutation();
   const [commitMutate, { isLoading: committing }] = useCommitBuilderOnboardingMutation();
   const [rollbackMutate, { isLoading: rollingBack }] = useRollbackBuilderOnboardingMutation();
+  const [finalizeMutate, { isLoading: finalizing }] = useFinalizeBuilderOnboardingMutation();
+  const [sendInvitesMutate, { isLoading: sendingInvites }] = useSendBuilderOnboardingInvitesMutation();
 
   const { data: statusResp, refetch: refetchStatus } = useGetBuilderOnboardingStatusQuery(
     { batchId: batchId ?? "" },
@@ -224,7 +228,7 @@ const BuilderOnboarding = () => {
     }
     if (!previewData) {
       toast({
-        title: "Preview before sending",
+        title: "Preview before importing",
         description: "Run preview first so you can confirm what gets created.",
         variant: "destructive",
       });
@@ -238,10 +242,13 @@ const BuilderOnboarding = () => {
       });
       return;
     }
+    // Step 1 of the two-phase flow: set up the data only. No emails go out
+    // until the operator clicks "Send invitations" on the status panel.
     const confirmMsg =
-      `This will create ${previewData.newRegistrationCount} registration(s) ` +
-      `across ${previewData.projectCount} project(s), and email each new customer ` +
-      `an invitation to download the app. Continue?`;
+      `Set up ${previewData.newRegistrationCount} registration(s) ` +
+      `across ${previewData.projectCount} project(s)? ` +
+      `No emails will be sent yet — you can review the imported rows ` +
+      `and trigger the invitations separately.`;
     if (!window.confirm(confirmMsg)) {
       return;
     }
@@ -264,6 +271,83 @@ const BuilderOnboarding = () => {
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
       toast({ title: "Commit failed", description: message, variant: "destructive" });
+    }
+  };
+
+  const handleSendInvites = async (id: string, pendingHint?: number) => {
+    const summary =
+      pendingHint !== undefined
+        ? `${pendingHint} pending invitation(s) will be emailed.`
+        : "Every customer in this batch who hasn't been emailed yet will receive the onboarding invitation.";
+    if (!window.confirm(`${summary}\n\nCustomers already emailed will be skipped. Continue?`)) {
+      return;
+    }
+    try {
+      const res = await sendInvitesMutate({ batchId: id }).unwrap();
+      if (res.success) {
+        const d = res.data;
+        toast({
+          title: "Invitations sent",
+          description:
+            `${d.sent} sent · ${d.alreadySent} already done · ` +
+            `${d.skippedNoEmail} skipped (no email) · ${d.failed} failed` +
+            (d.failed > 0 ? `. First failure: ${d.failureMessages[0] ?? "see logs"}` : ""),
+        });
+      } else {
+        toast({
+          title: "Send invitations failed",
+          description: res.message,
+          variant: "destructive",
+        });
+      }
+      refetchStatus();
+      refetchImports();
+    } catch (e) {
+      toast({
+        title: "Send invitations failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleFinalize = async (id: string) => {
+    if (
+      !window.confirm(
+        "Replay the handover step for every customer in this batch that's not yet HANDED?\n\n" +
+          "This will create the missing Orders and send the property-handover email " +
+          "to each affected customer. Customers already at HANDED are skipped.",
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await finalizeMutate({ batchId: id }).unwrap();
+      if (res.success) {
+        const d = res.data;
+        toast({
+          title: "Handover finalized",
+          description:
+            `${d.processed} processed · ${d.skipped} already done · ${d.failed} failed` +
+            (d.failed > 0
+              ? `. First failure: ${d.failureMessages[0] ?? "see logs"}`
+              : ""),
+        });
+      } else {
+        toast({
+          title: "Finalize failed",
+          description: res.message,
+          variant: "destructive",
+        });
+      }
+      refetchStatus();
+      refetchImports();
+    } catch (e) {
+      toast({
+        title: "Finalize failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
     }
   };
 
@@ -453,9 +537,11 @@ const BuilderOnboarding = () => {
 
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <p className="text-sm text-muted-foreground">
-                      Once you click <strong>Send invitations</strong>,
-                      registrations are created and one invitation email goes
-                      out per new customer. Emails cannot be recalled.
+                      Clicking <strong>Import &amp; set up</strong> creates the
+                      registrations, projects and handover records — but
+                      <em> no emails are sent yet</em>. You'll get a
+                      separate <strong>Send invitations</strong> button on
+                      the next screen so you can review the rows first.
                     </p>
                     <Button
                       onClick={handleCommit}
@@ -465,10 +551,10 @@ const BuilderOnboarding = () => {
                         previewData.newRegistrationCount === 0
                       }
                     >
-                      <Send className="h-4 w-4 mr-2" />
+                      <Upload className="h-4 w-4 mr-2" />
                       {committing
-                        ? "Submitting…"
-                        : `Send invitations (${previewData.newRegistrationCount})`}
+                        ? "Importing…"
+                        : `Import & set up (${previewData.newRegistrationCount})`}
                     </Button>
                   </div>
                 </CardContent>
@@ -530,14 +616,38 @@ const BuilderOnboarding = () => {
                     </div>
                   )}
                   {status?.status === "COMPLETED" && (
-                    <Button
-                      variant="outline"
-                      onClick={() => handleRollback(batchId)}
-                      disabled={rollingBack}
-                    >
-                      <RotateCcw className="h-4 w-4 mr-2" />
-                      {rollingBack ? "Rolling back…" : "Roll back this batch"}
-                    </Button>
+                    <div className="space-y-3 pt-2 border-t">
+                      <div>
+                        <p className="text-sm font-medium">
+                          Step 2: send the invitations
+                        </p>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          One email per registration, with the "your builder has
+                          just joined" copy. Already-emailed rows are skipped if
+                          you click again later.
+                        </p>
+                        <Button
+                          onClick={() =>
+                            handleSendInvites(batchId, status.processedCount ?? undefined)
+                          }
+                          disabled={sendingInvites}
+                        >
+                          <Send className="h-4 w-4 mr-2" />
+                          {sendingInvites ? "Sending…" : "Send invitations"}
+                        </Button>
+                      </div>
+                      <div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRollback(batchId)}
+                          disabled={rollingBack}
+                        >
+                          <RotateCcw className="h-4 w-4 mr-2" />
+                          {rollingBack ? "Rolling back…" : "Roll back this batch"}
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -567,6 +677,7 @@ const BuilderOnboarding = () => {
                         <TableHead>Status</TableHead>
                         <TableHead>Processed</TableHead>
                         <TableHead>Errors</TableHead>
+                        <TableHead>Invites</TableHead>
                         <TableHead>File</TableHead>
                         <TableHead>Created</TableHead>
                         <TableHead className="w-32" />
@@ -590,6 +701,18 @@ const BuilderOnboarding = () => {
                               <XCircle className="inline-block h-3.5 w-3.5 ml-1 text-red-500" />
                             )}
                           </TableCell>
+                          <TableCell className="text-xs">
+                            {(row.sentInvites ?? 0)}/{((row.sentInvites ?? 0) + (row.pendingInvites ?? 0))}
+                            {(row.pendingInvites ?? 0) > 0 ? (
+                              <span className="ml-1 text-yellow-700">
+                                ({row.pendingInvites} pending)
+                              </span>
+                            ) : (
+                              (row.sentInvites ?? 0) > 0 && (
+                                <span className="ml-1 text-green-700">(all sent)</span>
+                              )
+                            )}
+                          </TableCell>
                           <TableCell className="max-w-[200px] truncate text-xs">
                             {row.filePath ?? "—"}
                           </TableCell>
@@ -600,15 +723,45 @@ const BuilderOnboarding = () => {
                           </TableCell>
                           <TableCell>
                             {row.status === "COMPLETED" && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleRollback(row.batchId)}
-                                disabled={rollingBack}
-                              >
-                                <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                                Rollback
-                              </Button>
+                              <div className="flex gap-1 flex-wrap">
+                                <Button
+                                  size="sm"
+                                  variant={(row.pendingInvites ?? 0) > 0 ? "default" : "ghost"}
+                                  onClick={() => handleSendInvites(row.batchId, row.pendingInvites)}
+                                  disabled={
+                                    sendingInvites || (row.pendingInvites ?? 0) === 0
+                                  }
+                                  title={
+                                    (row.pendingInvites ?? 0) > 0
+                                      ? `Email ${row.pendingInvites} pending customer(s)`
+                                      : "All customers in this batch have been emailed"
+                                  }
+                                >
+                                  <Send className="h-3.5 w-3.5 mr-1" />
+                                  {(row.pendingInvites ?? 0) > 0
+                                    ? `Send invites (${row.pendingInvites})`
+                                    : "Invites sent"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleFinalize(row.batchId)}
+                                  disabled={finalizing}
+                                  title="Replay handover for customers still in pre-handed state"
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                                  Finalize handovers
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleRollback(row.batchId)}
+                                  disabled={rollingBack}
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                                  Rollback
+                                </Button>
+                              </div>
                             )}
                           </TableCell>
                         </TableRow>

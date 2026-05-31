@@ -152,7 +152,7 @@ export const ProjectComplianceSection = ({ projectId }: ProjectComplianceSection
           </Button>
           <Button variant="outline" onClick={() => setGenerateOpen(true)}>
             <Sparkles className="h-4 w-4 mr-2" />
-            Generate with AI
+            Generate
           </Button>
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4 mr-2" />
@@ -175,7 +175,7 @@ export const ProjectComplianceSection = ({ projectId }: ProjectComplianceSection
           onEdit={openEdit}
           onDelete={(doc) => setDeletingDoc(doc)}
           onStatusChange={handleStatusChange}
-          emptyMessage="No compliance documents yet. Generate the list with AI or add one manually."
+          emptyMessage="No compliance documents yet. Generate the list or add one manually."
         />
       )}
 

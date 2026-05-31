@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { USER_DATA_EVENT, useOrganization } from "@/hooks/useOrganization";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import OrganizationSelector from "@/components/OrganizationSelector";
 import {
   DropdownMenu,
@@ -57,6 +58,7 @@ const Header = () => {
     isImpersonating,
     setImpersonatedOrganization,
   } = useOrganization();
+  const { hasModule } = useEntitlements();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -65,17 +67,21 @@ const Header = () => {
   // before useOrganization re-reads userData).
   const effectiveBuilderRole = builderRole ?? readBuilderRoleFromStorage();
   const isAuthenticated = !!user || hasBuilderAuth();
-  const canShowAdminTab = isAdmin || isAdministrator(effectiveBuilderRole);
+  // Org-level module gate (Platform Synergy §3.4) layered on top of role gating:
+  // a tab shows only when the role permits AND the org has the module enabled.
+  // hasModule fails open while entitlements load, so this never flash-hides nav.
+  const canShowAdminTab = (isAdmin || isAdministrator(effectiveBuilderRole)) && hasModule("USERS");
   const isVendor = isInternalVendor(effectiveBuilderRole) || isExternalVendor(effectiveBuilderRole);
 
   const showOrgNavItems = (!isSuperAdmin || isImpersonating) && !isVendor;
-  const showProjectsTab = canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null;
-  const showQueriesTab = !isExternalVendor(effectiveBuilderRole);
+  const showProjectsTab = (canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null) && hasModule("PROJECTS");
+  const showQueriesTab = !isExternalVendor(effectiveBuilderRole) && hasModule("QUERIES");
   const showItemsTab = effectiveBuilderRole === null || canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === "CUSTOMER_SUPPORT";
   const showRegistrationsTab =
-    effectiveBuilderRole === null
+    (effectiveBuilderRole === null
     || canManageProjects(effectiveBuilderRole)
-    || effectiveBuilderRole === "CUSTOMER_SUPPORT";
+    || effectiveBuilderRole === "CUSTOMER_SUPPORT")
+    && hasModule("REGISTRATIONS");
   const showTicketsTab = canAssignVendors(effectiveBuilderRole);
   const showMyScheduleTab = isInternalVendor(effectiveBuilderRole);
   const showMyAssignmentsTab = isExternalVendor(effectiveBuilderRole);

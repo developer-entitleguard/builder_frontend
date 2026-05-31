@@ -84,10 +84,10 @@ export const GenerateComplianceDialog = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            Generate compliance list with AI
+            Generate compliance list
           </DialogTitle>
           <DialogDescription>
-            The AI drafts the required NSW compliance documents for this property
+            Drafts the required NSW compliance documents for this property
             using its type, location and BAL rating. Add any extra context below
             (optional).
           </DialogDescription>

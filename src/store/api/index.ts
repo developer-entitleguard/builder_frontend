@@ -30,6 +30,8 @@ import './terms';
 import './orgTerms';
 // PRD_Compliance_Documents — project/registration compliance docs + handover gating.
 import './complianceDocuments';
+// Platform Synergy PRD §3.4 — effective-entitlements gate.
+import './entitlements';
 
 // Export the main API slice
 export { api } from './apiSlice';
@@ -114,6 +116,9 @@ export * from './orgTerms';
 
 // Compliance documents
 export * from './complianceDocuments';
+
+// Effective entitlements (Platform Synergy §3.4)
+export * from './entitlements';
 
 // Re-export types
 export type * from '@/lib/api/types';

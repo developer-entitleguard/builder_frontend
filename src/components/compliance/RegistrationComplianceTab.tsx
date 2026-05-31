@@ -167,7 +167,7 @@ export const RegistrationComplianceTab = ({
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setGenerateOpen(true)}>
                 <Sparkles className="h-4 w-4 mr-2" />
-                Generate with AI
+                Generate
               </Button>
               <Button size="sm" onClick={openCreate}>
                 <Plus className="h-4 w-4 mr-2" />

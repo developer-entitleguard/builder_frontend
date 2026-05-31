@@ -229,12 +229,12 @@ export const ActivityList = ({
         </div>
         <h3 className="text-lg font-semibold mb-2">No activities yet</h3>
         <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-          Generate a list with AI from a short description, add a category and activities manually, or import from a CSV file.
+          Generate a list from a short description, add a category and activities manually, or import from a CSV file.
         </p>
         <div className="flex items-center justify-center gap-3">
           <Button onClick={() => setGenerateDialogOpen(true)}>
             <Sparkles className="h-4 w-4 mr-2" />
-            Generate activities from a prompt
+            Generate Activities
           </Button>
           <Button variant="outline" onClick={() => setIsAddingCategory(true)}>
             <FolderPlus className="h-4 w-4 mr-2" />

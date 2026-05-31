@@ -112,10 +112,10 @@ export const GenerateActivitiesDialog = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            Generate activities with AI
+            Generate Activities
           </DialogTitle>
           <DialogDescription>
-            Describe this project and the AI will draft a categorised activity list.
+            Describe this project to draft a categorised activity list.
             Your project's type, location, BAL rating and any registered floor area
             are included automatically — just add the extra detail. A clear
             description is required.

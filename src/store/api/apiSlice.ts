@@ -78,6 +78,8 @@ export const api = createApi({
     'ComplianceDocuments',
     'ComplianceAttachments',
     'HandoverReadiness',
+    // Platform Synergy PRD §3.4 — effective entitlements (org modules/capabilities + caller permissions).
+    'Entitlements',
   ],
   endpoints: () => ({}),
 });

@@ -51,6 +51,8 @@ export const api = createApi({
     'Registration',
     'Item',
     'Query',
+    // Ticket/Query/Job refactor — jobs spawned from a converted ticket query.
+    'Job',
     'Activities',
     'ActivityCategories',
     'Document',

@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils";
 import { viewPhotoUrl } from "@/lib/api/services/files";
 import VendorLinkModal from "@/components/VendorLinkModal";
 import AssignVendorDialog from "@/components/queries/AssignVendorDialog";
+import JobsPanel from "@/components/queries/JobsPanel";
 import { canAssignVendors } from "@/lib/roles";
 import {
   ATTACHMENT_ACCEPT,
@@ -731,6 +732,11 @@ const QueryDetail = () => {
                   )}
                 </CardContent>
               </Card>
+            )}
+
+            {/* Jobs spawned from this converted ticket query (one query → many jobs). */}
+            {id && (
+              <JobsPanel queryId={id} builderId={builderId} canManage={canScheduleAssign} />
             )}
           </div>
 

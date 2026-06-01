@@ -53,6 +53,12 @@ export interface CreateJobRequest {
   scope?: string;
   categoryId?: string;
   status?: JobStatus;
+  /**
+   * Optional dwelling (BuilderCustomer registration) this job is performed
+   * against. Links any resulting trade compliance certificate into that
+   * registration's handover pack (PRD Phase 4 linkage).
+   */
+  registrationId?: string;
 }
 
 /**
@@ -181,6 +187,27 @@ export const jobsApi = api.injectEndpoints({
       invalidatesTags: (result, error, { queryId }) => [{ type: 'Job', id: queryId }],
     }),
 
+    // Link (or clear) the dwelling/registration a job is performed against.
+    // Pass registrationId: null/'' to unlink. Invalidates the handover pack so
+    // the registration's trade-certificate panel refreshes.
+    linkJobRegistration: build.mutation<
+      BuilderJob,
+      { id: string; builderId: string; queryId: string; registrationId: string | null }
+    >({
+      query: ({ id, builderId, registrationId }) => ({
+        url: `/api/builder/job/${id}/registration`,
+        method: 'PUT',
+        params: { builderId },
+        body: { registrationId },
+      }),
+      invalidatesTags: (result, error, { queryId, registrationId }) => [
+        { type: 'Job', id: queryId },
+        ...(registrationId
+          ? [{ type: 'HandoverReadiness' as const, id: `trade-certs-${registrationId}` }]
+          : []),
+      ],
+    }),
+
     // -----------------------------------------------------------------------
     // Vendor-facing (assignee-scoped). The logged-in internal vendor reads and
     // acts on the jobs assigned to *them* for a query. Status changes touch only
@@ -223,6 +250,7 @@ export const {
   useAssignJobMutation,
   useAssignJobVendorMutation,
   useDeleteJobMutation,
+  useLinkJobRegistrationMutation,
   useGetMyJobsForQueryQuery,
   useUpdateMyJobStatusMutation,
 } = jobsApi;

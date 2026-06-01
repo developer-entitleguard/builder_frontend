@@ -26,6 +26,7 @@ import { ComplianceCompletenessBar } from "./ComplianceCompletenessBar";
 import { ComplianceDocumentDialog } from "./ComplianceDocumentDialog";
 import { GenerateComplianceDialog } from "./GenerateComplianceDialog";
 import { HandoverReadinessCard } from "./HandoverReadinessCard";
+import { TradeCertificatesCard } from "./TradeCertificatesCard";
 
 interface RegistrationComplianceTabProps {
   registrationId: string;
@@ -129,6 +130,8 @@ export const RegistrationComplianceTab = ({
   return (
     <div className="space-y-6">
       <HandoverReadinessCard registrationId={registrationId} />
+
+      <TradeCertificatesCard registrationId={registrationId} />
 
       {completeness && (
         <ComplianceCompletenessBar

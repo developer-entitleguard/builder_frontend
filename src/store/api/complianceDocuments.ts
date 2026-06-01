@@ -54,12 +54,42 @@ export interface RegistrationComplianceView {
   completeness: ComplianceCompleteness;
 }
 
+/**
+ * Trade/auditor compliance certificate produced against a job tied to this
+ * registration (PRD Phase 4 linkage). Informational — surfaced in the handover
+ * pack but does NOT affect the {@link HandoverReadiness.blocked} gate.
+ */
+export interface TradeCertificateApi {
+  id: string;
+  jobId: string | null;
+  jobTitle: string | null;
+  name: string | null;
+  certificateType: string | null;
+  issuer: string | null;
+  status: string | null;
+  notes: string | null;
+  fileId: string | null;
+  externalUrl: string | null;
+  downloadType: "file" | "link" | null;
+  signed: boolean;
+  createdAt: string | null;
+  sentToCustomerAt: string | null;
+}
+
 export interface HandoverReadiness {
   registrationId: string;
   completeness: ComplianceCompleteness;
   outstandingDocuments: string[];
   acknowledged: boolean;
   blocked: boolean;
+  tradeCertificates?: TradeCertificateApi[];
+}
+
+/** Lightweight dwelling picker option for the job → registration linker. */
+export interface RegistrationOption {
+  id: string;
+  name: string;
+  address: string;
 }
 
 export interface HandoverAcknowledgementApi {
@@ -472,6 +502,31 @@ export const complianceDocumentsApi = api.injectEndpoints({
         { type: "HandoverReadiness", id: `acks-${registrationId}` },
       ],
     }),
+
+    // ----- Trade certificate linkage (PRD Phase 4, informational) -----
+
+    // GET /api/builder/registrations/:registrationId/trade-certificates
+    getRegistrationTradeCertificates: build.query<
+      ListResponse<TradeCertificateApi[]>,
+      { registrationId: string }
+    >({
+      query: ({ registrationId }) => ({
+        url: `/api/builder/registrations/${registrationId}/trade-certificates`,
+        method: "GET",
+      }),
+      providesTags: (_r, _e, { registrationId }) => [
+        { type: "HandoverReadiness", id: `trade-certs-${registrationId}` },
+      ],
+    }),
+
+    // GET /api/builder/registrations/options
+    listRegistrationOptions: build.query<ListResponse<RegistrationOption[]>, void>({
+      query: () => ({
+        url: `/api/builder/registrations/options`,
+        method: "GET",
+      }),
+      providesTags: [{ type: "Registration", id: "options" }],
+    }),
   }),
 });
 
@@ -495,4 +550,6 @@ export const {
   useGetHandoverReadinessQuery,
   useAcknowledgeHandoverMutation,
   useListHandoverAcknowledgementsQuery,
+  useGetRegistrationTradeCertificatesQuery,
+  useListRegistrationOptionsQuery,
 } = complianceDocumentsApi;

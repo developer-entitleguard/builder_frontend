@@ -17,8 +17,14 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ArrowLeft,
-  Check,
   LinkIcon,
   Send,
   Upload,
@@ -147,14 +153,6 @@ const QueryDetail = () => {
   );
   const statuses = statusesData?.data ?? [];
 
-  // ── Target status IDs ──
-  const createdStatusId = statuses.find(
-    (s) => (s.name ?? "").toUpperCase() === "CREATED"
-  )?.id;
-  const doneStatusId = statuses.find(
-    (s) => (s.name ?? "").toUpperCase() === "DONE"
-  )?.id;
-
   // ── Fetch query ──
   const fetchQuery = useCallback(
     async (queryId: string) => {
@@ -178,22 +176,28 @@ const QueryDetail = () => {
 
   // ── Handlers ──
 
-  const handleSendBack = async () => {
-    if (!queryData || !createdStatusId) return;
+  // Persist the selected assessment files against the query without changing
+  // its status (status is now driven solely by the dropdown).
+  const handleUploadAssessment = async () => {
+    if (!queryData || uploadedFiles.length === 0) return;
     try {
       const result = await updateQuery({
         id: queryData.id,
-        statusId: createdStatusId,
         userId: userId ?? undefined,
+        queryFileMapDto: uploadedFiles.map((f) => ({
+          type: "vendor",
+          files: f,
+        })),
       }).unwrap();
 
       if (result.success) {
-        toast({ title: "Success", description: "Query sent back for review" });
+        toast({ title: "Success", description: "Files uploaded" });
+        setUploadedFiles([]);
         if (id) await fetchQuery(id);
       } else {
         toast({
           title: "Error",
-          description: result.message || "Failed to send back",
+          description: result.message || "Failed to upload files",
           variant: "destructive",
         });
       }
@@ -206,27 +210,25 @@ const QueryDetail = () => {
     }
   };
 
-  const handleMarkComplete = async () => {
-    if (!queryData || !doneStatusId) return;
+  // Free-form status change via the dropdown — available to the same roles that
+  // can manage jobs. Lets staff move the query to any QUERY-module status
+  // without being constrained to the fixed lifecycle buttons.
+  const handleStatusChange = async (statusId: string) => {
+    if (!queryData || !statusId || statusId === queryData.status?.id) return;
     try {
       const result = await updateQuery({
         id: queryData.id,
-        statusId: doneStatusId,
+        statusId,
         userId: userId ?? undefined,
-        queryFileMapDto: uploadedFiles.map((f) => ({
-          type: "vendor",
-          files: f,
-        })),
       }).unwrap();
 
       if (result.success) {
-        toast({ title: "Success", description: "Query marked as complete" });
-        setUploadedFiles([]);
+        toast({ title: "Status updated" });
         if (id) await fetchQuery(id);
       } else {
         toast({
           title: "Error",
-          description: result.message || "Failed to complete query",
+          description: result.message || "Failed to update status",
           variant: "destructive",
         });
       }
@@ -364,36 +366,6 @@ const QueryDetail = () => {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Queries
             </Button>
-            {(isVendor || isVendorComplete) && (
-              <Button
-                variant="outline"
-                onClick={() => setVendorLinkModalOpen(true)}
-              >
-                <LinkIcon className="h-4 w-4 mr-2" />
-                Get Vendor Link
-              </Button>
-            )}
-            {isVendor && (
-              <Button onClick={handleMarkComplete} disabled={isUpdating}>
-                <Check className="h-4 w-4 mr-2" />
-                {isUpdating ? "Updating..." : "Mark Complete"}
-              </Button>
-            )}
-            {isVendorComplete && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={handleSendBack}
-                  disabled={isUpdating}
-                >
-                  Re-assign Vendor
-                </Button>
-                <Button onClick={handleMarkComplete} disabled={isUpdating}>
-                  <Check className="h-4 w-4 mr-2" />
-                  {isUpdating ? "Updating..." : "Mark as Done"}
-                </Button>
-              </>
-            )}
           </div>
         </div>
 
@@ -404,9 +376,36 @@ const QueryDetail = () => {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Case Details</CardTitle>
-                <Badge variant="secondary" className="bg-gray-100 text-gray-700">
-                  {queryData.status?.name || "-"}
-                </Badge>
+                {canManageQueryJobs && statuses.length > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-muted-foreground">
+                      Status
+                    </Label>
+                    <Select
+                      value={queryData.status?.id ?? ""}
+                      onValueChange={handleStatusChange}
+                      disabled={isUpdating}
+                    >
+                      <SelectTrigger className="h-8 w-[180px]">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statuses.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <Badge
+                    variant="secondary"
+                    className="bg-gray-100 text-gray-700"
+                  >
+                    {queryData.status?.name || "-"}
+                  </Badge>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4 mb-6">
@@ -630,6 +629,20 @@ const QueryDetail = () => {
                           </Button>
                         </div>
                       ))}
+                      <Button
+                        size="sm"
+                        className="mt-2"
+                        onClick={handleUploadAssessment}
+                        disabled={isUpdating}
+                      >
+                        {isUpdating ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4 mr-2" />
+                        )}
+                        Upload {uploadedFiles.length} file
+                        {uploadedFiles.length > 1 ? "s" : ""}
+                      </Button>
                     </div>
                   )}
                 </CardContent>
@@ -805,25 +818,6 @@ const QueryDetail = () => {
           </div>
         </div>
 
-        {/* Bottom actions for vendor status */}
-        {isVendor && (
-          <div className="flex justify-center gap-4 mt-8">
-            <Button
-              variant="outline"
-              onClick={handleSendBack}
-              disabled={isUpdating}
-            >
-              {isUpdating ? "Sending..." : "Send Back to Reviewer"}
-            </Button>
-            <Button
-              onClick={handleMarkComplete}
-              disabled={isUpdating}
-            >
-              <Check className="h-4 w-4 mr-2" />
-              {isUpdating ? "Updating..." : "Mark as Complete"}
-            </Button>
-          </div>
-        )}
       </main>
 
       {/* Vendor Link Modal */}

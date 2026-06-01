@@ -80,6 +80,29 @@ interface StatusOption {
   module: string;
 }
 
+interface VendorJob {
+  id: string;
+  title: string;
+  scope?: string | null;
+  status: string;
+  scheduledStart?: string | null;
+}
+
+function jobStatusColor(status: string) {
+  switch (status) {
+    case "ASSIGNED":
+      return "bg-blue-100 text-blue-800";
+    case "IN_PROGRESS":
+      return "bg-yellow-100 text-yellow-800";
+    case "COMPLETED":
+      return "bg-green-100 text-green-800";
+    case "CANCELLED":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
 function getPriorityColor(priority: string) {
   switch (priority?.toUpperCase()) {
     case "LOW":
@@ -108,6 +131,8 @@ const VendorQuery = () => {
 
   const [queryData, setQueryData] = useState<VendorQueryData | null>(null);
   const [statuses, setStatuses] = useState<StatusOption[]>([]);
+  const [jobs, setJobs] = useState<VendorJob[]>([]);
+  const [updatingJob, setUpdatingJob] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [comment, setComment] = useState("");
@@ -153,9 +178,23 @@ const VendorQuery = () => {
     }
   };
 
+  const fetchJobs = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(
+        buildUrl(`/unsecure/vendor/query/jobs?token=${encodeURIComponent(token)}`)
+      );
+      const data = await res.json();
+      if (data.success) setJobs(data.data ?? []);
+    } catch {
+      /* ignore */
+    }
+  };
+
   useEffect(() => {
     fetchQuery();
     fetchStatuses();
+    fetchJobs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -308,6 +347,43 @@ const VendorQuery = () => {
     }
   };
 
+  const handleJobStatus = async (
+    jobId: string,
+    status: string,
+    label: string
+  ) => {
+    setUpdatingJob(jobId);
+    try {
+      const res = await fetch(
+        buildUrl(
+          `/unsecure/vendor/query/jobs/status?token=${encodeURIComponent(
+            token
+          )}&jobId=${encodeURIComponent(jobId)}&status=${status}`
+        ),
+        { method: "POST" }
+      );
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: "Success", description: `Job ${label}` });
+        await fetchJobs();
+      } else {
+        toast({
+          title: "Error",
+          description: data.message,
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingJob(null);
+    }
+  };
+
   // ── Loading / Error states ──
 
   if (loading) {
@@ -426,6 +502,90 @@ const VendorQuery = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Your Jobs — what this vendor was specifically asked to do */}
+            {jobs.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Job{jobs.length > 1 ? "s" : ""}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {jobs.map((job) => {
+                    const jobDone =
+                      job.status === "COMPLETED" || job.status === "CANCELLED";
+                    return (
+                      <div
+                        key={job.id}
+                        className="rounded-lg border p-4 space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-medium">{job.title}</p>
+                          <Badge className={jobStatusColor(job.status)}>
+                            {job.status}
+                          </Badge>
+                        </div>
+                        {job.scope ? (
+                          <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                            {job.scope}
+                          </p>
+                        ) : (
+                          <p className="text-sm italic text-muted-foreground">
+                            No scope provided.
+                          </p>
+                        )}
+                        {job.scheduledStart && (
+                          <p className="text-xs text-muted-foreground">
+                            Scheduled:{" "}
+                            {new Date(job.scheduledStart).toLocaleString()}
+                          </p>
+                        )}
+                        {!jobDone && (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {job.status !== "IN_PROGRESS" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={updatingJob === job.id}
+                                onClick={() =>
+                                  handleJobStatus(
+                                    job.id,
+                                    "IN_PROGRESS",
+                                    "marked in progress"
+                                  )
+                                }
+                              >
+                                {updatingJob === job.id ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : null}
+                                Mark in progress
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              disabled={updatingJob === job.id}
+                              onClick={() =>
+                                handleJobStatus(
+                                  job.id,
+                                  "COMPLETED",
+                                  "marked complete"
+                                )
+                              }
+                            >
+                              {updatingJob === job.id ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Check className="h-4 w-4 mr-2" />
+                              )}
+                              Mark job complete
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Customer & Address */}
             <Card>
@@ -689,17 +849,6 @@ const VendorQuery = () => {
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 {updatingStatus ? "Sending..." : "Send Back to Reviewer"}
-              </Button>
-            )}
-            {completedStatusId && (
-              <Button
-                onClick={() =>
-                  handleStatusChange(completedStatusId, "marked as complete")
-                }
-                disabled={updatingStatus}
-              >
-                <Check className="h-4 w-4 mr-2" />
-                {updatingStatus ? "Completing..." : "Mark as Complete"}
               </Button>
             )}
           </div>

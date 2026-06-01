@@ -31,7 +31,25 @@ import {
   useAddQueryCommentMutation,
   type BuilderQuery,
 } from "@/lib/api/services/query";
-import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
+import {
+  useGetMyJobsForQueryQuery,
+  useUpdateMyJobStatusMutation,
+  type JobStatus,
+} from "@/lib/api/services/jobs";
+function jobStatusColor(status: string) {
+  switch (status) {
+    case "ASSIGNED":
+      return "bg-blue-100 text-blue-800";
+    case "IN_PROGRESS":
+      return "bg-yellow-100 text-yellow-800";
+    case "COMPLETED":
+      return "bg-green-100 text-green-800";
+    case "CANCELLED":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
 
 function getPriorityColor(priority?: string) {
   switch ((priority ?? "").toUpperCase()) {
@@ -87,11 +105,17 @@ const MyAssignmentDetail = () => {
   const [getQueryById, { data: queryResp, isFetching }] = useLazyGetQueryByIdQuery();
   const queryData = queryResp?.data as BuilderQuery | undefined;
 
-  const { data: statusesResp } = useGetStatusesByModuleQuery({ module: "QUERY" }, { skip: false });
-  const statuses = statusesResp?.data ?? [];
-
   const [updateQuery, { isLoading: updating }] = useUpdateQueryMutation();
   const [addComment, { isLoading: addingComment }] = useAddQueryCommentMutation();
+
+  // Jobs assigned to *this* vendor on the query. Acting on a job never changes
+  // the query — the builder/CS owns the query lifecycle.
+  const { data: myJobsResp } = useGetMyJobsForQueryQuery(
+    { queryId: queryId ?? "" },
+    { skip: !queryId },
+  );
+  const myJobs = myJobsResp?.data ?? [];
+  const [updateMyJobStatus, { isLoading: updatingJob }] = useUpdateMyJobStatusMutation();
 
   const [comment, setComment] = useState("");
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
@@ -106,16 +130,6 @@ const MyAssignmentDetail = () => {
   const userName = useMemo(readUserDisplayName, []);
 
   const done = isComplete(queryData?.status?.name);
-
-  const completedStatusId = statuses.find(
-    (s) => (s.name ?? "").toUpperCase().replace(/\s+/g, "_") === "COMPLETED" || (s.name ?? "").toUpperCase() === "DONE"
-  )?.id;
-  const createdStatusId = statuses.find(
-    (s) => (s.name ?? "").toUpperCase() === "CREATED"
-  )?.id;
-  const inProgressStatusId = statuses.find(
-    (s) => (s.name ?? "").toUpperCase().replace(/\s+/g, "_") === "IN_PROGRESS"
-  )?.id;
 
   const queryFiles = (queryData as unknown as { queryFileMaps?: Array<{ id: string; type: string; files: { id: string; name: string; fileType?: string; filePath?: string } }> })?.queryFileMaps ?? [];
   const queryComments = queryData?.queryComments ?? [];
@@ -203,20 +217,15 @@ const MyAssignmentDetail = () => {
     }
   };
 
-  const handleStatusChange = async (statusId: string, label: string) => {
-    if (!queryId || !statusId) return;
+  const handleJobStatus = async (jobId: string, status: JobStatus, label: string) => {
+    if (!queryId) return;
     try {
-      const res = await updateQuery({
-        id: queryId,
-        statusId,
-        userId,
-      }).unwrap();
+      const res = await updateMyJobStatus({ id: jobId, status, queryId }).unwrap();
       if (!res.success) {
         toast({ title: "Update failed", description: res.message, variant: "destructive" });
         return;
       }
-      toast({ title: "Status updated", description: `Query ${label}.` });
-      await refreshQuery();
+      toast({ title: "Job updated", description: `Job ${label}.` });
     } catch (e) {
       toast({
         title: "Update failed",
@@ -337,6 +346,75 @@ const MyAssignmentDetail = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Your job(s) — scope + job-level status actions */}
+            {myJobs.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your job{myJobs.length > 1 ? "s" : ""} ({myJobs.length})</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {myJobs.map((job) => {
+                    const jobDone = job.status === "COMPLETED" || job.status === "CANCELLED";
+                    return (
+                      <div key={job.id} className="rounded-md border p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-medium">{job.title}</p>
+                            {job.scope ? (
+                              <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">
+                                {job.scope}
+                              </p>
+                            ) : (
+                              <p className="mt-1 text-sm text-muted-foreground italic">
+                                No specific scope — see the query description below.
+                              </p>
+                            )}
+                            {job.scheduledStart && (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                Scheduled{" "}
+                                {new Date(job.scheduledStart).toLocaleString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </p>
+                            )}
+                          </div>
+                          <Badge className={jobStatusColor(job.status)}>{job.status}</Badge>
+                        </div>
+                        {!jobDone && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {job.status !== "IN_PROGRESS" && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={updatingJob}
+                                onClick={() => handleJobStatus(job.id, "IN_PROGRESS", "marked in progress")}
+                              >
+                                {updatingJob ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                                Mark in progress
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={updatingJob}
+                              onClick={() => handleJobStatus(job.id, "COMPLETED", "marked complete")}
+                            >
+                              <Check className="h-4 w-4 mr-2" />
+                              Mark job complete
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Customer info */}
             <Card>
@@ -567,54 +645,6 @@ const MyAssignmentDetail = () => {
                 )}
               </CardContent>
             </Card>
-
-            {/* Inline status actions */}
-            {!done && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Update status</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {inProgressStatusId && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full justify-start"
-                      disabled={updating}
-                      onClick={() => handleStatusChange(inProgressStatusId, "marked in progress")}
-                    >
-                      {updating ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : null}
-                      Mark as In Progress
-                    </Button>
-                  )}
-                  {createdStatusId && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full justify-start"
-                      disabled={updating}
-                      onClick={() => handleStatusChange(createdStatusId, "sent back to reviewer")}
-                    >
-                      <ArrowLeft className="h-4 w-4 mr-2" />
-                      Send back to reviewer
-                    </Button>
-                  )}
-                  {completedStatusId && (
-                    <Button
-                      type="button"
-                      className="w-full justify-start"
-                      disabled={updating}
-                      onClick={() => handleStatusChange(completedStatusId, "marked complete")}
-                    >
-                      <Check className="h-4 w-4 mr-2" />
-                      Mark as Complete
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            )}
 
             {done && (
               <Card>

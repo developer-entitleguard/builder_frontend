@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, Briefcase } from "lucide-react";
+import { Loader2, Plus, Trash2, Briefcase, LinkIcon } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
@@ -50,6 +50,11 @@ function statusColor(status: string) {
     default:
       return "bg-gray-100 text-gray-800";
   }
+}
+
+/** Off-platform vendor — reached via an emailed link (has a contact, no portal user). */
+function isExternalAssigned(job: BuilderJob) {
+  return !job.assigneeUserId && !!(job.assigneeName || job.assigneeEmail);
 }
 
 function assigneeLabel(job: BuilderJob) {
@@ -98,6 +103,8 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
 
   const [showAdd, setShowAdd] = useState(false);
   const [scope, setScope] = useState("");
+  // Optional vendor chosen in the Add Job form — assigns in the same flow.
+  const [newVendorId, setNewVendorId] = useState("");
   const [assignVendorByJob, setAssignVendorByJob] = useState<Record<string, string>>({});
   // Schedule dialog target for an internal vendor assignment.
   const [scheduleFor, setScheduleFor] = useState<
@@ -117,7 +124,7 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
   const handleAdd = async () => {
     try {
       // Title is omitted — the backend defaults it to the source query's title.
-      await createJob({
+      const created = await createJob({
         queryId,
         builderId: builderId ?? "",
         scope: scope.trim() || undefined,
@@ -125,6 +132,35 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
       toast({ title: "Job created" });
       setScope("");
       setShowAdd(false);
+
+      // If a vendor was picked in the same form, assign it now.
+      const vendor = newVendorId ? vendorById.get(newVendorId) : undefined;
+      setNewVendorId("");
+      if (!vendor) return;
+
+      // Internal vendors need a scheduled time booked against their
+      // availability — open the schedule dialog targeting the new job.
+      if (vendor.userInfo?.id) {
+        setScheduleFor({ jobId: created.id, vendorId: vendor.id, vendorName: vendor.name });
+        return;
+      }
+      // External vendors: assign immediately, then surface the shareable link.
+      try {
+        const res = await assignJobVendor({
+          id: created.id,
+          builderId: builderId ?? "",
+          queryId,
+          vendorId: vendor.id,
+        }).unwrap();
+        if (!res.success) {
+          toast({ title: "Could not assign vendor", description: res.message, variant: "destructive" });
+          return;
+        }
+        toast({ title: "Vendor assigned", description: "Share the vendor link below." });
+        setLinkModalOpen(true);
+      } catch (e) {
+        toast({ title: "Could not assign vendor", variant: "destructive" });
+      }
     } catch (e) {
       toast({ title: "Could not create job", variant: "destructive" });
     }
@@ -218,9 +254,34 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                 rows={2}
               />
             </div>
+            <div className="space-y-1">
+              <Label>Assign vendor (optional)</Label>
+              <Select
+                value={newVendorId}
+                onValueChange={(v) => setNewVendorId(v)}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Leave blank to create a draft" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vendors.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.name}
+                      {v.userInfo?.id ? " (internal)" : " (external)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Internal vendors prompt for a schedule; external vendors get a
+                shareable link.
+              </p>
+            </div>
             <div className="flex gap-2">
-              <Button size="sm" onClick={handleAdd} disabled={creating}>
-                {creating && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              <Button size="sm" onClick={handleAdd} disabled={creating || assigning}>
+                {(creating || assigning) && (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                )}
                 Create
               </Button>
               <Button
@@ -229,6 +290,7 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                 onClick={() => {
                   setShowAdd(false);
                   setScope("");
+                  setNewVendorId("");
                 }}
               >
                 Cancel
@@ -315,6 +377,17 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                     >
                       Assign
                     </Button>
+
+                    {isExternalAssigned(job) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setLinkModalOpen(true)}
+                      >
+                        <LinkIcon className="mr-1 h-4 w-4" />
+                        Get link
+                      </Button>
+                    )}
 
                     <Button
                       size="sm"

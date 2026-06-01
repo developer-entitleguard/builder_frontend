@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { format } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -13,11 +13,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  useGetVendorAvailabilityQuery,
+  useGetVendorScheduleQuery,
   type FreeWindow,
-  type VendorAvailabilityRow,
+  type VendorDayAvailability,
 } from "@/store/api/vendorSchedule";
 import { useAssignJobVendorMutation } from "@/lib/api/services/jobs";
 
@@ -42,11 +43,22 @@ const toHHmm = (raw: string | null | undefined): string => {
 const within = (inner: { start: string; end: string }, outer: FreeWindow) =>
   toHHmm(outer.startTime) <= inner.start && inner.end <= toHHmm(outer.endTime);
 
+/** Default a 1-hour booking from a window start, clamped to the window end. */
+const defaultEnd = (start: string, windowEnd: string): string => {
+  const [sh, sm] = start.split(":");
+  const proposed = `${String(Number(sh) + 1).padStart(2, "0")}:${sm}`;
+  return proposed <= windowEnd ? proposed : windowEnd;
+};
+
+const DAYS_IN_VIEW = 7;
+
 /**
- * Schedule-aware assignment of an internal vendor to a job. Mirrors the old
- * query-level assign dialog but targets a single, already-picked vendor and the
- * job endpoint. The chosen time is validated against the vendor's free windows
- * and booked on their calendar.
+ * Schedule-aware assignment of an internal vendor to a job. Shows the vendor's
+ * calendar a week at a time — free windows are clickable, booked/blocked slots
+ * are shown so the scheduler can see what's taken. Picking a free window
+ * pre-fills the booking, which can then be fine-tuned and confirmed. The chosen
+ * time is validated against the vendor's free windows and booked on their
+ * calendar.
  */
 const JobAssignVendorDialog = ({
   open,
@@ -59,51 +71,59 @@ const JobAssignVendorDialog = ({
   onAssigned,
 }: JobAssignVendorDialogProps) => {
   const { toast } = useToast();
-  const [date, setDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
-  const [startTime, setStartTime] = useState<string>("09:00");
-  const [endTime, setEndTime] = useState<string>("10:00");
+  const today = format(new Date(), "yyyy-MM-dd");
+  const [weekStart, setWeekStart] = useState<string>(today);
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [startTime, setStartTime] = useState<string>("");
+  const [endTime, setEndTime] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
 
+  const weekEnd = useMemo(
+    () => format(addDays(parseISO(weekStart), DAYS_IN_VIEW - 1), "yyyy-MM-dd"),
+    [weekStart],
+  );
+
+  // Reset the view/selection each time the dialog opens.
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      setWeekStart(today);
+      setSelectedDate("");
+      setStartTime("");
+      setEndTime("");
       setNotes("");
-      setDate(format(new Date(), "yyyy-MM-dd"));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const { data: availabilityResp, isFetching } = useGetVendorAvailabilityQuery(
-    { builderId, date },
-    { skip: !builderId || !open },
+  const { data: scheduleResp, isFetching } = useGetVendorScheduleQuery(
+    { vendorId, from: weekStart, to: weekEnd },
+    { skip: !vendorId || !open },
   );
-  const rows: VendorAvailabilityRow[] = availabilityResp?.data ?? [];
-  const vendorRow = useMemo(
-    () => rows.find((r) => r.vendorId === vendorId) ?? null,
-    [rows, vendorId],
+  const days: VendorDayAvailability[] = scheduleResp?.data ?? [];
+
+  const selectedDay = useMemo(
+    () => days.find((d) => d.date === selectedDate) ?? null,
+    [days, selectedDate],
   );
 
-  // Snap the start/end into the first free window whenever availability loads.
-  useEffect(() => {
-    if (!vendorRow || vendorRow.freeWindows.length === 0) return;
-    const first = vendorRow.freeWindows[0];
-    const start = toHHmm(first.startTime);
+  const pickWindow = (date: string, w: FreeWindow) => {
+    const start = toHHmm(w.startTime);
+    const end = toHHmm(w.endTime);
+    setSelectedDate(date);
     setStartTime(start);
-    const endHour = Math.min(
-      Number(toHHmm(first.endTime).split(":")[0]),
-      Number(start.split(":")[0]) + 1,
-    );
-    const mins = start.split(":")[1];
-    const ft = toHHmm(first.endTime);
-    const proposed = `${String(endHour).padStart(2, "0")}:${mins}`;
-    setEndTime(proposed <= ft ? proposed : ft);
-  }, [vendorRow?.vendorId, date]); // eslint-disable-line react-hooks/exhaustive-deps
+    setEndTime(defaultEnd(start, end));
+  };
 
   const windowValid = useMemo(() => {
-    if (!vendorRow) return false;
+    if (!selectedDay || !startTime || !endTime) return false;
     if (endTime <= startTime) return false;
-    return vendorRow.freeWindows.some((w) => within({ start: startTime, end: endTime }, w));
-  }, [vendorRow, startTime, endTime]);
+    return selectedDay.freeWindows.some((w) =>
+      within({ start: startTime, end: endTime }, w),
+    );
+  }, [selectedDay, startTime, endTime]);
 
-  const [assignJobVendor, { isLoading: isAssigning }] = useAssignJobVendorMutation();
+  const [assignJobVendor, { isLoading: isAssigning }] =
+    useAssignJobVendorMutation();
 
   const handleAssign = async () => {
     if (!windowValid) {
@@ -120,13 +140,17 @@ const JobAssignVendorDialog = ({
         builderId,
         queryId,
         vendorId,
-        date,
+        date: selectedDate,
         startTime: `${startTime}:00`,
         endTime: `${endTime}:00`,
         notes: notes || undefined,
       }).unwrap();
       if (!res.success) {
-        toast({ title: "Assign failed", description: res.message, variant: "destructive" });
+        toast({
+          title: "Assign failed",
+          description: res.message,
+          variant: "destructive",
+        });
         return;
       }
       toast({ title: "Vendor assigned", description: res.message });
@@ -143,61 +167,182 @@ const JobAssignVendorDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent className="sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle>Schedule {vendorName}</DialogTitle>
           <DialogDescription>
-            Pick a date, then a time inside one of the vendor's free windows. The
-            slot is booked on their calendar.
+            Browse {vendorName}'s calendar and click a free window to book it.
+            Booked time is shown so you can avoid clashes.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-1">
-          <Label>Date</Label>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        {/* Week navigation */}
+        <div className="flex items-center justify-between">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setWeekStart(
+                format(addDays(parseISO(weekStart), -DAYS_IN_VIEW), "yyyy-MM-dd"),
+              )
+            }
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Prev
+          </Button>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">
+              {format(parseISO(weekStart), "dd MMM")} –{" "}
+              {format(parseISO(weekEnd), "dd MMM yyyy")}
+            </span>
+            {weekStart !== today && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setWeekStart(today)}
+              >
+                Today
+              </Button>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setWeekStart(
+                format(addDays(parseISO(weekStart), DAYS_IN_VIEW), "yyyy-MM-dd"),
+              )
+            }
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
 
-        <div className="rounded-md border p-3 text-sm">
+        {/* Calendar */}
+        <div className="max-h-[320px] space-y-2 overflow-y-auto rounded-md border p-2">
           {isFetching ? (
-            <p className="text-muted-foreground">Loading availability…</p>
-          ) : !vendorRow ? (
-            <p className="text-muted-foreground">
-              {vendorName} is not available on this date (non-working day or fully booked).
+            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Loading calendar…
+            </div>
+          ) : days.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No schedule data for this week.
             </p>
           ) : (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                Working {toHHmm(vendorRow.workingHoursStart)}–{toHHmm(vendorRow.workingHoursEnd)}
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {vendorRow.freeWindows.length === 0 ? (
-                  <span className="text-muted-foreground">No free windows.</span>
-                ) : (
-                  vendorRow.freeWindows.map((w, i) => (
-                    <Badge key={i} variant="secondary" className="text-[10px]">
-                      {toHHmm(w.startTime)}–{toHHmm(w.endTime)}
-                    </Badge>
-                  ))
-                )}
-              </div>
-            </div>
+            days.map((day) => {
+              const isSelectedDay = day.date === selectedDate;
+              const nonWorking = !day.workingDay && day.freeWindows.length === 0;
+              return (
+                <div
+                  key={day.date}
+                  className={`rounded-md border p-2 ${
+                    isSelectedDay ? "border-primary bg-primary/5" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      {format(parseISO(day.date), "EEE dd MMM")}
+                    </span>
+                    {!nonWorking &&
+                      day.workingHoursStart &&
+                      day.workingHoursEnd && (
+                        <span className="text-xs text-muted-foreground">
+                          {toHHmm(day.workingHoursStart)}–
+                          {toHHmm(day.workingHoursEnd)}
+                        </span>
+                      )}
+                  </div>
+
+                  {nonWorking ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Non-working day
+                    </p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      {day.freeWindows.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {day.freeWindows.map((w, i) => {
+                            const ws = toHHmm(w.startTime);
+                            const we = toHHmm(w.endTime);
+                            const active =
+                              isSelectedDay &&
+                              startTime >= ws &&
+                              endTime <= we &&
+                              endTime > startTime;
+                            return (
+                              <Button
+                                key={i}
+                                type="button"
+                                size="sm"
+                                variant={active ? "default" : "outline"}
+                                className="h-7 text-xs"
+                                onClick={() => pickWindow(day.date, w)}
+                              >
+                                {ws}–{we}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Fully booked.
+                        </p>
+                      )}
+
+                      {day.bookings.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {day.bookings.map((b) => (
+                            <Badge
+                              key={b.id}
+                              variant="secondary"
+                              className="text-[10px] font-normal text-muted-foreground"
+                            >
+                              Booked {toHHmm(b.startTime)}–{toHHmm(b.endTime)}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
 
-        {vendorRow && vendorRow.freeWindows.length > 0 && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Start</Label>
-              <Input type="time" step={300} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+        {/* Selected slot — refine and confirm */}
+        {selectedDay && (
+          <div className="space-y-3 rounded-md border p-3">
+            <p className="text-sm font-medium">
+              {format(parseISO(selectedDate), "EEE dd MMM yyyy")}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Start</Label>
+                <Input
+                  type="time"
+                  step={300}
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>End</Label>
+                <Input
+                  type="time"
+                  step={300}
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label>End</Label>
-              <Input type="time" step={300} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-            </div>
-            <p className="col-span-2 text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {windowValid
                 ? `Will be booked as ${startTime}–${endTime}.`
-                : "Pick a window inside one of the vendor's free slots above."}
+                : "Adjust the times to sit inside one of this day's free windows."}
             </p>
           </div>
         )}

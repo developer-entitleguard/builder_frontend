@@ -180,6 +180,38 @@ export const jobsApi = api.injectEndpoints({
       }),
       invalidatesTags: (result, error, { queryId }) => [{ type: 'Job', id: queryId }],
     }),
+
+    // -----------------------------------------------------------------------
+    // Vendor-facing (assignee-scoped). The logged-in internal vendor reads and
+    // acts on the jobs assigned to *them* for a query. Status changes touch only
+    // the job — never the parent query.
+    // -----------------------------------------------------------------------
+
+    // The calling internal vendor's own jobs on a query (title + scope).
+    getMyJobsForQuery: build.query<
+      { success: boolean; message: string; data: BuilderJob[] },
+      { queryId: string }
+    >({
+      query: ({ queryId }) => ({
+        url: '/api/vendor/me/jobs',
+        method: 'GET',
+        params: { queryId },
+      }),
+      providesTags: (result, error, { queryId }) => [{ type: 'Job', id: `vendor-${queryId}` }],
+    }),
+
+    // The calling internal vendor updates one of their jobs' status.
+    updateMyJobStatus: build.mutation<
+      ApiResult,
+      { id: string; status: JobStatus; queryId: string }
+    >({
+      query: ({ id, status }) => ({
+        url: `/api/vendor/me/jobs/${id}/status`,
+        method: 'PUT',
+        body: { status },
+      }),
+      invalidatesTags: (result, error, { queryId }) => [{ type: 'Job', id: `vendor-${queryId}` }],
+    }),
   }),
 });
 
@@ -191,4 +223,6 @@ export const {
   useAssignJobMutation,
   useAssignJobVendorMutation,
   useDeleteJobMutation,
+  useGetMyJobsForQueryQuery,
+  useUpdateMyJobStatusMutation,
 } = jobsApi;

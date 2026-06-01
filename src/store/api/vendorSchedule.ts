@@ -121,6 +121,13 @@ export interface MyAssignedQuery {
   customerContact: string | null;
   customerEmail: string | null;
   status: { id: string; name: string } | null;
+  /**
+   * Vendor-scoped completion: true once all of THIS vendor's jobs on the query
+   * are terminal (COMPLETED/CANCELLED) — independent of the parent query status.
+   */
+  completed: boolean;
+  /** ISO timestamp of the latest completed job; used to sort the Completed tab. */
+  completedAt: string | null;
 }
 
 export const vendorScheduleApi = api.injectEndpoints({

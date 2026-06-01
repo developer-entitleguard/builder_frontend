@@ -32,7 +32,7 @@ type BuilderQueryApi = Omit<BuilderQuery, "orderItem"> & { orderItem?: OrderItem
 
 // ── Helpers ──
 
-type TabKey = "pending" | "assigned" | "completed" | "done";
+type TabKey = "pending" | "assigned" | "done";
 
 function getTabForStatus(statusName?: string): TabKey {
   const upper = (statusName ?? "").toUpperCase().replace(/\s+/g, "_");
@@ -47,8 +47,8 @@ function getTabForStatus(statusName?: string): TabKey {
     case "ASSIGNED_TO_VENDOR":
     case "AWAITING_VENDOR_ACTION":
       return "assigned";
+    // The "Completed" status was retired; fold any legacy COMPLETED query into Done.
     case "COMPLETED":
-      return "completed";
     case "DONE":
       return "done";
     default:
@@ -171,7 +171,6 @@ const QueriesManagement = () => {
     const groups: Record<TabKey, QueryDisplay[]> = {
       pending: [],
       assigned: [],
-      completed: [],
       done: [],
     };
     for (const q of allQueries) {
@@ -183,7 +182,6 @@ const QueriesManagement = () => {
   const tabCounts: Record<TabKey, number> = {
     pending: grouped.pending.length,
     assigned: grouped.assigned.length,
-    completed: grouped.completed.length,
     done: grouped.done.length,
   };
 
@@ -289,14 +287,6 @@ const QueriesManagement = () => {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="completed" className="gap-1.5">
-              Completed
-              {tabCounts.completed > 0 && (
-                <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] text-xs px-1.5">
-                  {tabCounts.completed}
-                </Badge>
-              )}
-            </TabsTrigger>
             <TabsTrigger value="done" className="gap-1.5">
               Done
               {tabCounts.done > 0 && (
@@ -312,9 +302,6 @@ const QueriesManagement = () => {
           </TabsContent>
           <TabsContent value="assigned">
             <QueryList queries={grouped.assigned} />
-          </TabsContent>
-          <TabsContent value="completed">
-            <QueryList queries={grouped.completed} />
           </TabsContent>
           <TabsContent value="done">
             <QueryList queries={grouped.done} />

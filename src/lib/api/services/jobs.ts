@@ -48,10 +48,35 @@ export interface BuilderJob {
 export interface CreateJobRequest {
   queryId: string;
   builderId: string;
-  title: string;
+  /** Optional — defaults to the source query's title on the backend. */
+  title?: string;
   scope?: string;
   categoryId?: string;
   status?: JobStatus;
+}
+
+/**
+ * Builder vendor assignment for a job. Pass a single {@code vendorId}; the
+ * backend routes by vendor kind. Internal vendors also require a schedule
+ * window ({@code date}/{@code startTime}/{@code endTime}); external vendors
+ * ignore it.
+ */
+export interface AssignJobVendorRequest {
+  id: string;
+  builderId: string;
+  queryId: string;
+  vendorId: string;
+  /** yyyy-MM-dd — required for internal vendors. */
+  date?: string;
+  /** HH:mm or HH:mm:ss — required for internal vendors. */
+  startTime?: string;
+  endTime?: string;
+  notes?: string;
+}
+
+export interface ApiResult {
+  success: boolean;
+  message: string;
 }
 
 export interface AssignJobRequest {
@@ -115,7 +140,7 @@ export const jobsApi = api.injectEndpoints({
       invalidatesTags: (result, error, { queryId }) => [{ type: 'Job', id: queryId }],
     }),
 
-    // Tri-modal vendor assignment.
+    // Tri-modal vendor assignment (low-level: raw assignee fields).
     assignJob: build.mutation<BuilderJob, AssignJobRequest & { queryId: string }>({
       query: ({ id, builderId, queryId, ...body }) => ({
         url: `/api/builder/job/${id}/assign`,
@@ -124,6 +149,24 @@ export const jobsApi = api.injectEndpoints({
         body,
       }),
       invalidatesTags: (result, error, { queryId }) => [{ type: 'Job', id: queryId }],
+    }),
+
+    // Builder vendor assignment: pass a vendorId (+ optional schedule for
+    // internal vendors). Books the vendor's calendar and mirrors onto the
+    // source query so internal vendors see it / external links can be shared.
+    assignJobVendor: build.mutation<ApiResult, AssignJobVendorRequest>({
+      query: ({ id, builderId, queryId, ...body }) => ({
+        url: `/api/builder/job/${id}/assign-vendor`,
+        method: 'PUT',
+        params: { builderId },
+        body,
+      }),
+      invalidatesTags: (result, error, { queryId }) => [
+        { type: 'Job', id: queryId },
+        'Query',
+        'VendorAvailability',
+        'VendorSchedule',
+      ],
     }),
 
     deleteJob: build.mutation<
@@ -146,5 +189,6 @@ export const {
   useCreateJobFromQueryMutation,
   useUpdateJobStatusMutation,
   useAssignJobMutation,
+  useAssignJobVendorMutation,
   useDeleteJobMutation,
 } = jobsApi;

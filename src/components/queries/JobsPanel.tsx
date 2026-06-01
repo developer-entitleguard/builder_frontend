@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -20,11 +19,13 @@ import {
   useGetJobsForQueryQuery,
   useCreateJobFromQueryMutation,
   useUpdateJobStatusMutation,
-  useAssignJobMutation,
+  useAssignJobVendorMutation,
   useDeleteJobMutation,
   type BuilderJob,
   type JobStatus,
 } from "@/lib/api/services/jobs";
+import JobAssignVendorDialog from "@/components/queries/JobAssignVendorDialog";
+import VendorLinkModal from "@/components/VendorLinkModal";
 
 const STATUSES: JobStatus[] = [
   "DRAFT",
@@ -92,13 +93,18 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
 
   const [createJob, { isLoading: creating }] = useCreateJobFromQueryMutation();
   const [updateStatus] = useUpdateJobStatusMutation();
-  const [assignJob, { isLoading: assigning }] = useAssignJobMutation();
+  const [assignJobVendor, { isLoading: assigning }] = useAssignJobVendorMutation();
   const [deleteJob] = useDeleteJobMutation();
 
   const [showAdd, setShowAdd] = useState(false);
-  const [title, setTitle] = useState("");
   const [scope, setScope] = useState("");
   const [assignVendorByJob, setAssignVendorByJob] = useState<Record<string, string>>({});
+  // Schedule dialog target for an internal vendor assignment.
+  const [scheduleFor, setScheduleFor] = useState<
+    { jobId: string; vendorId: string; vendorName: string } | null
+  >(null);
+  // After an external vendor is assigned, surface the shareable query link.
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
 
   const canAct = canManage && !!builderId;
 
@@ -109,19 +115,14 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
   }, [vendors]);
 
   const handleAdd = async () => {
-    if (!title.trim()) {
-      toast({ title: "Title required", description: "Enter a job title.", variant: "destructive" });
-      return;
-    }
     try {
+      // Title is omitted — the backend defaults it to the source query's title.
       await createJob({
         queryId,
         builderId: builderId ?? "",
-        title: title.trim(),
         scope: scope.trim() || undefined,
       }).unwrap();
       toast({ title: "Job created" });
-      setTitle("");
       setScope("");
       setShowAdd(false);
     } catch (e) {
@@ -145,27 +146,27 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
       toast({ title: "Pick a vendor", variant: "destructive" });
       return;
     }
-    // Route per vendor kind: internal vendors have a linked EG-portal user
-    // account; external vendors are reached off-platform via an emailed link.
-    const internalUserId = vendor.userInfo?.id;
+    // Internal vendors (linked to an EG-portal user) need a scheduled time
+    // booked against their availability — open the schedule dialog.
+    if (vendor.userInfo?.id) {
+      setScheduleFor({ jobId: job.id, vendorId: vendor.id, vendorName: vendor.name });
+      return;
+    }
+    // External vendors: assign immediately, then surface the shareable link
+    // the builder hands over manually.
     try {
-      if (internalUserId) {
-        await assignJob({
-          id: job.id,
-          builderId: builderId ?? "",
-          queryId,
-          assigneeUserId: internalUserId,
-        }).unwrap();
-      } else {
-        await assignJob({
-          id: job.id,
-          builderId: builderId ?? "",
-          queryId,
-          assigneeName: vendor.name,
-          assigneeEmail: vendor.email,
-        }).unwrap();
+      const res = await assignJobVendor({
+        id: job.id,
+        builderId: builderId ?? "",
+        queryId,
+        vendorId: vendor.id,
+      }).unwrap();
+      if (!res.success) {
+        toast({ title: "Could not assign vendor", description: res.message, variant: "destructive" });
+        return;
       }
-      toast({ title: "Vendor assigned" });
+      toast({ title: "Vendor assigned", description: "Share the vendor link below." });
+      setLinkModalOpen(true);
     } catch (e) {
       toast({ title: "Could not assign vendor", variant: "destructive" });
     }
@@ -181,6 +182,7 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
   };
 
   return (
+    <>
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="flex items-center gap-2 text-lg">
@@ -202,15 +204,10 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
       <CardContent className="space-y-4">
         {showAdd && canAct && (
           <div className="space-y-3 rounded-md border p-3">
-            <div className="space-y-1">
-              <Label htmlFor="job-title">Title</Label>
-              <Input
-                id="job-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Replace kitchen tapware"
-              />
-            </div>
+            <p className="text-xs text-muted-foreground">
+              The job inherits this query's title. Add an optional scope to
+              describe what this particular job covers.
+            </p>
             <div className="space-y-1">
               <Label htmlFor="job-scope">Scope (optional)</Label>
               <Textarea
@@ -231,7 +228,6 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                 variant="ghost"
                 onClick={() => {
                   setShowAdd(false);
-                  setTitle("");
                   setScope("");
                 }}
               >
@@ -336,6 +332,26 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
         )}
       </CardContent>
     </Card>
+
+      {scheduleFor && builderId && (
+        <JobAssignVendorDialog
+          open={!!scheduleFor}
+          onOpenChange={(o) => !o && setScheduleFor(null)}
+          builderId={builderId}
+          jobId={scheduleFor.jobId}
+          queryId={queryId}
+          vendorId={scheduleFor.vendorId}
+          vendorName={scheduleFor.vendorName}
+          onAssigned={() => setScheduleFor(null)}
+        />
+      )}
+
+      <VendorLinkModal
+        open={linkModalOpen}
+        onClose={() => setLinkModalOpen(false)}
+        queryId={queryId}
+      />
+    </>
   );
 };
 

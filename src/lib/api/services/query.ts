@@ -288,19 +288,18 @@ export const queryApi = api.injectEndpoints({
       AddCommentResponse,
       AddCommentRequest
     >({
-      query: (data) => {
-        const formData = new FormData();
-        formData.append('comment', data.comment);
-        formData.append('commentedBy', data.commentedBy);
-        formData.append('id', data.id);
-        formData.append('queryId', data.queryId);
-        
-        return {
-          url: '/api/querycomment',
-          method: 'POST',
-          body: formData,
-        };
-      },
+      // Backend /api/querycomment binds @RequestBody (JSON). Sending multipart
+      // FormData here yields HTTP 415 Unsupported Media Type — send JSON.
+      query: (data) => ({
+        url: '/api/querycomment',
+        method: 'POST',
+        body: {
+          comment: data.comment,
+          commentedBy: data.commentedBy,
+          id: data.id,
+          queryId: data.queryId,
+        },
+      }),
       invalidatesTags: ['Query'],
     }),
   }),

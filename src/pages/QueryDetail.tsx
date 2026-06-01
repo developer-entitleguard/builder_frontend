@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import type { BuilderQuery } from "@/lib/api/services/query";
-import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
 import {
   useUpdateQueryMutation,
   useAddQueryCommentMutation,
@@ -15,25 +14,9 @@ import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { format } from "date-fns";
-import {
-  CalendarIcon,
   ArrowLeft,
   Check,
   LinkIcon,
@@ -43,12 +26,10 @@ import {
   Loader2,
   FileText,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { viewPhotoUrl } from "@/lib/api/services/files";
 import VendorLinkModal from "@/components/VendorLinkModal";
-import AssignVendorDialog from "@/components/queries/AssignVendorDialog";
 import JobsPanel from "@/components/queries/JobsPanel";
-import { canAssignVendors } from "@/lib/roles";
+import { canManageJobs } from "@/lib/roles";
 import {
   ATTACHMENT_ACCEPT,
   ATTACHMENT_HELP_TEXT,
@@ -105,25 +86,19 @@ const QueryDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { organization, builderRole } = useOrganization();
-  const canScheduleAssign = canAssignVendors(builderRole);
+  const canManageQueryJobs = canManageJobs(builderRole);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   // ── State ──
   const [queryData, setQueryData] = useState<BuilderQuery | null>(null);
-  const [selectedVendor, setSelectedVendor] = useState("");
-  const [vendorPhone, setVendorPhone] = useState("");
-  const [priorityLevel, setPriorityLevel] = useState<string>("Medium");
-  const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [comment, setComment] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [vendorLinkModalOpen, setVendorLinkModalOpen] = useState(false);
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
   // ── Derived ──
   const group = statusGroup(queryData?.status?.name);
-  const isPending = group === "pending";
   const isVendor = group === "vendor";
   const isVendorComplete = group === "vendorComplete";
   const isComplete = group === "complete";
@@ -172,27 +147,7 @@ const QueryDetail = () => {
   );
   const statuses = statusesData?.data ?? [];
 
-  const { data: vendorsData, isLoading: isLoadingVendors } =
-    useGetBuilderVendorsQuery(
-      { builderId: builderId ?? "" },
-      { skip: !builderId || !isPending }
-    );
-  const vendors = (vendorsData as {
-    data?: Array<{ id: string; name: string; type?: string; contact?: string; vendorType?: 'INTERNAL' | 'EXTERNAL' | null }>;
-  })?.data ?? [];
-
-  // What classification is the vendor currently picked in the dropdown?
-  const effectiveVendorId = selectedVendor || queryData?.vendor?.id || "";
-  const selectedVendorClassification =
-    vendors.find((v) => v.id === effectiveVendorId)?.vendorType ?? null;
-  const isInternalVendorPicked = selectedVendorClassification === "INTERNAL";
-  const isExternalVendorPicked = selectedVendorClassification === "EXTERNAL";
-
   // ── Target status IDs ──
-  const assignedToVendorStatusId = statuses.find(
-    (s) =>
-      (s.name ?? "").toUpperCase().replace(/\s+/g, "_") === "ASSIGNED_TO_VENDOR"
-  )?.id;
   const createdStatusId = statuses.find(
     (s) => (s.name ?? "").toUpperCase() === "CREATED"
   )?.id;
@@ -221,60 +176,7 @@ const QueryDetail = () => {
     if (id) fetchQuery(id);
   }, [id, fetchQuery]);
 
-  // Sync form state when data loads
-  useEffect(() => {
-    if (queryData) {
-      if (queryData.priorityLevel) setPriorityLevel(queryData.priorityLevel);
-      if (queryData.dueDate) setDueDate(new Date(queryData.dueDate));
-    }
-  }, [queryData]);
-
   // ── Handlers ──
-
-  const handleAssignCase = async () => {
-    if (!queryData || !assignedToVendorStatusId) return;
-    const vendorId = selectedVendor?.trim() || undefined;
-    if (!vendorId) {
-      toast({
-        title: "Error",
-        description: "Please select a vendor",
-        variant: "destructive",
-      });
-      return;
-    }
-    try {
-      const dueDateString = dueDate
-        ? dueDate.toISOString().split("T")[0]
-        : undefined;
-      const result = await updateQuery({
-        id: queryData.id,
-        statusId: assignedToVendorStatusId,
-        vendorId,
-        vendorNumber: vendorPhone?.trim() || undefined,
-        priorityLevel: priorityLevel.toUpperCase(),
-        dueDate: dueDateString,
-        userId: userId ?? undefined,
-      }).unwrap();
-
-      if (result.success) {
-        toast({ title: "Success", description: "Vendor assigned successfully" });
-        setVendorLinkModalOpen(true);
-        if (id) await fetchQuery(id);
-      } else {
-        toast({
-          title: "Error",
-          description: result.message || "Failed to assign vendor",
-          variant: "destructive",
-        });
-      }
-    } catch {
-      toast({
-        title: "Error",
-        description: "An error occurred while assigning vendor",
-        variant: "destructive",
-      });
-    }
-  };
 
   const handleSendBack = async () => {
     if (!queryData || !createdStatusId) return;
@@ -736,182 +638,12 @@ const QueryDetail = () => {
 
             {/* Jobs spawned from this converted ticket query (one query → many jobs). */}
             {id && (
-              <JobsPanel queryId={id} builderId={builderId} canManage={canScheduleAssign} />
+              <JobsPanel queryId={id} builderId={builderId} canManage={canManageQueryJobs} />
             )}
           </div>
 
           {/* ── Right Column ── */}
           <div className="space-y-6">
-            {/* Assign to Vendor — pending statuses only */}
-            {isPending && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Assign to Vendor</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="vendor-select">Select Vendor</Label>
-                    <Select
-                      value={
-                        selectedVendor ||
-                        queryData.vendor?.id ||
-                        ""
-                      }
-                      onValueChange={(value) => {
-                        setSelectedVendor(value);
-                        const v = vendors.find((v) => v.id === value);
-                        if (v?.contact) setVendorPhone(v.contact);
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue
-                          placeholder={
-                            isLoadingVendors
-                              ? "Loading vendors..."
-                              : queryData.vendor?.name || "Select a vendor..."
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {isLoadingVendors ? (
-                          <SelectItem value="loading" disabled>
-                            Loading vendors...
-                          </SelectItem>
-                        ) : vendors.length === 0 ? (
-                          <SelectItem value="no-vendors" disabled>
-                            No vendors available
-                          </SelectItem>
-                        ) : (
-                          vendors.map((vendor) => (
-                            <SelectItem key={vendor.id} value={vendor.id}>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span>{vendor.name}</span>
-                                {vendor.type && (
-                                  <span className="text-xs text-muted-foreground">
-                                    ({vendor.type})
-                                  </span>
-                                )}
-                                {vendor.vendorType === "INTERNAL" && (
-                                  <Badge variant="default" className="text-[10px] px-1.5 py-0">
-                                    Internal
-                                  </Badge>
-                                )}
-                                {vendor.vendorType === "EXTERNAL" && (
-                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                                    External
-                                  </Badge>
-                                )}
-                                {!vendor.vendorType && (
-                                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                                    Unclassified
-                                  </Badge>
-                                )}
-                              </div>
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="vendor-phone">Vendor Contact</Label>
-                    <Input
-                      id="vendor-phone"
-                      placeholder="(555) 555-5555"
-                      value={
-                        vendorPhone || queryData.vendor?.contact || ""
-                      }
-                      onChange={(e) => setVendorPhone(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <Label>Priority Level</Label>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      {["Low", "Medium", "High", "Critical"].map((level) => (
-                        <Button
-                          key={level}
-                          variant={
-                            priorityLevel === level ? "default" : "outline"
-                          }
-                          size="sm"
-                          onClick={() => setPriorityLevel(level)}
-                        >
-                          {level}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* External vendors get a manual due date — internal vendors
-                      inherit theirs from the booked schedule slot. */}
-                  {isExternalVendorPicked && (
-                    <div>
-                      <Label>Due Date</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !dueDate && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {dueDate ? (
-                              format(dueDate, "PPP")
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={dueDate}
-                            onSelect={setDueDate}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  )}
-
-                  {isExternalVendorPicked && (
-                    <Button
-                      className="w-full"
-                      onClick={handleAssignCase}
-                      disabled={isUpdating || !queryData}
-                    >
-                      {isUpdating ? "Assigning..." : "Assign Case"}
-                    </Button>
-                  )}
-
-                  {isInternalVendorPicked && canScheduleAssign && builderId && queryData && (
-                    <Button
-                      type="button"
-                      className="w-full"
-                      onClick={() => setAssignDialogOpen(true)}
-                    >
-                      Assign with schedule…
-                    </Button>
-                  )}
-
-                  {!selectedVendorClassification && effectiveVendorId && (
-                    <p className="text-xs text-muted-foreground">
-                      Vendor classification isn't set — ask an admin to mark this vendor as Internal or External under Admin → Vendors.
-                    </p>
-                  )}
-                  {!effectiveVendorId && (
-                    <p className="text-xs text-muted-foreground">
-                      Pick a vendor to continue. Internal vendors get a scheduled booking; external vendors get a manual due date.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
             {/* Vendor Info — vendor / vendorComplete / complete statuses */}
             {(isVendor || isVendorComplete || isComplete) && queryData.vendor && (
               <Card>
@@ -1100,20 +832,6 @@ const QueryDetail = () => {
           open={vendorLinkModalOpen}
           onClose={() => setVendorLinkModalOpen(false)}
           queryId={queryData.id}
-        />
-      )}
-
-      {/* Schedule-aware assign dialog (Customer Support / Admin) */}
-      {queryData.id && builderId && (
-        <AssignVendorDialog
-          open={assignDialogOpen}
-          onOpenChange={setAssignDialogOpen}
-          queryId={queryData.id}
-          builderId={builderId}
-          onAssigned={() => {
-            // Refresh the page-level query so the newly assigned vendor + due date land in the UI.
-            getQueryById({ id: queryData.id });
-          }}
         />
       )}
     </div>

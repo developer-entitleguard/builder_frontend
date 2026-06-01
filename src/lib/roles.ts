@@ -92,6 +92,12 @@ export const canTriageQueries = (role: BuilderRole | null | undefined): boolean 
 export const canAssignVendors = (role: BuilderRole | null | undefined): boolean =>
   isAdministrator(role) || isCustomerSupport(role);
 
+// Ticket/Query/Job refactor. Mirrors backend RolePermissions JOB_MANAGE/JOB_ASSIGN:
+// ADMINISTRATOR, PROJECT_MANAGER and CUSTOMER_SUPPORT may create/assign/manage
+// the jobs spawned from a query. (The vendor roles remain view-only.)
+export const canManageJobs = (role: BuilderRole | null | undefined): boolean =>
+  isAdministrator(role) || isProjectManager(role) || isCustomerSupport(role);
+
 export const hasAnyBuilderRole = (
   role: BuilderRole | null | undefined,
   allowed: readonly BuilderRole[],

@@ -17,13 +17,16 @@ const getAuthToken = (): string => {
 export const uploadActivitiesCsv = async (
   projectId: string,
   file: File,
-  saveDuplicate: boolean
+  saveDuplicate: boolean,
+  dryRun = false
 ): Promise<unknown> => {
   const authToken = getAuthToken();
   const apiBaseUrl = getApiBaseUrl();
   const path = `/api/builder/projects/${projectId}/upload/activities`;
   const urlBase = import.meta.env.DEV ? path : `${apiBaseUrl}${path}`;
-  const url = `${urlBase}?saveDuplicate=${saveDuplicate ? "true" : "false"}`;
+  const url =
+    `${urlBase}?saveDuplicate=${saveDuplicate ? "true" : "false"}` +
+    `&dryRun=${dryRun ? "true" : "false"}`;
 
   const formData = new FormData();
   formData.append("file", file);
@@ -57,10 +60,10 @@ export const useUploadActivitiesCsv = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const upload = useCallback(
-    async (projectId: string, file: File, saveDuplicate: boolean) => {
+    async (projectId: string, file: File, saveDuplicate: boolean, dryRun = false) => {
       setIsLoading(true);
       try {
-        const result = await uploadActivitiesCsv(projectId, file, saveDuplicate);
+        const result = await uploadActivitiesCsv(projectId, file, saveDuplicate, dryRun);
         return result;
       } catch (error) {
         console.error("Error uploading activities CSV:", error);

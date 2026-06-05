@@ -86,7 +86,8 @@ export const ActivityTypeDialog = ({
 
   const duplicateMessage = useMemo(() => {
     if (!duplicateCount) return "";
-    return `You are trying to add activities that already exist. Number of duplicate activities: ${duplicateCount}. Do you want to continue?`;
+    const noun = duplicateCount === 1 ? "activity" : "activities";
+    return `${duplicateCount} ${noun} in this file match the name and category of activities that already exist in this project. "Import all" adds everything, creating duplicate entries. "Skip duplicates & import the rest" adds only the new activities and leaves the existing ones untouched.`;
   }, [duplicateCount]);
 
   const handleSingleActivity = () => {
@@ -110,9 +111,19 @@ export const ActivityTypeDialog = ({
     event.target.value = '';
   };
 
+  const finishImport = (description: string) => {
+    toast({ title: "Activities imported", description });
+    setDuplicateConfirmOpen(false);
+    resetState();
+    onOpenChange(false);
+    onSuccess?.();
+  };
+
   const handleSave = async () => {
     if (!selectedFile) return;
-    const resp = await uploadActivitiesCsv(projectId, selectedFile, false);
+    // Dry run first: detect duplicates WITHOUT saving anything, so we never
+    // commit before the builder has decided.
+    const resp = await uploadActivitiesCsv(projectId, selectedFile, false, true);
     if (!resp) return;
 
     const dupCount = countDuplicatesFromResponse(resp);
@@ -122,27 +133,36 @@ export const ActivityTypeDialog = ({
       return;
     }
 
-    toast({
-      title: "Activities imported",
-      description: "CSV file was uploaded successfully.",
-    });
-    resetState();
-    onOpenChange(false);
-    onSuccess?.();
+    // No duplicates → commit everything in a single save.
+    const commit = await uploadActivitiesCsv(projectId, selectedFile, false, false);
+    if (!commit) return;
+    finishImport("CSV file was uploaded successfully.");
   };
 
+  // Yes → import everything, including the rows flagged as duplicates.
   const handleConfirmDuplicateYes = async () => {
     if (!selectedFile) return;
-    const resp = await uploadActivitiesCsv(projectId, selectedFile, true);
+    const resp = await uploadActivitiesCsv(projectId, selectedFile, true, false);
     if (!resp) return;
-    toast({
-      title: "Activities imported",
-      description: "CSV file was uploaded successfully.",
-    });
-    setDuplicateConfirmOpen(false);
-    resetState();
-    onOpenChange(false);
-    onSuccess?.();
+    finishImport("CSV file was uploaded successfully.");
+  };
+
+  // No → import the non-duplicates only; skip the flagged duplicates.
+  const handleConfirmDuplicateNo = async () => {
+    if (!selectedFile) {
+      setDuplicateConfirmOpen(false);
+      resetState();
+      onOpenChange(false);
+      return;
+    }
+    const resp = await uploadActivitiesCsv(projectId, selectedFile, false, false);
+    if (!resp) {
+      setDuplicateConfirmOpen(false);
+      resetState();
+      onOpenChange(false);
+      return;
+    }
+    finishImport("Duplicates were skipped; the remaining activities were imported.");
   };
 
   const handleBack = () => {
@@ -274,19 +294,13 @@ export const ActivityTypeDialog = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={() => {
-                setDuplicateConfirmOpen(false);
-                resetState();
-                onOpenChange(false);
-              }}
-            >
-              No
+            <AlertDialogCancel onClick={handleConfirmDuplicateNo}>
+              Skip duplicates &amp; import the rest
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDuplicateYes}
             >
-              Yes
+              Import all (keep duplicates)
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -18,9 +18,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
-import type {
-  ComplianceDocumentApi,
-  ComplianceDocumentBody,
+import {
+  useGetJobCategoriesQuery,
+  type ComplianceDocumentApi,
+  type ComplianceDocumentBody,
 } from "@/store/api/complianceDocuments";
 import {
   MANDATORY_OPTIONS,
@@ -57,6 +58,7 @@ export const ComplianceDocumentDialog = ({
   onSave,
 }: ComplianceDocumentDialogProps) => {
   const [form, setForm] = useState<ComplianceDocumentBody>(emptyForm);
+  const { data: jobCategories } = useGetJobCategoriesQuery();
 
   useEffect(() => {
     if (!open) return;
@@ -64,6 +66,7 @@ export const ComplianceDocumentDialog = ({
       setForm({
         documentName: document.documentName ?? "",
         category: document.category ?? "",
+        categoryCode: document.categoryCode ?? "",
         description: document.description ?? "",
         mandatory: document.mandatory ?? "REQUIRED",
         issuer: document.issuer ?? "",
@@ -129,6 +132,31 @@ export const ComplianceDocumentDialog = ({
                 disabled={isSaving}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Standard category (for matching)</Label>
+            <Select
+              value={form.categoryCode ? form.categoryCode : "NONE"}
+              onValueChange={(v) => update("categoryCode", v === "NONE" ? "" : v)}
+              disabled={isSaving}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Optional — map to a standard trade category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">Unmapped</SelectItem>
+                {(jobCategories ?? []).map((jc) => (
+                  <SelectItem key={jc.id} value={jc.code}>
+                    {jc.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Lets this line, the job you assign it to, and the trade's certificate line up by
+              default.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

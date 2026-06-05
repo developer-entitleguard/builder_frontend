@@ -135,7 +135,7 @@ const Header = () => {
     }
     if (showTicketsTab) {
       mobileNavItems.push({
-        label: "Phone Tickets",
+        label: "Tickets",
         to: "/tickets",
         activePrefix: "/tickets",
       });
@@ -320,7 +320,7 @@ const Header = () => {
                             {showTicketsTab && (
                               <DropdownMenuItem asChild>
                                 <Link to="/tickets" className="cursor-pointer">
-                                  Phone Tickets
+                                  Tickets
                                 </Link>
                               </DropdownMenuItem>
                             )}

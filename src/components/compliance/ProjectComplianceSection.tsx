@@ -20,12 +20,15 @@ import {
   useUpdateProjectComplianceDocumentMutation,
   useDeleteProjectComplianceDocumentMutation,
   useResetProjectComplianceDocumentsMutation,
+  useAssignProjectComplianceDocumentMutation,
+  type ComplianceAssignBody,
   type ComplianceDocumentApi,
   type ComplianceDocumentBody,
 } from "@/store/api/complianceDocuments";
 import { ComplianceDocumentsTable } from "./ComplianceDocumentsTable";
 import { ComplianceCompletenessBar } from "./ComplianceCompletenessBar";
 import { ComplianceDocumentDialog } from "./ComplianceDocumentDialog";
+import { AssignComplianceDialog } from "./AssignComplianceDialog";
 import { GenerateComplianceDialog } from "./GenerateComplianceDialog";
 
 interface ProjectComplianceSectionProps {
@@ -42,11 +45,13 @@ export const ProjectComplianceSection = ({ projectId }: ProjectComplianceSection
   const [updateDoc, { isLoading: updating }] = useUpdateProjectComplianceDocumentMutation();
   const [deleteDoc] = useDeleteProjectComplianceDocumentMutation();
   const [resetDocs, { isLoading: resetting }] = useResetProjectComplianceDocumentsMutation();
+  const [assignDoc, { isLoading: assigning }] = useAssignProjectComplianceDocumentMutation();
 
   const [generateOpen, setGenerateOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<ComplianceDocumentApi | null>(null);
   const [deletingDoc, setDeletingDoc] = useState<ComplianceDocumentApi | null>(null);
+  const [assigningDoc, setAssigningDoc] = useState<ComplianceDocumentApi | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
 
   const documents = docsResponse?.data ?? [];
@@ -97,6 +102,21 @@ export const ProjectComplianceSection = ({ projectId }: ProjectComplianceSection
       }).unwrap();
     } catch {
       toast({ title: "Couldn't update status", variant: "destructive" });
+    }
+  };
+
+  const handleAssign = async (body: ComplianceAssignBody) => {
+    if (!assigningDoc) return;
+    try {
+      await assignDoc({ projectId, id: assigningDoc.id, body }).unwrap();
+      toast({
+        title: "Assigned",
+        description:
+          "The trade/auditor was invited. Their certificate will close this line automatically.",
+      });
+      setAssigningDoc(null);
+    } catch {
+      toast({ title: "Couldn't assign document", variant: "destructive" });
     }
   };
 
@@ -174,10 +194,19 @@ export const ProjectComplianceSection = ({ projectId }: ProjectComplianceSection
           ownerId={projectId}
           onEdit={openEdit}
           onDelete={(doc) => setDeletingDoc(doc)}
+          onAssign={(doc) => setAssigningDoc(doc)}
           onStatusChange={handleStatusChange}
           emptyMessage="No compliance documents yet. Generate the list or add one manually."
         />
       )}
+
+      <AssignComplianceDialog
+        open={!!assigningDoc}
+        onOpenChange={(next) => !next && setAssigningDoc(null)}
+        document={assigningDoc}
+        isSaving={assigning}
+        onAssign={handleAssign}
+      />
 
       <GenerateComplianceDialog
         open={generateOpen}

@@ -18,12 +18,15 @@ import {
   useCreateRegistrationComplianceDocumentMutation,
   useUpdateRegistrationComplianceDocumentMutation,
   useDeleteRegistrationComplianceDocumentMutation,
+  useAssignRegistrationComplianceDocumentMutation,
+  type ComplianceAssignBody,
   type ComplianceDocumentApi,
   type ComplianceDocumentBody,
 } from "@/store/api/complianceDocuments";
 import { ComplianceDocumentsTable } from "./ComplianceDocumentsTable";
 import { ComplianceCompletenessBar } from "./ComplianceCompletenessBar";
 import { ComplianceDocumentDialog } from "./ComplianceDocumentDialog";
+import { AssignComplianceDialog } from "./AssignComplianceDialog";
 import { GenerateComplianceDialog } from "./GenerateComplianceDialog";
 import { HandoverReadinessCard } from "./HandoverReadinessCard";
 import { TradeCertificatesCard } from "./TradeCertificatesCard";
@@ -47,11 +50,14 @@ export const RegistrationComplianceTab = ({
   const [createDoc, { isLoading: creating }] = useCreateRegistrationComplianceDocumentMutation();
   const [updateDoc, { isLoading: updating }] = useUpdateRegistrationComplianceDocumentMutation();
   const [deleteDoc] = useDeleteRegistrationComplianceDocumentMutation();
+  const [assignDoc, { isLoading: assigning }] =
+    useAssignRegistrationComplianceDocumentMutation();
 
   const [generateOpen, setGenerateOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<ComplianceDocumentApi | null>(null);
   const [deletingDoc, setDeletingDoc] = useState<ComplianceDocumentApi | null>(null);
+  const [assigningDoc, setAssigningDoc] = useState<ComplianceDocumentApi | null>(null);
 
   const view = viewResponse?.data;
   const projectDocuments = view?.projectDocuments ?? [];
@@ -104,6 +110,21 @@ export const RegistrationComplianceTab = ({
       }).unwrap();
     } catch {
       toast({ title: "Couldn't update status", variant: "destructive" });
+    }
+  };
+
+  const handleAssign = async (body: ComplianceAssignBody) => {
+    if (!assigningDoc) return;
+    try {
+      await assignDoc({ registrationId, id: assigningDoc.id, body }).unwrap();
+      toast({
+        title: "Assigned",
+        description:
+          "The trade/auditor was invited. Their certificate will close this line automatically.",
+      });
+      setAssigningDoc(null);
+    } catch {
+      toast({ title: "Couldn't assign document", variant: "destructive" });
     }
   };
 
@@ -186,10 +207,19 @@ export const RegistrationComplianceTab = ({
           readOnly={readOnly}
           onEdit={openEdit}
           onDelete={(doc) => setDeletingDoc(doc)}
+          onAssign={(doc) => setAssigningDoc(doc)}
           onStatusChange={handleStatusChange}
           emptyMessage="No dwelling-specific documents yet."
         />
       </div>
+
+      <AssignComplianceDialog
+        open={!!assigningDoc}
+        onOpenChange={(next) => !next && setAssigningDoc(null)}
+        document={assigningDoc}
+        isSaving={assigning}
+        onAssign={handleAssign}
+      />
 
       <GenerateComplianceDialog
         open={generateOpen}

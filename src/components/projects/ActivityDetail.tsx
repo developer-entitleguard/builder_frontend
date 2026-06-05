@@ -19,7 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Activity, ActivityStatus, ActivityUpdate, CreateActivityData } from "@/hooks/useActivities";
-import { useDeleteActivitiesMutation, useGetActivityByIdQuery, useGetActivityUpdatesQuery, usePostActivityUpdateMutation, useUpdateActivityMutation } from "@/store/api/activities";
+import { useAssignActivityMutation, useDeleteActivitiesMutation, useGetActivityByIdQuery, useGetActivityUpdatesQuery, usePostActivityUpdateMutation, useUpdateActivityMutation } from "@/store/api/activities";
 import { useDeleteActivityCategoryMutation } from "@/store/api/activityCategories";
 import { useToast } from "@/hooks/use-toast";
 import { CreateApprovalData } from "@/hooks/useApprovals";
@@ -203,10 +203,37 @@ export const ActivityDetail = ({
   const [deleteActivitiesMutation] = useDeleteActivitiesMutation();
 
   // Call builder GET /api/builder/projects/{projectId}/activities/{id} when in builder mode
-  useGetActivityByIdQuery(
+  const { data: builderActivityResp } = useGetActivityByIdQuery(
     { projectId, id: activity.id },
     { skip: !isBuilder }
   );
+  const builderActivity = builderActivityResp?.data;
+
+  const [assignActivity, { isLoading: assigningActivity }] = useAssignActivityMutation();
+  const [assigneeName, setAssigneeName] = useState("");
+  const [assigneeEmail, setAssigneeEmail] = useState("");
+
+  const handleAssignActivity = async () => {
+    if (!assigneeEmail.trim()) return;
+    try {
+      await assignActivity({
+        projectId,
+        activityId: activity.id,
+        body: {
+          assigneeName: assigneeName.trim() || null,
+          assigneeEmail: assigneeEmail.trim(),
+        },
+      }).unwrap();
+      toast({
+        title: "Activity assigned",
+        description: "The trade/auditor was invited to this job.",
+      });
+      setAssigneeName("");
+      setAssigneeEmail("");
+    } catch {
+      toast({ title: "Couldn't assign activity", variant: "destructive" });
+    }
+  };
 
   const [updates, setUpdates] = useState<ActivityUpdate[]>([]);
   const [loadingUpdates, setLoadingUpdates] = useState(true);
@@ -623,6 +650,73 @@ export const ActivityDetail = ({
             onUpdateActivity={onUpdateActivity}
             activityId={activity.id}
           />
+
+          {/* Assignment (Phase B) — assign the activity to a trade/auditor as a job */}
+          {isBuilder && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Assignment
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {builderActivity?.jobId ? (
+                  <div className="text-sm space-y-1">
+                    <div>
+                      <span className="text-muted-foreground">Assigned to: </span>
+                      <span className="font-medium">
+                        {builderActivity.assigneeDisplayName ?? "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Job status: </span>
+                      <span className="font-medium">{builderActivity.jobStatus ?? "—"}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Reassign by inviting a different contact below.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Assign this activity to a trade or auditor — this creates a job and invites
+                    them. Their compliance certificate flows back to you automatically.
+                  </p>
+                )}
+                <div>
+                  <Label className="text-xs text-muted-foreground">Contact name</Label>
+                  <Input
+                    className="mt-1 h-8"
+                    value={assigneeName}
+                    onChange={(e) => setAssigneeName(e.target.value)}
+                    placeholder="e.g. Joe's Electrical"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Contact email</Label>
+                  <Input
+                    className="mt-1 h-8"
+                    type="email"
+                    value={assigneeEmail}
+                    onChange={(e) => setAssigneeEmail(e.target.value)}
+                    placeholder="name@example.com"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleAssignActivity}
+                  disabled={assigningActivity || !assigneeEmail.trim()}
+                >
+                  {assigningActivity
+                    ? "Assigning…"
+                    : builderActivity?.jobId
+                      ? "Reassign"
+                      : "Assign to trade / auditor"}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Save Button */}
           <Button

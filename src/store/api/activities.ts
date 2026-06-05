@@ -20,8 +20,23 @@ export interface BuilderActivityApi {
   vendorEmail?: string | null;
   vendorPhone?: string | null;
   priority?: string | null;
+  /** Phase B: the linked job (assignment) and its assignee, when assigned out. */
+  jobId?: string | null;
+  jobStatus?: string | null;
+  assigneeDisplayName?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Phase B activity-assignment request (tri-modal; UI collects a contact). */
+export interface ActivityAssignBody {
+  assigneeName?: string | null;
+  assigneeEmail?: string | null;
+  assigneeOrgType?: string | null;
+  assigneeOrgId?: string | null;
+  assigneeUserId?: string | null;
+  /** Link an EXISTING builder job instead of spawning one. */
+  jobId?: string | null;
 }
 
 export interface BuilderActivitiesResponse {
@@ -177,6 +192,22 @@ export const activitiesApi = api.injectEndpoints({
       ],
     }),
 
+    // POST /api/builder/projects/:projectId/activities/:activityId/assign
+    assignActivity: build.mutation<
+      BuilderActivityResponse,
+      { projectId: string; activityId: string; body: ActivityAssignBody }
+    >({
+      query: ({ projectId, activityId, body }) => ({
+        url: `/api/builder/projects/${projectId}/activities/${activityId}/assign`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { projectId, activityId }) => [
+        { type: "Activities", id: projectId },
+        { type: "Activities", id: activityId },
+      ],
+    }),
+
     // DELETE /api/builder/projects/:projectId/activities/:id
     deleteActivity: build.mutation<
       DeleteBuilderActivityResponse,
@@ -245,6 +276,7 @@ export const {
   useCreateActivityMutation,
   useGenerateActivitiesMutation,
   useUpdateActivityMutation,
+  useAssignActivityMutation,
   useDeleteActivityMutation,
   useDeleteActivitiesMutation,
 } = activitiesApi;

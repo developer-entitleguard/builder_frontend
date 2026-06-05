@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Paperclip, Pencil, Trash2 } from "lucide-react";
+import { Paperclip, Pencil, Trash2, UserPlus } from "lucide-react";
 import type { ComplianceDocumentApi } from "@/store/api/complianceDocuments";
 import { ComplianceAttachmentsDialog } from "./ComplianceAttachmentsDialog";
 import {
@@ -34,6 +34,7 @@ interface ComplianceDocumentsTableProps {
   readOnly?: boolean;
   onEdit?: (doc: ComplianceDocumentApi) => void;
   onDelete?: (doc: ComplianceDocumentApi) => void;
+  onAssign?: (doc: ComplianceDocumentApi) => void;
   onStatusChange?: (doc: ComplianceDocumentApi, status: string) => void;
   emptyMessage?: string;
 }
@@ -45,6 +46,7 @@ export const ComplianceDocumentsTable = ({
   readOnly = false,
   onEdit,
   onDelete,
+  onAssign,
   onStatusChange,
   emptyMessage = "No compliance documents yet.",
 }: ComplianceDocumentsTableProps) => {
@@ -119,6 +121,19 @@ export const ComplianceDocumentsTable = ({
                     >
                       <Paperclip className="h-4 w-4" />
                     </Button>
+                    {!readOnly &&
+                      onAssign &&
+                      (doc.status ?? "").toUpperCase() !== "RECEIVED" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="Assign to trade / auditor"
+                          onClick={() => onAssign(doc)}
+                        >
+                          <UserPlus className="h-4 w-4" />
+                        </Button>
+                      )}
                     {!readOnly && onEdit && (
                       <Button
                         variant="ghost"

@@ -6,6 +6,8 @@ export interface ComplianceDocumentApi {
   projectId?: string | null;
   registrationId?: string | null;
   category: string | null;
+  /** Phase C: canonical JobCategory.code this line maps to (null when unmapped). */
+  categoryCode?: string | null;
   documentName: string;
   description: string | null;
   scope: string | null;
@@ -102,6 +104,7 @@ export interface HandoverAcknowledgementApi {
 
 export interface ComplianceDocumentBody {
   category?: string | null;
+  categoryCode?: string | null;
   documentName: string;
   description?: string | null;
   scope?: string | null;
@@ -111,6 +114,29 @@ export interface ComplianceDocumentBody {
   status?: string | null;
   notes?: string | null;
   orderIndex?: number | null;
+}
+
+/**
+ * Phase A assignment request. Tri-modal assignee mirroring the builder job
+ * contract; in the builder UI we collect an off-platform contact (name + email)
+ * which drives the viral invite loop, but the shape supports org/internal too.
+ */
+export interface ComplianceAssignBody {
+  assigneeName?: string | null;
+  assigneeEmail?: string | null;
+  assigneeOrgType?: string | null;
+  assigneeOrgId?: string | null;
+  assigneeUserId?: string | null;
+}
+
+/** Phase C: canonical EG-curated job/trade category for the mapping pickers. */
+export interface JobCategoryApi {
+  id: string;
+  code: string;
+  label: string;
+  description?: string | null;
+  enabled: boolean;
+  displayOrder: number;
 }
 
 interface DefaultListResponse<T> {
@@ -322,6 +348,44 @@ export const complianceDocumentsApi = api.injectEndpoints({
         { type: "ComplianceDocuments", id: `registration-${registrationId}` },
         { type: "HandoverReadiness", id: registrationId },
       ],
+    }),
+
+    // POST /api/builder/projects/:projectId/compliance-documents/:id/assign
+    assignProjectComplianceDocument: build.mutation<
+      ListResponse<unknown>,
+      { projectId: string; id: string; body: ComplianceAssignBody }
+    >({
+      query: ({ projectId, id, body }) => ({
+        url: `/api/builder/projects/${projectId}/compliance-documents/${id}/assign`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (_r, _e, { projectId }) => [
+        { type: "ComplianceDocuments", id: `project-${projectId}` },
+        { type: "ComplianceDocuments", id: `project-completeness-${projectId}` },
+      ],
+    }),
+
+    // POST /api/builder/registrations/:registrationId/compliance-documents/:id/assign
+    assignRegistrationComplianceDocument: build.mutation<
+      ListResponse<unknown>,
+      { registrationId: string; id: string; body: ComplianceAssignBody }
+    >({
+      query: ({ registrationId, id, body }) => ({
+        url: `/api/builder/registrations/${registrationId}/compliance-documents/${id}/assign`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (_r, _e, { registrationId }) => [
+        { type: "ComplianceDocuments", id: `registration-${registrationId}` },
+        { type: "HandoverReadiness", id: registrationId },
+      ],
+    }),
+
+    // GET /api/builder/job-categories (canonical taxonomy for mapping pickers)
+    getJobCategories: build.query<JobCategoryApi[], void>({
+      query: () => ({ url: `/api/builder/job-categories`, method: "GET" }),
+      providesTags: [{ type: "ComplianceDocuments", id: "job-categories" }],
     }),
 
     // ----- Attachments (shared shape; ownerType drives the path) -----
@@ -552,4 +616,7 @@ export const {
   useListHandoverAcknowledgementsQuery,
   useGetRegistrationTradeCertificatesQuery,
   useListRegistrationOptionsQuery,
+  useAssignProjectComplianceDocumentMutation,
+  useAssignRegistrationComplianceDocumentMutation,
+  useGetJobCategoriesQuery,
 } = complianceDocumentsApi;

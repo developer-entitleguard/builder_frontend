@@ -26,6 +26,7 @@ import {
   useLinkTicketToRegistrationMutation,
 } from "@/store/api/tickets";
 import { useDashboardRegistrationsQuery } from "@/store/api";
+import { CoverageReviewPanel } from "@/components/CoverageReviewPanel";
 import { ArrowLeft, ArrowRight, LinkIcon, Wand2, XCircle, Ban } from "lucide-react";
 
 interface DashRegistration {
@@ -199,6 +200,8 @@ const TicketDetail = () => {
             </CardContent>
           </Card>
         )}
+
+        {ticket && <CoverageReviewPanel entity={ticket} />}
 
         {ticket && ticket.status !== "CONVERTED" && (
           <Card>

@@ -1,6 +1,7 @@
 import { api } from '@/store/api/apiSlice';
 import { getApiBaseUrl } from '@/lib/config';
 import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
+import type { CoverageFields } from '@/store/api/coverage';
 
 export interface QueryFile {
   id: string;
@@ -36,7 +37,7 @@ export interface QueryHistoryEntry {
   userInfo: unknown | null;
 }
 
-export interface BuilderQuery {
+export interface BuilderQuery extends CoverageFields {
   id: string;
   title: string;
   description: string;
@@ -302,6 +303,26 @@ export const queryApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Query'],
     }),
+    // Builder confirms / rejects an auto-created (intake-linked) registration.
+    // Resolves the "verify you built this home" banner on the linked query/ticket.
+    verifyRegistration: build.mutation<AddCommentResponse, { registrationId: string }>({
+      query: ({ registrationId }) => ({
+        url: `/api/builder/registrations/${registrationId}/verify`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['Query', 'Ticket'],
+    }),
+    rejectRegistration: build.mutation<
+      AddCommentResponse,
+      { registrationId: string; reason?: string }
+    >({
+      query: ({ registrationId, reason }) => ({
+        url: `/api/builder/registrations/${registrationId}/reject`,
+        method: 'POST',
+        body: { reason },
+      }),
+      invalidatesTags: ['Query', 'Ticket'],
+    }),
   }),
 });
 
@@ -310,5 +331,7 @@ export const {
   useLazyGetQueryByIdQuery,
   useUpdateQueryMutation,
   useAddQueryCommentMutation,
+  useVerifyRegistrationMutation,
+  useRejectRegistrationMutation,
 } = queryApi;
 

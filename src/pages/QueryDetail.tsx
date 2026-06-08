@@ -35,6 +35,7 @@ import {
 import { viewPhotoUrl } from "@/lib/api/services/files";
 import VendorLinkModal from "@/components/VendorLinkModal";
 import JobsPanel from "@/components/queries/JobsPanel";
+import { CoverageReviewPanel } from "@/components/CoverageReviewPanel";
 import { canManageJobs } from "@/lib/roles";
 import {
   ATTACHMENT_ACCEPT,
@@ -372,6 +373,8 @@ const QueryDetail = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* ── Left Column ── */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Warranty coverage + auto-linked registration verification */}
+            <CoverageReviewPanel entity={queryData} />
             {/* Case Details */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">

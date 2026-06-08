@@ -1,4 +1,5 @@
 import { api } from './apiSlice';
+import type { CoverageFields } from './coverage';
 
 interface DefaultListResponse<T> {
   success: boolean;
@@ -11,7 +12,7 @@ interface ApiResponseDto {
   message: string;
 }
 
-export interface Ticket {
+export interface Ticket extends CoverageFields {
   id: string;
   builderOrganizationId: string;
   customerName: string | null;
@@ -28,7 +29,6 @@ export interface Ticket {
   sourceTimestamp: string | null;
   status: 'NEW' | 'TRIAGED' | 'CONVERTED' | 'CLOSED' | 'CANCELLED';
   closureReason: string | null;
-  linkedRegistrationId: string | null;
   linkedQueryId: string | null;
   createdAt: string | null;
   updatedAt: string | null;

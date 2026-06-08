@@ -15,8 +15,9 @@ import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Printer, AlertCircle, FileBarChart, CalendarCheck, Rocket, ChevronRight } from "lucide-react";
+import { ArrowLeft, Printer, Download, Loader2, AlertCircle, FileBarChart, CalendarCheck, Rocket, ChevronRight } from "lucide-react";
 import { useGetOrgReportQuery, type OrgReport as OrgReportData, type OrgReportProjectRow } from "@/store/api/reports";
+import { useOrgReportPdfDownload } from "@/lib/api/services/reportDownload";
 import { KpiCard, ProgressBar, SectionCard, formatCurrency, formatDate } from "@/components/reports/reportUtils";
 import { cn } from "@/lib/utils";
 
@@ -178,6 +179,7 @@ const HighlightPanel = ({
 const OrgReport = () => {
   const navigate = useNavigate();
   const { data, isLoading, isError, error } = useGetOrgReportQuery();
+  const { download, isLoading: isDownloading } = useOrgReportPdfDownload();
 
   const report = data?.data ?? null;
   const errorMessage =
@@ -217,10 +219,20 @@ const OrgReport = () => {
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back to dashboard
           </Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()} disabled={!report}>
-            <Printer className="h-4 w-4 mr-2" />
-            Print / Save as PDF
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => window.print()} disabled={!report}>
+              <Printer className="h-4 w-4 mr-2" />
+              Print
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => download()} disabled={!report || isDownloading}>
+              {isDownloading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Download PDF
+            </Button>
+          </div>
         </div>
       </div>
 

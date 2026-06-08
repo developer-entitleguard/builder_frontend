@@ -464,6 +464,18 @@ const QueryDetail = () => {
                       </Badge>
                     </div>
                   </div>
+                  {queryData.unitNumber && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">
+                        Unit
+                      </Label>
+                      <div className="mt-1">
+                        <Badge variant="outline" className="font-semibold">
+                          {queryData.unitNumber}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
                   {queryData.dueDate && (
                     <div>
                       <Label className="text-sm font-medium text-gray-700">

@@ -60,6 +60,7 @@ export interface BuilderQuery extends CoverageFields {
   customerAddress?: string;
   customerState?: string;
   customerZip?: string;
+  unitNumber?: string | null;
   builderOrganizationId?: string;
   queryFileMaps: QueryFile[];
   queryComments?: QueryComment[];

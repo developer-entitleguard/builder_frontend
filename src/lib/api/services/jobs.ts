@@ -31,6 +31,7 @@ export interface BuilderJob {
   orgId: string;
   title: string;
   scope?: string | null;
+  unitNumber?: string | null;
   status: JobStatus;
   category?: JobCategory | null;
   assigneeUserId?: string | null;

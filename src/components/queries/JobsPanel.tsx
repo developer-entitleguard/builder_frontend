@@ -359,6 +359,11 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate font-medium">{job.title}</p>
+                    {job.unitNumber && (
+                      <p className="mt-0.5 text-xs font-medium text-foreground">
+                        Unit: {job.unitNumber}
+                      </p>
+                    )}
                     {job.scope && (
                       <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
                         {job.scope}

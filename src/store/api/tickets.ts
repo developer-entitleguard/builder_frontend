@@ -12,6 +12,17 @@ interface ApiResponseDto {
   message: string;
 }
 
+export interface TicketFile {
+  id: string;
+  type: string | null;
+  files: {
+    id: string;
+    name: string | null;
+    fileType: string | null;
+    filePath: string | null;
+  } | null;
+}
+
 export interface Ticket extends CoverageFields {
   id: string;
   builderOrganizationId: string;
@@ -19,6 +30,8 @@ export interface Ticket extends CoverageFields {
   customerEmail: string | null;
   customerPhone: string | null;
   customerAddress: string | null;
+  title: string | null;
+  unitNumber: string | null;
   queryType: string | null;
   priority: string | null;
   description: string | null;
@@ -55,6 +68,11 @@ export const ticketsApi = api.injectEndpoints({
 
     getTicket: build.query<DefaultListResponse<Ticket>, { id: string }>({
       query: ({ id }) => ({ url: `/api/tickets/${id}`, method: 'GET' }),
+      providesTags: (_r, _e, arg) => [{ type: 'Ticket', id: arg.id }],
+    }),
+
+    getTicketFiles: build.query<DefaultListResponse<TicketFile[]>, { id: string }>({
+      query: ({ id }) => ({ url: `/api/tickets/${id}/files`, method: 'GET' }),
       providesTags: (_r, _e, arg) => [{ type: 'Ticket', id: arg.id }],
     }),
 
@@ -111,6 +129,7 @@ export const ticketsApi = api.injectEndpoints({
 export const {
   useListTicketsQuery,
   useGetTicketQuery,
+  useGetTicketFilesQuery,
   useLinkTicketToRegistrationMutation,
   useConvertTicketToQueryMutation,
   useCancelTicketMutation,

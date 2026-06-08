@@ -23,11 +23,14 @@ import {
   useCloseTicketMutation,
   useConvertTicketToQueryMutation,
   useGetTicketQuery,
+  useGetTicketFilesQuery,
   useLinkTicketToRegistrationMutation,
 } from "@/store/api/tickets";
 import { useDashboardRegistrationsQuery } from "@/store/api";
 import { CoverageReviewPanel } from "@/components/CoverageReviewPanel";
-import { ArrowLeft, ArrowRight, LinkIcon, Wand2, XCircle, Ban } from "lucide-react";
+import { viewPhotoUrl } from "@/lib/api/services/files";
+import { classifyAttachment } from "@/lib/queryAttachments";
+import { ArrowLeft, ArrowRight, LinkIcon, Wand2, XCircle, Ban, FileText } from "lucide-react";
 
 interface DashRegistration {
   id: string;
@@ -47,6 +50,8 @@ const TicketDetail = () => {
 
   const { data: ticketResp, isLoading } = useGetTicketQuery({ id: id ?? "" }, { skip: !id });
   const ticket = ticketResp?.data;
+  const { data: filesResp } = useGetTicketFilesQuery({ id: id ?? "" }, { skip: !id });
+  const ticketFiles = filesResp?.data ?? [];
   const { data: registrationsResp } = useDashboardRegistrationsQuery(
     { builderId: builderId ?? "", type: "owner" },
     { skip: !builderId },
@@ -184,6 +189,7 @@ const TicketDetail = () => {
               <Detail label="Email" value={ticket.customerEmail} />
               <Detail label="Phone" value={ticket.customerPhone} />
               <Detail label="Address" value={ticket.customerAddress} />
+              {ticket.unitNumber && <Detail label="Unit" value={ticket.unitNumber} />}
               <Detail label="Category" value={ticket.category} />
               <div className="md:col-span-2">
                 <p className="text-xs text-muted-foreground">Description</p>
@@ -202,6 +208,69 @@ const TicketDetail = () => {
         )}
 
         {ticket && <CoverageReviewPanel entity={ticket} />}
+
+        {ticket && ticketFiles.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                Attachments ({ticketFiles.length})
+              </CardTitle>
+              <CardDescription>Photos and videos the customer submitted.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {ticketFiles.map((fileMap) => {
+                  const fileId = fileMap.files?.id;
+                  if (!fileId) return null;
+                  const fileName = fileMap.files?.name || "File";
+                  const url = viewPhotoUrl(fileId);
+                  const kind = classifyAttachment({
+                    mimeType: fileMap.files?.fileType ?? undefined,
+                    name: fileMap.files?.name ?? undefined,
+                  });
+                  if (kind === "image") {
+                    return (
+                      <div
+                        key={fileMap.id}
+                        className="aspect-square rounded-lg overflow-hidden border cursor-pointer"
+                        onClick={() => window.open(url, "_blank")}
+                      >
+                        <img src={url} alt={fileName} className="w-full h-full object-cover" />
+                      </div>
+                    );
+                  }
+                  if (kind === "video") {
+                    return (
+                      <div
+                        key={fileMap.id}
+                        className="aspect-square rounded-lg overflow-hidden border bg-black"
+                      >
+                        <video
+                          src={url}
+                          controls
+                          preload="metadata"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    );
+                  }
+                  return (
+                    <a
+                      key={fileMap.id}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex flex-col items-center justify-center aspect-square rounded-lg border bg-gray-50 hover:bg-gray-100 p-3 text-center"
+                    >
+                      <FileText className="h-8 w-8 text-gray-400 mb-2" />
+                      <span className="text-xs text-gray-600 truncate w-full">{fileName}</span>
+                    </a>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {ticket && ticket.status !== "CONVERTED" && (
           <Card>

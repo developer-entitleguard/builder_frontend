@@ -2,7 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Printer, Download, MapPin, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, Printer, Download, MapPin, AlertCircle, Loader2, FolderOpen } from "lucide-react";
 import { useGetProjectReportQuery } from "@/store/api/reports";
 import { useReportPdfDownload } from "@/lib/api/services/reportDownload";
 import { ReportProgress } from "@/components/reports/ReportProgress";
@@ -25,6 +25,14 @@ const ProjectReport = () => {
     (data && !data.success ? data.message : undefined) ??
     (isError ? "Unable to load this report." : undefined);
 
+  // Hide a whole section when it has nothing to show.
+  const hasProgress = (report?.progress.totalActivities ?? 0) > 0;
+  const f = report?.financial;
+  const hasFinancial = !!f && (f.hasPricing || (f.committedSpend ?? 0) > 0 || f.costItems.length > 0);
+  const c = report?.compliance;
+  const hasCompliance =
+    !!c && ((c.projectCompleteness?.total ?? 0) > 0 || c.registrations.length > 0);
+
   return (
     <div className="min-h-screen bg-background">
       <div className="print:hidden">
@@ -33,11 +41,15 @@ const ProjectReport = () => {
 
       <div className="sticky top-0 z-10 bg-card border-b border-border shadow-sm print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${id}`)}>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/report")}>
             <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to project
+            Back to report
           </Button>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${id}`)}>
+              <FolderOpen className="h-4 w-4 mr-2" />
+              View project
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -112,9 +124,14 @@ const ProjectReport = () => {
               </div>
             </div>
 
-            <ReportProgress progress={report.progress} />
-            <ReportFinancial financial={report.financial} />
-            <ReportCompliance compliance={report.compliance} />
+            {hasProgress && <ReportProgress progress={report.progress} />}
+            {hasFinancial && <ReportFinancial financial={report.financial} />}
+            {hasCompliance && <ReportCompliance compliance={report.compliance} />}
+            {!hasProgress && !hasFinancial && !hasCompliance && (
+              <p className="text-sm text-muted-foreground">
+                No progress, financial or compliance data has been added to this project yet.
+              </p>
+            )}
           </>
         )}
       </main>

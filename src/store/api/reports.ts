@@ -158,7 +158,18 @@ export interface OrgReportProjectRow {
   status: string | null;
   propertyType: string | null;
   buildingClass: string | null;
+  startDate: string | null;
   targetEndDate: string | null;
+  completingSoon: boolean;
+  readyToStart: boolean;
+  tasksCompleted: number;
+  tasksTotal: number;
+  complianceReceived: number;
+  complianceTotal: number;
+  totalPaid: number;
+  totalAmount: number;
+  onTimeLikelihood: "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "UNKNOWN" | null;
+  onTimeRationale: string | null;
 }
 
 export interface OrgReport {

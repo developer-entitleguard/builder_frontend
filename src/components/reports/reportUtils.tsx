@@ -58,6 +58,32 @@ export const KpiCard = ({ label, value, hint, tone = "default" }: KpiCardProps) 
   </Card>
 );
 
+interface ProgressBarProps {
+  /** 0–100; clamped. */
+  percent: number;
+  /** Tailwind class for the filled portion, e.g. "bg-blue-500". */
+  className?: string;
+  /** Tailwind class for the track. */
+  track?: string;
+  /** Tailwind height class, e.g. "h-2". */
+  height?: string;
+}
+
+/** A thin, dependency-free progress/proportion bar. */
+export const ProgressBar = ({
+  percent,
+  className = "bg-primary",
+  track = "bg-muted",
+  height = "h-2",
+}: ProgressBarProps) => (
+  <div className={cn("w-full overflow-hidden rounded-full", track, height)}>
+    <div
+      className={cn("h-full rounded-full", className)}
+      style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
+    />
+  </div>
+);
+
 interface SectionCardProps {
   title: string;
   description?: string;

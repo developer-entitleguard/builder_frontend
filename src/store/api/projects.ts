@@ -47,6 +47,8 @@ export interface CreateBuilderProjectBody {
   statusId: string;
   targetEndDate: string;
   topographyTypeId?: string | null;
+  autoGenerate?: boolean;
+  dwellingCount?: number | null;
 }
 
 export type UpdateBuilderProjectBody = CreateBuilderProjectBody;
@@ -56,6 +58,7 @@ export interface BuilderProjectRegistration {
   customerName?: string;
   customer_email?: string;
   customerEmail?: string;
+  unitNumber?: string | null;
   property_address?: string;
   propertyAddress?: string;
   projectId?: string | null;

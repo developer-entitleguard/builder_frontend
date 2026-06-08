@@ -326,6 +326,7 @@ const RegistrationDetail = () => {
             lastName?: string | null;
             email?: string;
             contact?: string;
+            unitNumber?: string | null;
             address?: string;
             city?: string;
             state?: string;
@@ -354,6 +355,7 @@ const RegistrationDetail = () => {
           lastName: (customer.lastName as string | null) ?? '',
           email: customer.email ?? '',
           contact: customer.contact ?? '',
+          unitNumber: customer.unitNumber ?? undefined,
           address: customer.address ?? '',
           city: customer.city ?? '',
           state: customer.state ?? '',

@@ -65,6 +65,7 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
         lastName?: string | null;
         email?: string | null;
         contact?: string | null;
+        unitNumber?: string | null;
         address?: string | null;
         city?: string | null;
         state?: string | null;
@@ -99,6 +100,7 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
       const customer_phone = r.contact ?? null;
 
       const property_address = [
+        r.unitNumber ? `Unit ${r.unitNumber}` : null,
         r.address,
         r.city,
         r.state,

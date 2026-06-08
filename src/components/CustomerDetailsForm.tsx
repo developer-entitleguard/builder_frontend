@@ -17,6 +17,7 @@ export interface CustomerDetailsFormData {
   lastName: string;
   email: string;
   phone: string;
+  unitNumber: string;
   propertyAddress: string;
   city: string;
   state: string;
@@ -65,6 +66,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
     lastName: initialData?.lastName || '',
     email: initialData?.email || '',
     phone: initialData?.phone || '',
+    unitNumber: initialData?.unitNumber || '',
     propertyAddress: initialData?.propertyAddress || '',
     city: initialData?.city || '',
     state: initialData?.state || '',
@@ -92,6 +94,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
       lastName: initialData.lastName ?? prev.lastName,
       email: initialData.email ?? prev.email,
       phone: initialData.phone ?? prev.phone,
+      unitNumber: initialData.unitNumber ?? prev.unitNumber,
       propertyAddress: initialData.propertyAddress ?? prev.propertyAddress,
       city: initialData.city ?? prev.city,
       state: initialData.state ?? prev.state,
@@ -252,6 +255,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
       lastName: formData.lastName.trim(),
       email: formData.email.trim(),
       contact: formData.phone.trim(),
+      unitNumber: formData.unitNumber.trim() || undefined,
       address: formData.propertyAddress.trim(),
       city: formData.city.trim(),
       state: formData.state,
@@ -444,16 +448,28 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="propertyAddress">Property Address *</Label>
-              <Input
-                id="propertyAddress"
-                value={formData.propertyAddress}
-                onChange={(e) => handleInputChange('propertyAddress', e.target.value)}
-                placeholder="123 Main Street"
-                required
-                disabled={readOnly}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="unitNumber">Unit / Lot No.</Label>
+                <Input
+                  id="unitNumber"
+                  value={formData.unitNumber}
+                  onChange={(e) => handleInputChange('unitNumber', e.target.value)}
+                  placeholder="e.g., 12"
+                  disabled={readOnly}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-3">
+                <Label htmlFor="propertyAddress">Property Address *</Label>
+                <Input
+                  id="propertyAddress"
+                  value={formData.propertyAddress}
+                  onChange={(e) => handleInputChange('propertyAddress', e.target.value)}
+                  placeholder="123 Main Street"
+                  required
+                  disabled={readOnly}
+                />
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">

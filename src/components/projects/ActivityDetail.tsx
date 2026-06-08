@@ -6,9 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { 
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -24,28 +22,19 @@ import { useDeleteActivityCategoryMutation } from "@/store/api/activityCategorie
 import { useToast } from "@/hooks/use-toast";
 import { CreateApprovalData } from "@/hooks/useApprovals";
 import { RequestApprovalDialog } from "./RequestApprovalDialog";
-import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/hooks/useOrganization";
-import { 
-  ArrowLeft, 
-  Trash2, 
-  Send, 
-  CheckCircle2, 
+import { ContactCombobox, ContactValue } from "./ContactCombobox";
+import { useOrgVendors } from "@/hooks/useOrgVendors";
+import {
+  ArrowLeft,
+  Trash2,
+  Send,
+  CheckCircle2,
   ShieldCheck,
   Calendar,
   DollarSign,
-  User,
-  Mail,
-  Phone
+  User
 } from "lucide-react";
 import { format } from "date-fns";
-
-interface Vendor {
-  id: string;
-  name: string;
-  contact_email: string;
-  contact_phone: string;
-}
 
 interface ActivityDetailProps {
   activity: Activity;
@@ -72,115 +61,6 @@ const hasBuilderAuth = (): boolean => {
   } catch {
     return false;
   }
-};
-
-const VendorCard = ({
-  vendorName, vendorEmail, vendorPhone,
-  setVendorName, setVendorEmail, setVendorPhone,
-  onUpdateActivity, activityId
-}: {
-  vendorName: string; vendorEmail: string; vendorPhone: string;
-  setVendorName: (v: string) => void; setVendorEmail: (v: string) => void; setVendorPhone: (v: string) => void;
-  onUpdateActivity: (id: string, data: Partial<CreateActivityData>) => Promise<boolean>;
-  activityId: string;
-}) => {
-  const { organization } = useOrganization();
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [loadingVendors, setLoadingVendors] = useState(false);
-
-  useEffect(() => {
-    if (!organization) return;
-    setLoadingVendors(true);
-    supabase
-      .from("vendors")
-      .select("id, name, contact_email, contact_phone")
-      .eq("organization_id", organization.id)
-      .order("name")
-      .then(({ data, error }) => {
-        if (!error && data) setVendors(data as Vendor[]);
-        setLoadingVendors(false);
-      });
-  }, [organization]);
-
-  const handleSelectVendor = (vendorId: string) => {
-    if (vendorId === "none") return;
-    const vendor = vendors.find((v) => v.id === vendorId);
-    if (!vendor) return;
-    setVendorName(vendor.name);
-    setVendorEmail(vendor.contact_email);
-    setVendorPhone(vendor.contact_phone);
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base flex items-center gap-2">
-          <User className="h-4 w-4" />
-          Vendor
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {vendors.length > 0 && (
-          <>
-            <div>
-              <Label className="text-xs text-muted-foreground">Select from org vendors</Label>
-              <Select onValueChange={handleSelectVendor}>
-                <SelectTrigger className="mt-1 h-8">
-                  <SelectValue placeholder="Choose a vendor..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {vendors.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Separator />
-          </>
-        )}
-        <div>
-          <Label htmlFor="vendor-name" className="text-xs text-muted-foreground">
-            Name
-          </Label>
-          <Input
-            id="vendor-name"
-            placeholder="Vendor name"
-            value={vendorName}
-            onChange={(e) => setVendorName(e.target.value)}
-            className="mt-1 h-8"
-          />
-        </div>
-        <div>
-          <Label htmlFor="vendor-email" className="text-xs text-muted-foreground">
-            Email
-          </Label>
-          <Input
-            id="vendor-email"
-            type="email"
-            placeholder="vendor@example.com"
-            value={vendorEmail}
-            onChange={(e) => setVendorEmail(e.target.value)}
-            className="mt-1 h-8"
-          />
-        </div>
-        <div>
-          <Label htmlFor="vendor-phone" className="text-xs text-muted-foreground">
-            Phone
-          </Label>
-          <Input
-            id="vendor-phone"
-            type="tel"
-            placeholder="Phone number"
-            value={vendorPhone}
-            onChange={(e) => setVendorPhone(e.target.value)}
-            className="mt-1 h-8"
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
 };
 
 export const ActivityDetail = ({
@@ -210,30 +90,33 @@ export const ActivityDetail = ({
   const builderActivity = builderActivityResp?.data;
 
   const [assignActivity, { isLoading: assigningActivity }] = useAssignActivityMutation();
-  const [assigneeName, setAssigneeName] = useState("");
-  const [assigneeEmail, setAssigneeEmail] = useState("");
+  const { vendors } = useOrgVendors();
 
-  const handleAssignActivity = async () => {
-    if (!assigneeEmail.trim()) return;
+  // Fire the trade/auditor invite for the current contact. Returns false when
+  // there's no email to invite (callers can ignore).
+  const inviteContact = async (name: string, email: string): Promise<boolean> => {
+    if (!isBuilder || !email.trim()) return false;
     try {
       await assignActivity({
         projectId,
         activityId: activity.id,
         body: {
-          assigneeName: assigneeName.trim() || null,
-          assigneeEmail: assigneeEmail.trim(),
+          assigneeName: name.trim() || null,
+          assigneeEmail: email.trim(),
         },
       }).unwrap();
       toast({
         title: "Activity assigned",
         description: "The trade/auditor was invited to this job.",
       });
-      setAssigneeName("");
-      setAssigneeEmail("");
+      return true;
     } catch {
       toast({ title: "Couldn't assign activity", variant: "destructive" });
+      return false;
     }
   };
+
+  const handleAssignActivity = () => inviteContact(vendorName, vendorEmail);
 
   const [updates, setUpdates] = useState<ActivityUpdate[]>([]);
   const [loadingUpdates, setLoadingUpdates] = useState(true);
@@ -314,6 +197,24 @@ export const ActivityDetail = ({
   const handleToggleCompleted = async (checked: boolean) => {
     setCompleted(checked);
     await onUpdateActivity(activity.id, { completed: checked });
+  };
+
+  // Picking/adding a contact in the Assignment card: store it on the activity
+  // and, when the email is new, fire the trade invite (per spec: invite on set).
+  const handleSetContact = async (contact: ContactValue) => {
+    const emailChanged =
+      !!contact.email.trim() && contact.email.trim() !== (vendorEmail.trim() || "");
+    setVendorName(contact.name);
+    setVendorEmail(contact.email);
+    setVendorPhone(contact.phone);
+    await onUpdateActivity(activity.id, {
+      vendor_name: contact.name || null,
+      vendor_email: contact.email || null,
+      vendor_phone: contact.phone || null,
+    } as Partial<CreateActivityData>);
+    if (emailChanged) {
+      await inviteContact(contact.name, contact.email);
+    }
   };
 
   const handleSaveDetails = async () => {
@@ -424,6 +325,9 @@ export const ActivityDetail = ({
         </Button>
 
         <div className="flex items-center gap-2">
+          <Button onClick={handleSaveDetails} disabled={isSavingDetails}>
+            {isSavingDetails ? "Saving..." : "Save Details"}
+          </Button>
           <Button variant="outline" onClick={() => setApprovalDialogOpen(true)}>
             <ShieldCheck className="h-4 w-4 mr-2" />
             Request Approval
@@ -639,74 +543,55 @@ export const ActivityDetail = ({
             </CardContent>
           </Card>
 
-          {/* Vendor */}
-          <VendorCard
-            vendorName={vendorName}
-            vendorEmail={vendorEmail}
-            vendorPhone={vendorPhone}
-            setVendorName={setVendorName}
-            setVendorEmail={setVendorEmail}
-            setVendorPhone={setVendorPhone}
-            onUpdateActivity={onUpdateActivity}
-            activityId={activity.id}
-          />
-
-          {/* Assignment (Phase B) — assign the activity to a trade/auditor as a job */}
-          {isBuilder && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Assignment
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {builderActivity?.jobId ? (
-                  <div className="text-sm space-y-1">
-                    <div>
-                      <span className="text-muted-foreground">Assigned to: </span>
-                      <span className="font-medium">
-                        {builderActivity.assigneeDisplayName ?? "—"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Job status: </span>
-                      <span className="font-medium">{builderActivity.jobStatus ?? "—"}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Reassign by inviting a different contact below.
-                    </p>
+          {/* Assignment — pick or add the trade/auditor for this activity */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Assignment
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {isBuilder && builderActivity?.jobId ? (
+                <div className="text-sm space-y-1">
+                  <div>
+                    <span className="text-muted-foreground">Assigned to: </span>
+                    <span className="font-medium">
+                      {builderActivity.assigneeDisplayName ?? "—"}
+                    </span>
                   </div>
-                ) : (
+                  <div>
+                    <span className="text-muted-foreground">Job status: </span>
+                    <span className="font-medium">{builderActivity.jobStatus ?? "—"}</span>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Assign this activity to a trade or auditor — this creates a job and invites
-                    them. Their compliance certificate flows back to you automatically.
+                    Reassign by choosing a different contact below.
                   </p>
-                )}
-                <div>
-                  <Label className="text-xs text-muted-foreground">Contact name</Label>
-                  <Input
-                    className="mt-1 h-8"
-                    value={assigneeName}
-                    onChange={(e) => setAssigneeName(e.target.value)}
-                    placeholder="e.g. Joe's Electrical"
-                  />
                 </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Contact email</Label>
-                  <Input
-                    className="mt-1 h-8"
-                    type="email"
-                    value={assigneeEmail}
-                    onChange={(e) => setAssigneeEmail(e.target.value)}
-                    placeholder="name@example.com"
-                  />
-                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Assign this activity to a trade or auditor — this creates a job and invites
+                  them. Their compliance certificate flows back to you automatically.
+                </p>
+              )}
+              <div>
+                <Label className="text-xs text-muted-foreground">Contact</Label>
+                <ContactCombobox
+                  className="mt-1 h-8"
+                  value={{ name: vendorName, email: vendorEmail, phone: vendorPhone }}
+                  vendors={vendors}
+                  onChange={handleSetContact}
+                />
+              </div>
+              {vendorPhone && (
+                <p className="text-xs text-muted-foreground">Phone: {vendorPhone}</p>
+              )}
+              {isBuilder && (
                 <Button
                   variant="outline"
                   className="w-full"
                   onClick={handleAssignActivity}
-                  disabled={assigningActivity || !assigneeEmail.trim()}
+                  disabled={assigningActivity || !vendorEmail.trim()}
                 >
                   {assigningActivity
                     ? "Assigning…"
@@ -714,18 +599,9 @@ export const ActivityDetail = ({
                       ? "Reassign"
                       : "Assign to trade / auditor"}
                 </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Save Button */}
-          <Button
-            onClick={handleSaveDetails}
-            disabled={isSavingDetails}
-            className="w-full"
-          >
-            {isSavingDetails ? "Saving..." : "Save Details"}
-          </Button>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 

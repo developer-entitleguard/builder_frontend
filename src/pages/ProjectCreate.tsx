@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProjects, PropertyType, CreateProjectData } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,9 +24,33 @@ import {
   PlusCircle,
   Settings,
   MapPin,
-  Calendar
+  Calendar,
+  Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Per-type guidance shown under the describe box — tells the builder what detail
+// to include so the AI can generate accurate activities, compliance docs and the
+// right number of unit registrations.
+const describeGuidance: Record<PropertyType, string> = {
+  house:
+    "e.g. Single storey, 4 bedrooms, double garage, swimming pool, ~220m² built-up area, slab on ground.",
+  duplex:
+    "Describe both dwellings — e.g. two 3-bedroom single-storey dwellings, each with a single carport, ~180m² each.",
+  townhouse:
+    "e.g. 6 townhouses — 4× 3-bedroom and 2× 2-bedroom, double storey, shared driveway, ~1,100m² total built-up area, amenities.",
+  apartment:
+    "e.g. 24 apartments across 2 blocks — 10× 1-bed, 10× 2-bed, 4× 3-bed, 5 storeys, basement carpark, gym, ~2,400m² total built-up area.",
+  renovation:
+    "Describe the scope — storeys, bedrooms affected, special items (pool, sauna, garages), built-up area, finishes and site constraints.",
+  extension:
+    "Describe the addition — storeys, new rooms/bedrooms, special items (pool, sauna, carports/garages), built-up area, finishes.",
+  custom:
+    "Describe the project — storeys, bedrooms, special items (pool, sauna, carports/garages), built-up area, finishes and site constraints.",
+};
+
+// Property types that produce more than one dwelling/registration.
+const MULTI_DWELLING: PropertyType[] = ["townhouse", "apartment", "duplex"];
 
 const propertyTypes: { value: PropertyType; label: string; description: string; icon: React.ElementType }[] = [
   { value: 'house', label: 'House', description: 'Single family home', icon: Home },
@@ -83,7 +108,9 @@ const ProjectCreate = () => {
     statusId: null,
     description: null,
     bal_rating: null,
-    topography_type: null
+    topography_type: null,
+    auto_generate: true,
+    dwelling_count: null
   });
 
   const { data: statusResponse } = useGetStatusesByModuleQuery({ module: 'PROJECT' });
@@ -107,12 +134,29 @@ const ProjectCreate = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Selecting a type also seeds the dwelling count: duplex is always 2, other
+  // multi-dwelling types default to 1 (builder edits it), single dwellings none.
+  const handleSelectType = (type: PropertyType) => {
+    setFormData(prev => ({
+      ...prev,
+      property_type: type,
+      dwelling_count:
+        type === 'duplex' ? 2 : MULTI_DWELLING.includes(type) ? (prev.dwelling_count ?? 1) : null,
+    }));
+  };
+
   const canProceed = () => {
     switch (currentStep) {
       case 'basics':
         return formData.name && formData.address && formData.city && formData.state && formData.postcode;
-      case 'type':
-        return formData.property_type;
+      case 'type': {
+        if (!formData.property_type) return false;
+        // Townhouse/apartment need an explicit unit count (duplex is fixed at 2).
+        const needsCount =
+          formData.property_type === 'townhouse' || formData.property_type === 'apartment';
+        if (needsCount && !(formData.dwelling_count && formData.dwelling_count >= 1)) return false;
+        return true;
+      }
       case 'timeline':
         return true;
       default:
@@ -240,32 +284,83 @@ const ProjectCreate = () => {
     </div>
   );
 
-  const renderTypeStep = () => (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-      {propertyTypes.map(type => {
-        const Icon = type.icon;
-        const isSelected = formData.property_type === type.value;
-        
-        return (
-          <button
-            key={type.value}
-            type="button"
-            onClick={() => updateField('property_type', type.value)}
-            className={cn(
-              "p-4 rounded-lg border-2 text-left transition-all",
-              isSelected
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-primary/50"
-            )}
-          >
-            <Icon className={cn("h-8 w-8 mb-2", isSelected ? "text-primary" : "text-muted-foreground")} />
-            <div className="font-medium">{type.label}</div>
-            <div className="text-xs text-muted-foreground mt-1">{type.description}</div>
-          </button>
-        );
-      })}
-    </div>
-  );
+  const renderTypeStep = () => {
+    const selectedType = formData.property_type;
+    const isMultiDwelling = MULTI_DWELLING.includes(selectedType);
+    const isDuplex = selectedType === 'duplex';
+
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {propertyTypes.map(type => {
+            const Icon = type.icon;
+            const isSelected = formData.property_type === type.value;
+
+            return (
+              <button
+                key={type.value}
+                type="button"
+                onClick={() => handleSelectType(type.value)}
+                className={cn(
+                  "p-4 rounded-lg border-2 text-left transition-all",
+                  isSelected
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50"
+                )}
+              >
+                <Icon className={cn("h-8 w-8 mb-2", isSelected ? "text-primary" : "text-muted-foreground")} />
+                <div className="font-medium">{type.label}</div>
+                <div className="text-xs text-muted-foreground mt-1">{type.description}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Number of units for multi-dwelling developments */}
+        {isMultiDwelling && (
+          isDuplex ? (
+            <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+              A duplex creates <strong className="text-foreground">2</strong> unit registrations automatically.
+            </div>
+          ) : (
+            <div className="w-1/2">
+              <Label htmlFor="dwelling_count">Number of units *</Label>
+              <Input
+                id="dwelling_count"
+                type="number"
+                min={1}
+                value={formData.dwelling_count ?? ''}
+                onChange={e =>
+                  updateField('dwelling_count', e.target.value ? parseInt(e.target.value, 10) : null)
+                }
+                placeholder="e.g. 6"
+                className="mt-1.5"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                One registration is created per unit (numbered 1–N).
+              </p>
+            </div>
+          )
+        )}
+
+        {/* Describe-your-project box, feeding the auto-generation */}
+        <div>
+          <Label htmlFor="describe">Describe your project</Label>
+          <Textarea
+            id="describe"
+            value={formData.description || ''}
+            onChange={e => updateField('description', e.target.value || null)}
+            placeholder={describeGuidance[selectedType]}
+            className="mt-1.5"
+            rows={5}
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Used to auto-generate your activities and compliance documents. The more detail, the better.
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   const renderTimelineStep = () => (
     <div className="space-y-6">
@@ -350,16 +445,26 @@ const ProjectCreate = () => {
         </div>
       </div>
 
-      <div>
-        <Label htmlFor="description">Description / Notes (optional)</Label>
-        <Textarea
-          id="description"
-          value={formData.description || ''}
-          onChange={e => updateField('description', e.target.value || null)}
-          placeholder="Any additional notes about this project..."
-          className="mt-1.5"
-          rows={4}
-        />
+      {/* Auto-generate switch (single control for all three) */}
+      <div className="flex items-start gap-3 rounded-lg border p-4">
+        <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="auto-generate" className="text-sm font-medium cursor-pointer">
+              Auto-generate activities, compliance documents &amp; registrations
+            </Label>
+            <Switch
+              id="auto-generate"
+              checked={formData.auto_generate ?? true}
+              onCheckedChange={v => updateField('auto_generate', v)}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Uses your project description to draft activities and the NSW compliance checklist.
+            {MULTI_DWELLING.includes(formData.property_type) &&
+              ' Unit registrations are created automatically for each dwelling.'}
+          </p>
+        </div>
       </div>
 
       {/* Summary */}

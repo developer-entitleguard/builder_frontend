@@ -51,6 +51,10 @@ export interface CreateProjectData {
   bal_rating?: string | null;
   topography_type?: string | null;
   activities_visible_to_homeowner?: boolean;
+  /** When true (default), auto-generate activities, compliance docs & unit registrations on create. */
+  auto_generate?: boolean;
+  /** Number of units for multi-dwelling types (townhouse/apartment); duplex is always 2. */
+  dwelling_count?: number | null;
 }
 
 const mapPropertyType = (value: string | null | undefined): PropertyType => {
@@ -205,6 +209,8 @@ export const useProjects = () => {
         statusId: data.statusId ?? data.status ?? "",
         targetEndDate: data.target_end_date ?? "",
         topographyTypeId: data.topography_type ?? null,
+        autoGenerate: data.auto_generate ?? true,
+        dwellingCount: data.dwelling_count ?? null,
       };
       const result = await createProjectMutation(body).unwrap();
       if (!result?.success) {

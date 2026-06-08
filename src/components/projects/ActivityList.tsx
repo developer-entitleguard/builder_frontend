@@ -6,13 +6,14 @@ import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Activity, ActivityStatus, ActivityPriority, ActivityUpdate, CreateActivityData } from "@/hooks/useActivities";
+import { Activity, ActivityStatus, ActivityUpdate, CreateActivityData } from "@/hooks/useActivities";
 import { ActivityCategory, CreateCategoryData } from "@/hooks/useActivityCategories";
 import { CreateApprovalData } from "@/hooks/useApprovals";
 import { useDeleteActivitiesMutation } from "@/store/api/activities";
+import { useOrgVendors } from "@/hooks/useOrgVendors";
 import { AddActivityDialog } from "./AddActivityDialog";
 import { ActivityDetail } from "./ActivityDetail";
+import { ActivityRow } from "./ActivityRow";
 import { ActivityTypeDialog } from "./ActivityTypeDialog";
 import { GenerateActivitiesDialog } from "./GenerateActivitiesDialog";
 import {
@@ -28,8 +29,6 @@ import {
 import {
   Plus,
   ListTodo,
-  Clock,
-  CheckCircle2,
   ChevronRight,
   ChevronDown,
   Eye,
@@ -39,7 +38,6 @@ import {
   FileSpreadsheet,
   Sparkles
 } from "lucide-react";
-import { format } from "date-fns";
 
 interface ActivityListProps {
   activities: Activity[];
@@ -65,17 +63,16 @@ interface ActivityListProps {
   onRefreshCategories?: () => void;
 }
 
-const statusConfig: Record<ActivityStatus, { icon: React.ElementType; color: string; label: string }> = {
-  pending: { icon: ListTodo, color: "bg-slate-100 text-slate-700", label: "Pending" },
-  in_progress: { icon: Clock, color: "bg-blue-100 text-blue-700", label: "In Progress" },
-  done: { icon: CheckCircle2, color: "bg-green-100 text-green-700", label: "Done" }
-};
-
-const priorityConfig: Record<ActivityPriority, { color: string; label: string }> = {
-  low: { color: "bg-gray-100 text-gray-600", label: "Low" },
-  medium: { color: "bg-blue-100 text-blue-600", label: "Medium" },
-  high: { color: "bg-orange-100 text-orange-600", label: "High" },
-  urgent: { color: "bg-red-100 text-red-600", label: "Urgent" }
+// Builder auth helper for JWT stored in localStorage.userData
+const hasBuilderAuth = (): boolean => {
+  try {
+    const userData = localStorage.getItem("userData");
+    if (!userData) return false;
+    const parsed = JSON.parse(userData) as { jwt?: string } | null;
+    return !!parsed?.jwt;
+  } catch {
+    return false;
+  }
 };
 
 export const ActivityList = ({
@@ -113,6 +110,10 @@ export const ActivityList = ({
   const [selectedActivityIds, setSelectedActivityIds] = useState<Set<string>>(
     () => new Set()
   );
+  const [editMode, setEditMode] = useState(false);
+
+  const isBuilder = hasBuilderAuth();
+  const { vendors } = useOrgVendors();
 
   const [deleteActivitiesMutation, { isLoading: isBulkDeleting }] =
     useDeleteActivitiesMutation();
@@ -298,16 +299,29 @@ export const ActivityList = ({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-4 py-2">
-          <Eye className="h-4 w-4 text-muted-foreground" />
-          <Label htmlFor="homeowner-visibility" className="text-sm font-medium cursor-pointer">
-            Homeowner can view progress
-          </Label>
-          <Switch
-            id="homeowner-visibility"
-            checked={activitiesVisibleToHomeowner}
-            onCheckedChange={onToggleHomeownerVisibility}
-          />
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-4 py-2">
+            <Eye className="h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="homeowner-visibility" className="text-sm font-medium cursor-pointer">
+              Homeowner can view progress
+            </Label>
+            <Switch
+              id="homeowner-visibility"
+              checked={activitiesVisibleToHomeowner}
+              onCheckedChange={onToggleHomeownerVisibility}
+            />
+          </div>
+          <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-4 py-2">
+            <Pencil className="h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="edit-activities" className="text-sm font-medium cursor-pointer">
+              Edit activities inline
+            </Label>
+            <Switch
+              id="edit-activities"
+              checked={editMode}
+              onCheckedChange={setEditMode}
+            />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setTypeDialogOpen(true)}>
@@ -445,57 +459,21 @@ export const ActivityList = ({
                       </p>
                     ) : (
                       <div className="divide-y">
-                        {catActivities.map(activity => {
-                          const isCompleted = activity.completed ?? activity.status === "done";
-                          const status = isCompleted ? statusConfig.done : statusConfig.pending;
-                          const isSelected = selectedActivityIds.has(activity.id);
-                          return (
-                            <div
-                              key={activity.id}
-                              className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 cursor-pointer transition-colors"
-                              onClick={() => setSelectedActivityId(activity.id)}
-                            >
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleSelected(activity.id);
-                                }}
-                              >
-                                <Checkbox checked={isSelected} className="cursor-pointer" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className={`font-medium text-sm ${isCompleted ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                                  {activity.name}
-                                </p>
-                                {activity.description && (
-                                  <p className="text-xs text-muted-foreground line-clamp-1">{activity.description}</p>
-                                )}
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-2 text-xs"
-                                onClick={(e) => handleMarkCompleteToggle(activity, e)}
-                              >
-                                {isCompleted ? "Mark as pending" : "Mark as complete"}
-                              </Button>
-                              <div className="flex items-center gap-2">
-                                {activity.due_date && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {format(new Date(activity.due_date), "MMM d")}
-                                  </span>
-                                )}
-                                <Badge
-                                  variant="outline"
-                                  className={`text-xs ${status.color}`}
-                                >
-                                  {status.label}
-                                </Badge>
-                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {catActivities.map(activity => (
+                          <ActivityRow
+                            key={activity.id}
+                            activity={activity}
+                            projectId={projectId}
+                            editMode={editMode}
+                            isBuilder={isBuilder}
+                            isSelected={selectedActivityIds.has(activity.id)}
+                            vendors={vendors}
+                            onToggleSelect={toggleSelected}
+                            onOpen={setSelectedActivityId}
+                            onUpdateActivity={onUpdateActivity}
+                            onMarkCompleteToggle={handleMarkCompleteToggle}
+                          />
+                        ))}
                       </div>
                     )}
                   </div>
@@ -512,57 +490,21 @@ export const ActivityList = ({
                 <h3 className="font-semibold text-muted-foreground">Uncategorized</h3>
               </div>
               <div className="border-t divide-y">
-                {uncategorizedActivities.map(activity => {
-                  const isCompleted = activity.completed ?? activity.status === "done";
-                  const status = isCompleted ? statusConfig.done : statusConfig.pending;
-                  const isSelected = selectedActivityIds.has(activity.id);
-                  return (
-                    <div
-                      key={activity.id}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 cursor-pointer transition-colors"
-                      onClick={() => setSelectedActivityId(activity.id)}
-                    >
-                      <div
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleSelected(activity.id);
-                        }}
-                      >
-                        <Checkbox checked={isSelected} className="cursor-pointer" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`font-medium text-sm ${isCompleted ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                          {activity.name}
-                        </p>
-                        {activity.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-1">{activity.description}</p>
-                        )}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 text-xs"
-                        onClick={(e) => handleMarkCompleteToggle(activity, e)}
-                      >
-                        {isCompleted ? "Mark as pending" : "Mark as complete"}
-                      </Button>
-                      <div className="flex items-center gap-2">
-                        {activity.due_date && (
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(activity.due_date), "MMM d")}
-                          </span>
-                        )}
-                        <Badge
-                          variant="outline"
-                          className={`text-xs ${status.color}`}
-                        >
-                          {status.label}
-                        </Badge>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </div>
-                  );
-                })}
+                {uncategorizedActivities.map(activity => (
+                  <ActivityRow
+                    key={activity.id}
+                    activity={activity}
+                    projectId={projectId}
+                    editMode={editMode}
+                    isBuilder={isBuilder}
+                    isSelected={selectedActivityIds.has(activity.id)}
+                    vendors={vendors}
+                    onToggleSelect={toggleSelected}
+                    onOpen={setSelectedActivityId}
+                    onUpdateActivity={onUpdateActivity}
+                    onMarkCompleteToggle={handleMarkCompleteToggle}
+                  />
+                ))}
               </div>
             </CardContent>
           </Card>

@@ -134,6 +134,7 @@ const Onboarding = () => {
         lastName: get('lastName', 'last_name'),
         email: get('email'),
         phone: get('contact', 'phone'),
+        unitNumber: get('unitNumber', 'unit_number'),
         propertyAddress: get('address', 'property_address'),
         city: get('city'),
         state: get('state'),

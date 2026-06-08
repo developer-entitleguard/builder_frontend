@@ -383,6 +383,7 @@ export interface BuilderCustomer {
   lastName: string;
   email: string;
   contact: string;
+  unitNumber?: string;
   address: string;
   city: string;
   state: string;
@@ -409,6 +410,7 @@ export interface CreateBuilderCustomerRequest {
   lastName: string;
   email: string;
   contact: string;
+  unitNumber?: string;
   address: string;
   city: string;
   state: string;

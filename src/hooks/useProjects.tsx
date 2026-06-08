@@ -193,7 +193,7 @@ export const useProjects = () => {
     }
   };
 
-  const createProject = async (data: CreateProjectData): Promise<boolean> => {
+  const createProject = async (data: CreateProjectData): Promise<string | null> => {
     try {
       const body = {
         activitiesVisibleToHomeowner: data.activities_visible_to_homeowner ?? true,
@@ -219,13 +219,14 @@ export const useProjects = () => {
           description: result?.message || "Failed to create project",
           variant: "destructive",
         });
-        return false;
+        return null;
       }
       toast({
         title: "Success",
         description: result.message || "Project created successfully",
       });
-      return true;
+      // data carries the new project's id (used to trigger generation).
+      return result.data ?? null;
     } catch (err: unknown) {
       toast({
         title: "Error creating project",
@@ -237,7 +238,7 @@ export const useProjects = () => {
               : "Failed to create project",
         variant: "destructive",
       });
-      return false;
+      return null;
     }
   };
 

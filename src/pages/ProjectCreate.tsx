@@ -10,8 +10,11 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProjects, PropertyType, CreateProjectData } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { useGetTopographyTypesQuery, useGetBalRatingsQuery } from "@/store/api/projectOptions";
+import { useGenerateActivitiesMutation } from "@/store/api/activities";
+import { useGenerateProjectComplianceDocumentsMutation } from "@/store/api/complianceDocuments";
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -91,10 +94,14 @@ const hasBuilderAuth = (): boolean => {
 const ProjectCreate = () => {
   const { user, loading: authLoading } = useAuth();
   const { createProject } = useProjects();
+  const { toast } = useToast();
   const navigate = useNavigate();
-  
+  const [generateActivities] = useGenerateActivitiesMutation();
+  const [generateCompliance] = useGenerateProjectComplianceDocumentsMutation();
+
   const [currentStep, setCurrentStep] = useState<Step>('basics');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   
   const [formData, setFormData] = useState<CreateProjectData>({
     name: '',
@@ -180,12 +187,36 @@ const ProjectCreate = () => {
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    const success = await createProject(formData);
-    setIsSubmitting(false);
-    
-    if (success) {
-      navigate(`/projects`);
+    const projectId = await createProject(formData);
+
+    if (!projectId) {
+      setIsSubmitting(false);
+      return;
     }
+
+    // Auto-generate activities + compliance using the SAME foreground endpoints
+    // the manual "Generate" buttons use, passing the project description as the
+    // prompt. This is reliable (unlike a background job) and lets the builder's
+    // description drive generation. Best-effort: a failure never blocks the flow.
+    const prompt = formData.description?.trim();
+    if (formData.auto_generate && prompt) {
+      setIsGenerating(true);
+      const results = await Promise.allSettled([
+        generateActivities({ projectId, prompt }).unwrap(),
+        generateCompliance({ projectId, prompt }).unwrap(),
+      ]);
+      setIsGenerating(false);
+      if (results.some((r) => r.status === "rejected")) {
+        toast({
+          title: "Project created",
+          description:
+            "Some auto-generation didn't complete — you can use the Generate buttons on the project's Activities and Compliance tabs.",
+        });
+      }
+    }
+
+    setIsSubmitting(false);
+    navigate(`/projects/${projectId}`);
   };
 
   const renderStepIndicator = () => (
@@ -547,11 +578,15 @@ const ProjectCreate = () => {
               </Button>
               
               {currentStep === 'timeline' ? (
-                <Button 
-                  onClick={handleSubmit} 
+                <Button
+                  onClick={handleSubmit}
                   disabled={!canProceed() || isSubmitting}
                 >
-                  {isSubmitting ? 'Creating...' : 'Create Project'}
+                  {isGenerating
+                    ? 'Generating activities & compliance…'
+                    : isSubmitting
+                      ? 'Creating...'
+                      : 'Create Project'}
                   <Check className="h-4 w-4 ml-2" />
                 </Button>
               ) : (

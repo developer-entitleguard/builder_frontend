@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useMemo } from "react";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useGetBuilderVendorsQuery } from "@/store/api/builderVendor";
 
 export interface OrgVendor {
   id: string;
@@ -10,33 +10,33 @@ export interface OrgVendor {
 }
 
 /**
- * Loads the organisation's saved vendors from Supabase. Shared by the activity
- * detail page and the activities list so both surface the same set of contacts
- * for the assignment typeahead (see {@link ContactCombobox}).
+ * Loads the organisation's saved vendors from the builder API
+ * (`GET /api/builder/vendor?builderId=…`) — the same source the Admin → Vendors
+ * screen uses. Shared by the activity detail page and the activities list so the
+ * assignment typeahead (see {@link ContactCombobox}) shows real vendors.
+ *
+ * Note: builder vendors live in the Java backend, NOT the legacy Supabase
+ * `vendors` table, so this must go through RTK Query (JWT-authed), not Supabase.
  */
 export const useOrgVendors = () => {
   const { organization } = useOrganization();
-  const [vendors, setVendors] = useState<OrgVendor[]>([]);
-  const [loading, setLoading] = useState(false);
+  const builderId = organization?.id;
 
-  useEffect(() => {
-    if (!organization) return;
-    let active = true;
-    setLoading(true);
-    supabase
-      .from("vendors")
-      .select("id, name, contact_email, contact_phone")
-      .eq("organization_id", organization.id)
-      .order("name")
-      .then(({ data, error }) => {
-        if (!active) return;
-        if (!error && data) setVendors(data as OrgVendor[]);
-        setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [organization]);
+  const { data, isLoading } = useGetBuilderVendorsQuery(
+    { builderId: builderId as string },
+    { skip: !builderId }
+  );
 
-  return { vendors, loading };
+  const vendors: OrgVendor[] = useMemo(
+    () =>
+      (data?.data ?? []).map((v) => ({
+        id: v.id,
+        name: v.name ?? "",
+        contact_email: v.email ?? "",
+        contact_phone: v.contact ?? "",
+      })),
+    [data]
+  );
+
+  return { vendors, loading: isLoading };
 };

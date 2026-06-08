@@ -33,6 +33,13 @@ export interface BuilderProjectResponse {
   data: BuilderProjectApi;
 }
 
+/** Create response: data carries the new project's id. */
+export interface CreateBuilderProjectResponse {
+  success: boolean;
+  message: string;
+  data: string | null;
+}
+
 export interface CreateBuilderProjectBody {
   activitiesVisibleToHomeowner: boolean;
   address: string;
@@ -114,7 +121,7 @@ export const projectsApi = api.injectEndpoints({
       }),
     }),
     // POST /api/builder/projects
-    createProject: build.mutation<BuilderProjectResponse, CreateBuilderProjectBody>({
+    createProject: build.mutation<CreateBuilderProjectResponse, CreateBuilderProjectBody>({
       query: (body) => ({
         url: "/api/builder/projects",
         method: "POST",

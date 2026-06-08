@@ -374,7 +374,10 @@ const QueryDetail = () => {
           {/* ── Left Column ── */}
           <div className="lg:col-span-2 space-y-6">
             {/* Warranty coverage + auto-linked registration verification */}
-            <CoverageReviewPanel entity={queryData} />
+            <CoverageReviewPanel
+              entity={queryData}
+              onResolved={() => id && fetchQuery(id)}
+            />
             {/* Case Details */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">

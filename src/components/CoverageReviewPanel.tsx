@@ -18,7 +18,14 @@ import { AlertTriangle, ShieldCheck, ShieldQuestion, HomeIcon } from "lucide-rea
  *
  * Both inputs come straight off the raw Ticket/Query entity (CoverageFields).
  */
-export function CoverageReviewPanel({ entity }: { entity: CoverageFields }) {
+export function CoverageReviewPanel({
+  entity,
+  onResolved,
+}: {
+  entity: CoverageFields;
+  /** Called after a successful verify/reject so a parent using local state can refetch. */
+  onResolved?: () => void;
+}) {
   const { toast } = useToast();
   const [verifyMut, { isLoading: verifying }] = useVerifyRegistrationMutation();
   const [rejectMut, { isLoading: rejecting }] = useRejectRegistrationMutation();
@@ -40,6 +47,7 @@ export function CoverageReviewPanel({ entity }: { entity: CoverageFields }) {
         return;
       }
       toast({ title: "Registration verified" });
+      onResolved?.();
     } catch (e) {
       toast({
         title: "Couldn't verify",
@@ -63,6 +71,7 @@ export function CoverageReviewPanel({ entity }: { entity: CoverageFields }) {
         return;
       }
       toast({ title: "Registration rejected" });
+      onResolved?.();
     } catch (e) {
       toast({
         title: "Couldn't reject",

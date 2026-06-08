@@ -48,7 +48,10 @@ const TicketDetail = () => {
   const { effectiveOrganization } = useOrganization();
   const builderId = effectiveOrganization?.id;
 
-  const { data: ticketResp, isLoading } = useGetTicketQuery({ id: id ?? "" }, { skip: !id });
+  const { data: ticketResp, isLoading, refetch: refetchTicket } = useGetTicketQuery(
+    { id: id ?? "" },
+    { skip: !id },
+  );
   const ticket = ticketResp?.data;
   const { data: filesResp } = useGetTicketFilesQuery({ id: id ?? "" }, { skip: !id });
   const ticketFiles = filesResp?.data ?? [];
@@ -207,7 +210,9 @@ const TicketDetail = () => {
           </Card>
         )}
 
-        {ticket && <CoverageReviewPanel entity={ticket} />}
+        {ticket && (
+          <CoverageReviewPanel entity={ticket} onResolved={() => refetchTicket()} />
+        )}
 
         {ticket && ticketFiles.length > 0 && (
           <Card>
@@ -272,7 +277,7 @@ const TicketDetail = () => {
           </Card>
         )}
 
-        {ticket && ticket.status !== "CONVERTED" && (
+        {ticket && ticket.status !== "CONVERTED" && !ticket.linkedRegistrationId && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">

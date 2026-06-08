@@ -24,12 +24,8 @@ import {
   type BuilderJob,
   type JobStatus,
 } from "@/lib/api/services/jobs";
-import { useListRegistrationOptionsQuery } from "@/store/api/complianceDocuments";
 import JobAssignVendorDialog from "@/components/queries/JobAssignVendorDialog";
 import VendorLinkModal from "@/components/VendorLinkModal";
-
-/** Sentinel option value — Radix Select forbids an empty-string item value. */
-const NO_REGISTRATION = "__none__";
 
 const STATUSES: JobStatus[] = [
   "DRAFT",
@@ -99,13 +95,6 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
     { skip: !builderId },
   );
   const vendors = vendorResp?.data ?? [];
-  // Dwelling picker for the Add Job form — links the job (and any resulting
-  // trade compliance certificate) to a registration's handover pack.
-  const { data: registrationResp } = useListRegistrationOptionsQuery(undefined, {
-    skip: !canManage || !builderId,
-  });
-  const registrationOptions = registrationResp?.data ?? [];
-
   const [createJob, { isLoading: creating }] = useCreateJobFromQueryMutation();
   const [updateStatus] = useUpdateJobStatusMutation();
   const [assignJobVendor, { isLoading: assigning }] = useAssignJobVendorMutation();
@@ -115,9 +104,6 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
   const [scope, setScope] = useState("");
   // Optional vendor chosen in the Add Job form — assigns in the same flow.
   const [newVendorId, setNewVendorId] = useState("");
-  // Optional dwelling chosen in the Add Job form — links the job's compliance
-  // certificate into that registration's handover pack.
-  const [newRegistrationId, setNewRegistrationId] = useState("");
   const [assignVendorByJob, setAssignVendorByJob] = useState<Record<string, string>>({});
   // Schedule dialog target for an internal vendor assignment.
   const [scheduleFor, setScheduleFor] = useState<
@@ -141,11 +127,9 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
         queryId,
         builderId: builderId ?? "",
         scope: scope.trim() || undefined,
-        registrationId: newRegistrationId || undefined,
       }).unwrap();
       toast({ title: "Job created" });
       setScope("");
-      setNewRegistrationId("");
       setShowAdd(false);
 
       // If a vendor was picked in the same form, assign it now.
@@ -269,34 +253,6 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                 rows={2}
               />
             </div>
-            {registrationOptions.length > 0 && (
-              <div className="space-y-1">
-                <Label>Dwelling / registration (optional)</Label>
-                <Select
-                  value={newRegistrationId || NO_REGISTRATION}
-                  onValueChange={(v) =>
-                    setNewRegistrationId(v === NO_REGISTRATION ? "" : v)
-                  }
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Not linked to a dwelling" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_REGISTRATION}>Not linked to a dwelling</SelectItem>
-                    {registrationOptions.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        {r.name}
-                        {r.address ? ` — ${r.address}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Links this job's compliance certificate into the dwelling's
-                  handover pack.
-                </p>
-              </div>
-            )}
             <div className="space-y-1">
               <Label>Assign vendor (optional)</Label>
               <Select
@@ -334,7 +290,6 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                   setShowAdd(false);
                   setScope("");
                   setNewVendorId("");
-                  setNewRegistrationId("");
                 }}
               >
                 Cancel

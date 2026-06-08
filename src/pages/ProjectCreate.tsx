@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProjects, PropertyType, CreateProjectData } from "@/hooks/useProjects";
+import { BUILDING_CLASS_OPTIONS, DEFAULT_BUILDING_CLASS_BY_TYPE } from "@/lib/buildingClass";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
@@ -110,6 +111,7 @@ const ProjectCreate = () => {
     state: '',
     postcode: '',
     property_type: 'house',
+    building_class: DEFAULT_BUILDING_CLASS_BY_TYPE['house'],
     start_date: null,
     target_end_date: null,
     statusId: null,
@@ -147,6 +149,9 @@ const ProjectCreate = () => {
     setFormData(prev => ({
       ...prev,
       property_type: type,
+      // Auto-select the NCC building class for the type (builder can override).
+      // Keep an existing manual choice for "custom", which has no default.
+      building_class: DEFAULT_BUILDING_CLASS_BY_TYPE[type] ?? prev.building_class ?? null,
       dwelling_count:
         type === 'duplex' ? 2 : MULTI_DWELLING.includes(type) ? (prev.dwelling_count ?? 1) : null,
     }));
@@ -158,6 +163,8 @@ const ProjectCreate = () => {
         return formData.name && formData.address && formData.city && formData.state && formData.postcode;
       case 'type': {
         if (!formData.property_type) return false;
+        // Building class is mandatory (auto-selected, but custom needs a choice).
+        if (!formData.building_class) return false;
         // Townhouse/apartment need an explicit unit count (duplex is fixed at 2).
         const needsCount =
           formData.property_type === 'townhouse' || formData.property_type === 'apartment';
@@ -345,6 +352,30 @@ const ProjectCreate = () => {
               </button>
             );
           })}
+        </div>
+
+        {/* NCC building class — auto-selected from the type, editable, mandatory */}
+        <div className="w-full md:w-1/2">
+          <Label htmlFor="building_class">Building class (NCC) *</Label>
+          <Select
+            value={formData.building_class ?? ''}
+            onValueChange={v => updateField('building_class', v || null)}
+          >
+            <SelectTrigger id="building_class" className="mt-1.5">
+              <SelectValue placeholder="Select building class" />
+            </SelectTrigger>
+            <SelectContent>
+              {BUILDING_CLASS_OPTIONS.map(opt => (
+                <SelectItem key={opt.code} value={opt.code}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            {BUILDING_CLASS_OPTIONS.find(o => o.code === formData.building_class)?.description ??
+              'Auto-selected from the property type — adjust if needed. Drives which compliance documents apply.'}
+          </p>
         </div>
 
         {/* Number of units for multi-dwelling developments */}

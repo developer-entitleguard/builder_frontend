@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle,
   Clock,
+  FileBarChart,
   MessageSquare,
   Package,
   Plus,
@@ -29,6 +30,7 @@ import {
   Settings,
   Users,
 } from "lucide-react";
+import { BUILDER_ROLES, readBuilderRoleFromStorage } from "@/lib/roles";
 
 const hasBuilderAuth = (): boolean => {
   try {
@@ -43,10 +45,11 @@ const hasBuilderAuth = (): boolean => {
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const { organization } = useOrganization();
+  const { organization, builderRole } = useOrganization();
   const navigate = useNavigate();
   const { toast } = useToast();
   const isAuthenticated = !!user || hasBuilderAuth();
+  const isAdmin = (builderRole ?? readBuilderRoleFromStorage()) === BUILDER_ROLES.ADMINISTRATOR;
 
   const builderId = useMemo(() => {
     const raw = localStorage.getItem("userData");
@@ -206,6 +209,15 @@ const Dashboard = () => {
             cta="Open"
             to="/registrations"
           />
+          {isAdmin && (
+            <QuickAction
+              icon={<FileBarChart className="h-8 w-8 text-indigo-500" />}
+              title="Report"
+              description="Org-wide stats, tickets, queries and project reports"
+              cta="View"
+              to="/report"
+            />
+          )}
         </div>
       </main>
 

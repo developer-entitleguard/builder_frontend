@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Project, PropertyType, ProjectStatus, CreateProjectData } from "@/hooks/useProjects";
+import { BUILDING_CLASS_OPTIONS, DEFAULT_BUILDING_CLASS_BY_TYPE } from "@/lib/buildingClass";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { useGetTopographyTypesQuery, useGetBalRatingsQuery } from "@/store/api/projectOptions";
 import { 
@@ -80,6 +81,7 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
     state: project.state,
     postcode: project.postcode,
     property_type: project.property_type,
+    building_class: project.building_class,
     start_date: project.start_date,
     target_end_date: project.target_end_date,
     status: project.status,
@@ -97,6 +99,7 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
         state: project.state,
         postcode: project.postcode,
         property_type: project.property_type,
+        building_class: project.building_class,
         start_date: project.start_date,
         target_end_date: project.target_end_date,
         status: project.status,
@@ -126,6 +129,16 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Changing the property type re-applies the NCC building-class default for that
+  // type (the builder can still override). Custom keeps the existing choice.
+  const handleSelectType = (type: PropertyType) => {
+    setFormData(prev => ({
+      ...prev,
+      property_type: type,
+      building_class: DEFAULT_BUILDING_CLASS_BY_TYPE[type] ?? prev.building_class ?? null,
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -138,7 +151,7 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
     }
   };
 
-  const isValid = formData.name && formData.address && formData.city && formData.state && formData.postcode;
+  const isValid = formData.name && formData.address && formData.city && formData.state && formData.postcode && formData.building_class;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -172,7 +185,7 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
                   <button
                     key={type.value}
                     type="button"
-                    onClick={() => updateField('property_type', type.value)}
+                    onClick={() => handleSelectType(type.value)}
                     className={cn(
                       "p-2 rounded-lg border-2 text-center transition-all",
                       isSelected
@@ -187,7 +200,31 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
               })}
             </div>
           </div>
-          
+
+          {/* Building class (NCC) — auto-selected from type, editable, mandatory */}
+          <div>
+            <Label htmlFor="edit-building_class">Building class (NCC) *</Label>
+            <Select
+              value={formData.building_class ?? ''}
+              onValueChange={v => updateField('building_class', v || null)}
+            >
+              <SelectTrigger id="edit-building_class" className="mt-1.5">
+                <SelectValue placeholder="Select building class" />
+              </SelectTrigger>
+              <SelectContent>
+                {BUILDING_CLASS_OPTIONS.map(opt => (
+                  <SelectItem key={opt.code} value={opt.code}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              {BUILDING_CLASS_OPTIONS.find(o => o.code === formData.building_class)?.description ??
+                'Drives which compliance documents apply.'}
+            </p>
+          </div>
+
           {/* Address */}
           <div>
             <Label htmlFor="edit-address">Property Address *</Label>

@@ -26,6 +26,8 @@ import Projects from "./pages/Projects";
 import ProjectCreate from "./pages/ProjectCreate";
 import BuilderOnboarding from "./pages/BuilderOnboarding";
 import ProjectDetail from "./pages/ProjectDetail";
+import ProjectReport from "./pages/ProjectReport";
+import OrgReport from "./pages/OrgReport";
 import ApprovalDetail from "./pages/ApprovalDetail";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import ApprovalResponse from "./pages/ApprovalResponse";
@@ -237,6 +239,22 @@ const App = () => (
               <Route path="/projects/:id" element={
                 <ProtectedRoute>
                   <ProjectDetail />
+                </ProtectedRoute>
+              } />
+              {/* Per-project management report — admin only. */}
+              <Route path="/projects/:id/report" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                    <ProjectReport />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              {/* Org-level management report — admin only. */}
+              <Route path="/report" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                    <OrgReport />
+                  </RoleGate>
                 </ProtectedRoute>
               } />
               <Route path="/tickets" element={

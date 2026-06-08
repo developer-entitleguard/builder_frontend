@@ -9,6 +9,7 @@ import { useActivities } from "@/hooks/useActivities";
 import { useActivityCategories } from "@/hooks/useActivityCategories";
 import { useApprovals } from "@/hooks/useApprovals";
 import { useAuth } from "@/hooks/useAuth";
+import { BUILDER_ROLES, readBuilderRoleFromStorage } from "@/lib/roles";
 import { useProjectByIdQuery, type BuilderProjectApi } from "@/store/api/projects";
 import { useGetProjectApprovalsQuery } from "@/store/api/approvals";
 import { useGetStatusesByModuleQuery } from "@/store/api/status";
@@ -29,7 +30,8 @@ import {
   Settings,
   MapPin,
   Edit,
-  DollarSign
+  DollarSign,
+  FileBarChart
 } from "lucide-react";
 
 const propertyTypeConfig: Record<PropertyType, { icon: React.ElementType; color: string; label: string }> = {
@@ -108,6 +110,7 @@ const mapStatusLocal = (value: string | null | undefined): ProjectStatus => {
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
+  const isAdmin = readBuilderRoleFromStorage() === BUILDER_ROLES.ADMINISTRATOR;
   const { user, loading: authLoading } = useAuth();
   const { updateProject } = useProjects();
   const { activities, loading: activitiesLoading, fetchActivities, createActivity, updateActivity, deleteActivity, fetchUpdates, postUpdate } = useActivities(id);
@@ -301,6 +304,12 @@ const ProjectDetail = () => {
             
             <div className="flex items-center gap-3">
               <Badge className={status.color}>{status.label}</Badge>
+              {isAdmin && (
+                <Button variant="outline" size="sm" onClick={() => navigate(`/projects/${id}/report`)}>
+                  <FileBarChart className="h-4 w-4 mr-2" />
+                  Report
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
                 <Edit className="h-4 w-4 mr-2" />
                 Edit

@@ -8,6 +8,8 @@ export interface BuilderProjectApi {
   state: string;
   postcode: string;
   propertyType: string;
+  /** NCC building classification code (e.g. CLASS_1A). */
+  buildingClass: string | null;
   startDate: string | null;
   targetEndDate: string | null;
   actualEndDate: string | null;
@@ -49,6 +51,8 @@ export interface CreateBuilderProjectBody {
   name: string;
   postcode: string;
   propertyType: string;
+  /** NCC building classification code (e.g. CLASS_1A). Mandatory. */
+  buildingClass?: string | null;
   startDate: string;
   state: string;
   statusId: string;

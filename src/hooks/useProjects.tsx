@@ -22,6 +22,8 @@ export interface Project {
   state: string;
   postcode: string;
   property_type: PropertyType;
+  /** NCC building classification code (e.g. CLASS_1A). */
+  building_class: string | null;
   start_date: string | null;
   target_end_date: string | null;
   actual_end_date: string | null;
@@ -42,6 +44,8 @@ export interface CreateProjectData {
   state: string;
   postcode: string;
   property_type: PropertyType;
+  /** NCC building classification code (e.g. CLASS_1A). Mandatory on create/update. */
+  building_class?: string | null;
   start_date?: string | null;
   target_end_date?: string | null;
   /** Status id from API (e.g. getStatusesByModule PROJECT). Preferred when creating via builder API. */
@@ -134,6 +138,7 @@ export const useProjects = () => {
       state: p.state,
       postcode: p.postcode,
       property_type: mapPropertyType(p.propertyType),
+      building_class: p.buildingClass ?? null,
       start_date: p.startDate,
       target_end_date: p.targetEndDate,
       actual_end_date: p.actualEndDate,
@@ -172,6 +177,7 @@ export const useProjects = () => {
         state: apiProject.state,
         postcode: apiProject.postcode,
         property_type: mapPropertyType(apiProject.propertyType),
+        building_class: apiProject.buildingClass ?? null,
         start_date: apiProject.startDate,
         target_end_date: apiProject.targetEndDate,
         actual_end_date: apiProject.actualEndDate,
@@ -204,6 +210,7 @@ export const useProjects = () => {
         name: data.name,
         postcode: data.postcode,
         propertyType: data.property_type,
+        buildingClass: data.building_class ?? null,
         startDate: data.start_date ?? "",
         state: data.state,
         statusId: data.statusId ?? data.status ?? "",
@@ -253,6 +260,7 @@ export const useProjects = () => {
         name: data.name,
         postcode: data.postcode,
         propertyType: data.property_type,
+        buildingClass: data.building_class ?? null,
         startDate: data.start_date ?? "",
         state: data.state,
         statusId: data.statusId ?? data.status ?? "planning",

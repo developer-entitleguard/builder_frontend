@@ -124,7 +124,11 @@ function getStatusBadge(statusName: string) {
 }
 
 function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString("en-US", {
+  // Backend LocalDateTime has no timezone and the server is UTC — tag it so JS
+  // renders it in the viewer's local zone instead of treating it as local.
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(dateString);
+  const d = new Date(!hasTz && dateString.includes("T") ? `${dateString}Z` : dateString);
+  return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",

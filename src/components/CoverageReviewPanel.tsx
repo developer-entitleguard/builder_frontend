@@ -8,6 +8,7 @@ import {
   useRejectRegistrationMutation,
 } from "@/lib/api/services/query";
 import type { CoverageFields } from "@/store/api/coverage";
+import { formatDateTime } from "@/lib/datetime";
 import { AlertTriangle, ShieldCheck, ShieldQuestion, HomeIcon } from "lucide-react";
 
 /**
@@ -155,7 +156,7 @@ export function CoverageReviewPanel({
               {entity.coverageAssessedAt && (
                 <Field
                   label="Assessed"
-                  value={new Date(entity.coverageAssessedAt).toLocaleString()}
+                  value={formatDateTime(entity.coverageAssessedAt)}
                 />
               )}
             </div>

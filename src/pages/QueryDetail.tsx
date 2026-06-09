@@ -36,6 +36,7 @@ import { viewPhotoUrl } from "@/lib/api/services/files";
 import VendorLinkModal from "@/components/VendorLinkModal";
 import JobsPanel from "@/components/queries/JobsPanel";
 import { CoverageReviewPanel } from "@/components/CoverageReviewPanel";
+import { formatDateTime } from "@/lib/datetime";
 import { canManageJobs } from "@/lib/roles";
 import {
   ATTACHMENT_ACCEPT,
@@ -357,9 +358,7 @@ const QueryDetail = () => {
               {queryData.title || "Query Details"}
             </h1>
             <p className="text-gray-600 mt-2">
-              {queryData.createdAt
-                ? `Created on ${new Date(queryData.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`
-                : ""}
+              {queryData.createdAt ? `Created on ${formatDateTime(queryData.createdAt)}` : ""}
             </p>
           </div>
           <div className="flex gap-3">
@@ -741,7 +740,7 @@ const QueryDetail = () => {
                               {c.commentedBy}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {new Date(c.createdAt).toLocaleString()}
+                              {formatDateTime(c.createdAt)}
                             </span>
                           </div>
                           <p className="text-sm">{c.comment}</p>
@@ -808,13 +807,7 @@ const QueryDetail = () => {
                               {h.status?.name || "Status changed"}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {new Date(h.changedAt).toLocaleString("en-US", {
-                                year: "numeric",
-                                month: "short",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
+                              {formatDateTime(h.changedAt)}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               Updated by{" "}

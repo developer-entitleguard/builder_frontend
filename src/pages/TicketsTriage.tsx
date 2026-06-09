@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useListTicketsQuery, type Ticket } from "@/store/api/tickets";
+import { formatDateTime } from "@/lib/datetime";
 
 const PRIORITY_VARIANT: Record<string, "default" | "destructive" | "outline" | "secondary"> = {
   LOW: "outline",
@@ -153,7 +154,7 @@ const TicketsTriage = () => {
                   </p>
                 </div>
                 <div className="text-xs text-muted-foreground whitespace-nowrap">
-                  {t.createdAt ? new Date(t.createdAt).toLocaleString() : ""}
+                  {t.createdAt ? formatDateTime(t.createdAt) : ""}
                 </div>
               </Link>
             ))}

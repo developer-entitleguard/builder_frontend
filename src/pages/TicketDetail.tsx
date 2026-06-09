@@ -28,6 +28,7 @@ import {
 } from "@/store/api/tickets";
 import { useDashboardRegistrationsQuery } from "@/store/api";
 import { CoverageReviewPanel } from "@/components/CoverageReviewPanel";
+import { formatDateTime } from "@/lib/datetime";
 import { viewPhotoUrl } from "@/lib/api/services/files";
 import { classifyAttachment } from "@/lib/queryAttachments";
 import { ArrowLeft, ArrowRight, LinkIcon, Wand2, XCircle, Ban, FileText } from "lucide-react";
@@ -185,7 +186,7 @@ const TicketDetail = () => {
                 <Badge variant="default">{ticket.status}</Badge>
               </CardTitle>
               <CardDescription>
-                {ticket.sourceChannel ?? "—"} via agent {ticket.agentId ?? "—"} · {ticket.createdAt ? new Date(ticket.createdAt).toLocaleString() : ""}
+                {ticket.sourceChannel ?? "—"} via agent {ticket.agentId ?? "—"} · {ticket.createdAt ? formatDateTime(ticket.createdAt) : ""}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2">

@@ -36,6 +36,11 @@ export interface BuilderQuery {
   vendor: { id: string; name: string; email?: string; contact?: string; type?: string } | null;
   dueDate: string;
   status: QueryStatus;
+  customerName?: string | null;
+  customerAddress?: string | null;
+  customerCity?: string | null;
+  customerState?: string | null;
+  customerZip?: string | null;
   createdAt?: string;
   updatedAt: string | null;
   queryFileMaps: QueryFile[];

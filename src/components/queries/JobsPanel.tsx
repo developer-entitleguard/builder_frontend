@@ -94,7 +94,7 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
     { builderId: builderId ?? "" },
     { skip: !builderId },
   );
-  const vendors = vendorResp?.data ?? [];
+  const vendors = useMemo(() => vendorResp?.data ?? [], [vendorResp]);
   const [createJob, { isLoading: creating }] = useCreateJobFromQueryMutation();
   const [updateStatus] = useUpdateJobStatusMutation();
   const [assignJobVendor, { isLoading: assigning }] = useAssignJobVendorMutation();
@@ -118,6 +118,27 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
     const m = new Map<string, (typeof vendors)[number]>();
     vendors.forEach((v) => m.set(v.id, v));
     return m;
+  }, [vendors]);
+
+  // Resolve the vendor a job is already assigned to back to a vendor.id, so the
+  // "Select vendor" dropdown can show it instead of the placeholder. Assignment
+  // persists assignee fields (not the vendor.id), so we reverse-map them:
+  // internal vendors by their portal user id, off-platform vendors by email/name.
+  const vendorIdForJob = useMemo(() => {
+    const byUserId = new Map<string, string>();
+    const byEmail = new Map<string, string>();
+    const byName = new Map<string, string>();
+    for (const v of vendors) {
+      if (v.userInfo?.id) byUserId.set(v.userInfo.id, v.id);
+      if (v.email) byEmail.set(v.email.toLowerCase(), v.id);
+      if (v.name) byName.set(v.name.toLowerCase(), v.id);
+    }
+    return (job: BuilderJob): string | undefined => {
+      if (job.assigneeUserId) return byUserId.get(job.assigneeUserId);
+      if (job.assigneeEmail) return byEmail.get(job.assigneeEmail.toLowerCase());
+      if (job.assigneeName) return byName.get(job.assigneeName.toLowerCase());
+      return undefined;
+    };
   }, [vendors]);
 
   const handleAdd = async () => {
@@ -355,32 +376,45 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                       </SelectContent>
                     </Select>
 
-                    <Select
-                      value={assignVendorByJob[job.id] ?? ""}
-                      onValueChange={(v) =>
-                        setAssignVendorByJob((prev) => ({ ...prev, [job.id]: v }))
-                      }
-                    >
-                      <SelectTrigger className="h-8 w-[180px]">
-                        <SelectValue placeholder="Select vendor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {vendors.map((v) => (
-                          <SelectItem key={v.id} value={v.id}>
-                            {v.name}
-                            {v.userInfo?.id ? " (internal)" : " (external)"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleAssign(job)}
-                      disabled={assigning || !assignVendorByJob[job.id]}
-                    >
-                      Assign
-                    </Button>
+                    {(() => {
+                      const assignedVendorId = vendorIdForJob(job);
+                      const selectedVendorId =
+                        assignVendorByJob[job.id] ?? assignedVendorId ?? "";
+                      // Only enable Assign when a vendor is chosen that differs
+                      // from the one already on the job.
+                      const canAssign =
+                        !!selectedVendorId && selectedVendorId !== assignedVendorId;
+                      return (
+                        <>
+                          <Select
+                            value={selectedVendorId}
+                            onValueChange={(v) =>
+                              setAssignVendorByJob((prev) => ({ ...prev, [job.id]: v }))
+                            }
+                          >
+                            <SelectTrigger className="h-8 w-[180px]">
+                              <SelectValue placeholder="Select vendor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {vendors.map((v) => (
+                                <SelectItem key={v.id} value={v.id}>
+                                  {v.name}
+                                  {v.userInfo?.id ? " (internal)" : " (external)"}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAssign(job)}
+                            disabled={assigning || !canAssign}
+                          >
+                            Assign
+                          </Button>
+                        </>
+                      );
+                    })()}
 
                     {isExternalAssigned(job) && (
                       <Button

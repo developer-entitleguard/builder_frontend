@@ -40,6 +40,7 @@ import MyAssignments from "./pages/MyAssignments";
 import MyAssignmentDetail from "./pages/MyAssignmentDetail";
 import TicketsTriage from "./pages/TicketsTriage";
 import TicketDetail from "./pages/TicketDetail";
+import Notifications from "./pages/Notifications";
 import { useValidateTokenQuery } from "@/store/api";
 
 const queryClient = new QueryClient();
@@ -289,6 +290,17 @@ const App = () => (
                 <ProtectedRoute>
                   <RoleGate roles={[BUILDER_ROLES.EXTERNAL_VENDOR, BUILDER_ROLES.INTERNAL_VENDOR, BUILDER_ROLES.ADMINISTRATOR]}>
                     <MyAssignmentDetail />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/notifications" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[
+                    BUILDER_ROLES.ADMINISTRATOR,
+                    BUILDER_ROLES.CUSTOMER_SUPPORT,
+                    BUILDER_ROLES.PROJECT_MANAGER,
+                  ]}>
+                    <Notifications />
                   </RoleGate>
                 </ProtectedRoute>
               } />

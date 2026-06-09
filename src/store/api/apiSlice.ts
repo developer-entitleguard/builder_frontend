@@ -74,6 +74,8 @@ export const api = createApi({
     'Approvals',
     'ProjectPricing',
     'Ticket',
+    // Builder staff in-app notifications (bell + /notifications page).
+    'Notification',
     'ProjectImport',
     'Warranty',
     // PRD_Org_Terms_And_Conditions Phase 4.

@@ -23,11 +23,14 @@ import {
   canAssignVendors,
   canManageProjects,
   isAdministrator,
+  isCustomerSupport,
   isExternalVendor,
   isInternalVendor,
+  isProjectManager,
   readBuilderRoleFromStorage,
 } from "@/lib/roles";
-import { Menu, ChevronDown } from "lucide-react";
+import { useUnreadNotificationCountQuery } from "@/lib/api/services/notifications";
+import { Menu, ChevronDown, Bell } from "lucide-react";
 
 const hasBuilderAuth = (): boolean => {
   try {
@@ -85,6 +88,19 @@ const Header = () => {
   const showTicketsTab = canAssignVendors(effectiveBuilderRole);
   const showMyScheduleTab = isInternalVendor(effectiveBuilderRole);
   const showMyAssignmentsTab = isExternalVendor(effectiveBuilderRole);
+  // Notifications page (bell) — admin / customer support / project manager.
+  const showNotifications =
+    isAdministrator(effectiveBuilderRole) ||
+    isCustomerSupport(effectiveBuilderRole) ||
+    isProjectManager(effectiveBuilderRole);
+
+  // Keep the unread badge live-ish without websockets. Skipped entirely when
+  // the bell isn't shown so non-staff never hit the endpoint.
+  const { data: unreadData } = useUnreadNotificationCountQuery(undefined, {
+    skip: !isAuthenticated || !showNotifications,
+    pollingInterval: 60000,
+  });
+  const unreadCount = unreadData?.data ?? 0;
 
   const handleStopImpersonation = () => {
     setImpersonatedOrganization(null);
@@ -105,6 +121,13 @@ const Header = () => {
   // Flat list used for the mobile drawer — respects the same visibility flags.
   const mobileNavItems: NavItem[] = [];
   mobileNavItems.push({ label: "Dashboard", to: "/dashboard" });
+  if (showNotifications) {
+    mobileNavItems.push({
+      label: unreadCount > 0 ? `Notifications (${unreadCount > 99 ? "99+" : unreadCount})` : "Notifications",
+      to: "/notifications",
+      activePrefix: "/notifications",
+    });
+  }
   if (showOrgNavItems) {
     if (showProjectsTab) {
       mobileNavItems.push({ label: "Projects", to: "/projects", activePrefix: "/projects" });
@@ -366,6 +389,28 @@ const Header = () => {
                     </Button>
                   )}
                 </nav>
+
+                {showNotifications && (
+                  <Button
+                    asChild
+                    variant={location.pathname === "/notifications" ? "default" : "ghost"}
+                    size="icon"
+                    className="relative"
+                    aria-label="Notifications"
+                  >
+                    <Link to="/notifications">
+                      <Bell className="h-5 w-5" />
+                      {unreadCount > 0 && (
+                        <Badge
+                          variant="destructive"
+                          className="absolute -top-1 -right-1 h-5 min-w-[20px] px-1 justify-center text-xs"
+                        >
+                          {unreadCount > 99 ? "99+" : unreadCount}
+                        </Badge>
+                      )}
+                    </Link>
+                  </Button>
+                )}
 
                 <Button variant="outline" size="sm" onClick={handleSignOut}>
                   Sign Out

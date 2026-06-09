@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import type { BuilderQuery } from "@/lib/api/services/query";
@@ -9,6 +9,7 @@ import {
   useLazyGetQueryByIdQuery,
 } from "@/lib/api/services/query";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
+import { useGetEligibleOwnersQuery } from "@/store/api";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,7 @@ const QueryDetail = () => {
   const { organization, builderRole } = useOrganization();
   const canManageQueryJobs = canManageJobs(builderRole);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
   // ── State ──
@@ -154,6 +156,12 @@ const QueryDetail = () => {
     { skip: false }
   );
   const statuses = statusesData?.data ?? [];
+
+  const { data: ownersData } = useGetEligibleOwnersQuery(
+    { builderId: builderId ?? "" },
+    { skip: !builderId }
+  );
+  const eligibleOwners = ownersData?.data ?? [];
 
   // ── Fetch query ──
   const fetchQuery = useCallback(
@@ -242,6 +250,40 @@ const QueryDetail = () => {
       });
     }
   };
+
+  // Manually (re)assign the coordinating owner. Restricted to the eligible
+  // owner/PM/CS users returned by the backend for this org.
+  const handleOwnerChange = async (ownerUserId: string) => {
+    if (!queryData || !ownerUserId || ownerUserId === queryData.ownerUserId) return;
+    try {
+      const result = await updateQuery({
+        id: queryData.id,
+        ownerUserId,
+        userId: userId ?? undefined,
+      }).unwrap();
+      if (result.success) {
+        toast({ title: "Owner updated" });
+        if (id) await fetchQuery(id);
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to update owner",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({ title: "Error", description: "An error occurred", variant: "destructive" });
+    }
+  };
+
+  // When arriving with a #jobs hash (e.g. from the board's "add jobs" prompt),
+  // scroll the Jobs section into view once the query has loaded.
+  useEffect(() => {
+    if (location.hash === "#jobs" && queryData) {
+      const el = document.getElementById("jobs");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [location.hash, queryData]);
 
   const handleAddComment = async () => {
     if (!comment.trim() || !queryData) return;
@@ -382,26 +424,50 @@ const QueryDetail = () => {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Case Details</CardTitle>
                 {canManageQueryJobs && statuses.length > 0 ? (
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground">
-                      Status
-                    </Label>
-                    <Select
-                      value={queryData.status?.id ?? ""}
-                      onValueChange={handleStatusChange}
-                      disabled={isUpdating}
-                    >
-                      <SelectTrigger className="h-8 w-[180px]">
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {statuses.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs text-muted-foreground">
+                        Owner
+                      </Label>
+                      <Select
+                        value={queryData.ownerUserId ?? ""}
+                        onValueChange={handleOwnerChange}
+                        disabled={isUpdating || eligibleOwners.length === 0}
+                      >
+                        <SelectTrigger className="h-8 w-[180px]">
+                          <SelectValue placeholder="Unassigned" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {eligibleOwners.map((o) => (
+                            <SelectItem key={o.id} value={o.id}>
+                              {o.name || o.id}
+                              {o.role ? ` · ${o.role}` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs text-muted-foreground">
+                        Status
+                      </Label>
+                      <Select
+                        value={queryData.status?.id ?? ""}
+                        onValueChange={handleStatusChange}
+                        disabled={isUpdating}
+                      >
+                        <SelectTrigger className="h-8 w-[180px]">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statuses.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 ) : (
                   <Badge
@@ -668,7 +734,9 @@ const QueryDetail = () => {
 
             {/* Jobs spawned from this converted ticket query (one query → many jobs). */}
             {id && (
-              <JobsPanel queryId={id} builderId={builderId} canManage={canManageQueryJobs} />
+              <div id="jobs" className="scroll-mt-24">
+                <JobsPanel queryId={id} builderId={builderId} canManage={canManageQueryJobs} />
+              </div>
             )}
           </div>
 

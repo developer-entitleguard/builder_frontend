@@ -39,6 +39,9 @@ export interface BuilderJob {
   assigneeOrgId?: string | null;
   assigneeName?: string | null;
   assigneeEmail?: string | null;
+  /** Derived display fields, populated by the backend on read. */
+  assigneeDisplayName?: string | null;
+  assigneeInitials?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
   completedAt?: string | null;

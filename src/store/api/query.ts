@@ -41,6 +41,9 @@ export interface BuilderQuery {
   customerCity?: string | null;
   customerState?: string | null;
   customerZip?: string | null;
+  ownerUserId?: string | null;
+  ownerName?: string | null;
+  ownerInitials?: string | null;
   createdAt?: string;
   updatedAt: string | null;
   queryFileMaps: QueryFile[];
@@ -110,7 +113,23 @@ export interface UpdateQueryRequest {
   priorityLevel?: string;
   dueDate?: string;
   userId?: string;
+  ownerUserId?: string;
   queryFileMapDto?: QueryFileMapDto[];
+}
+
+export interface OwnerOption {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  name: string | null;
+  initials: string | null;
+  role: string | null;
+}
+
+export interface EligibleOwnersResponse {
+  success: boolean;
+  message: string;
+  data: OwnerOption[];
 }
 
 export interface UpdateQueryResponse {
@@ -171,6 +190,9 @@ export const queryApi = api.injectEndpoints({
           if (data.userId !== undefined && data.userId !== null) {
             formData.append('userId', String(data.userId));
           }
+          if (data.ownerUserId !== undefined && data.ownerUserId !== null) {
+            formData.append('ownerUserId', String(data.ownerUserId));
+          }
           if (data.queryFileMapDto?.length) {
             data.queryFileMapDto.forEach((fileDto, index) => {
               formData.append(`queryFileMapDto[${index}].type`, fileDto.type);
@@ -229,6 +251,13 @@ export const queryApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Query'],
     }),
+    getEligibleOwners: build.query<EligibleOwnersResponse, { builderId: string }>({
+      query: ({ builderId }) => ({
+        url: '/api/builder/query/owners',
+        method: 'GET',
+        params: { builderId },
+      }),
+    }),
     getVendorLink: build.query<VendorLinkResponse, { queryId: string }>({
       query: ({ queryId }) => ({
         url: '/api/builder/query/vendor-link',
@@ -270,4 +299,5 @@ export const {
   useGetRegistrationItemsQuery,
   useLazyGetRegistrationItemsQuery,
   useAddQueryCommentMutation,
+  useGetEligibleOwnersQuery,
 } = queryApi;

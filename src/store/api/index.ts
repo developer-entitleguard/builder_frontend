@@ -95,6 +95,7 @@ export {
   useGetRegistrationItemsQuery,
   useLazyGetRegistrationItemsQuery,
   useAddQueryCommentMutation,
+  useGetEligibleOwnersQuery,
 } from './query';
 
 // Projects

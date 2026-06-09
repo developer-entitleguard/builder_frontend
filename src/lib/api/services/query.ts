@@ -60,6 +60,9 @@ export interface BuilderQuery extends CoverageFields {
   customerAddress?: string;
   customerState?: string;
   customerZip?: string;
+  ownerUserId?: string | null;
+  ownerName?: string | null;
+  ownerInitials?: string | null;
   unitNumber?: string | null;
   builderOrganizationId?: string;
   queryFileMaps: QueryFile[];
@@ -133,6 +136,7 @@ export interface UpdateQueryRequest {
   priorityLevel?: string;
   dueDate?: string;
   userId?: string;
+  ownerUserId?: string;
   queryFileMapDto?: QueryFileMapDto[];
 }
 
@@ -224,7 +228,10 @@ export const queryApi = api.injectEndpoints({
               userId: data.userId 
             });
           }
-          
+          if (data.ownerUserId !== undefined && data.ownerUserId !== null) {
+            formData.append('ownerUserId', String(data.ownerUserId));
+          }
+
           // Add file data in the format queryFileMapDto[0].type and queryFileMapDto[0].files
           if (data.queryFileMapDto && data.queryFileMapDto.length > 0) {
             data.queryFileMapDto.forEach((fileDto, index) => {

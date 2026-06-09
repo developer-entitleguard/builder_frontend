@@ -4,12 +4,22 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { MapPin, Briefcase, Clock, Loader2, Plus } from "lucide-react";
 import Header from "@/components/Header";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useGetBuilderQueriesQuery, useUpdateQueryMutation, useGetStatusesByModuleQuery } from "@/store/api";
-import { useGetJobsForQueryQuery } from "@/lib/api/services/jobs";
+import { useGetJobsForQueryQuery, type BuilderJob } from "@/lib/api/services/jobs";
 import type { BuilderQuery } from "@/store/api/query";
 
 // ── Lanes ──
@@ -117,6 +127,73 @@ interface JobSummary {
   loaded: boolean;
 }
 
+interface Person {
+  key: string;
+  initials: string;
+  name: string;
+}
+
+function initialsFromName(name?: string | null): string {
+  if (!name) return "";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+// Distinct people assigned across a query's jobs, in job order.
+function assigneesFromJobs(jobs: BuilderJob[]): Person[] {
+  const map = new Map<string, Person>();
+  for (const j of jobs) {
+    const key = j.assigneeUserId || j.assigneeEmail || j.assigneeName || j.assigneeOrgId;
+    if (!key) continue;
+    const name = j.assigneeDisplayName || j.assigneeName || "Assignee";
+    const initials = j.assigneeInitials || initialsFromName(name);
+    if (!initials) continue;
+    if (!map.has(key)) map.set(key, { key, initials, name });
+  }
+  return Array.from(map.values());
+}
+
+// Small circular initials badge. Owners are tinted to stand apart from assignees.
+const InitialsAvatar = ({
+  initials,
+  title,
+  variant = "assignee",
+}: {
+  initials: string;
+  title: string;
+  variant?: "owner" | "assignee" | "more";
+}) => (
+  <span
+    title={title}
+    className={cn(
+      "inline-flex h-6 w-6 items-center justify-center rounded-full border border-background text-[10px] font-semibold",
+      variant === "owner" && "bg-primary text-primary-foreground",
+      variant === "assignee" && "bg-secondary text-secondary-foreground",
+      variant === "more" && "bg-muted text-muted-foreground",
+    )}
+  >
+    {initials}
+  </span>
+);
+
+// Up to two assignee avatars, then a "+N" overflow; hover lists everyone.
+const AssigneeStack = ({ people }: { people: Person[] }) => {
+  if (people.length === 0) return null;
+  const shown = people.slice(0, 2);
+  const extra = people.length - shown.length;
+  const all = people.map((p) => p.name).join(", ");
+  return (
+    <div className="flex items-center -space-x-1.5" title={`Assigned: ${all}`}>
+      {shown.map((p) => (
+        <InitialsAvatar key={p.key} initials={p.initials} title={p.name} />
+      ))}
+      {extra > 0 && <InitialsAvatar initials={`+${extra}`} title={all} variant="more" />}
+    </div>
+  );
+};
+
 // ── Card ──
 
 const KanbanCard = ({
@@ -148,7 +225,9 @@ const KanbanCard = ({
     if (isSuccess) onJobSummary(query.id, summary);
   }, [isSuccess, summary, query.id, onJobSummary]);
 
+  const assignees = useMemo(() => assigneesFromJobs(jobs ?? []), [jobs]);
   const severity = severityStyles(query.createdAt);
+  const showPeople = !!query.ownerInitials || assignees.length > 0;
 
   return (
     <Card
@@ -181,6 +260,20 @@ const KanbanCard = ({
             {formatAge(query.createdAt)}
           </span>
         </div>
+        {showPeople && (
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            {query.ownerInitials ? (
+              <InitialsAvatar
+                initials={query.ownerInitials}
+                title={`Owner: ${query.ownerName ?? "Unknown"}`}
+                variant="owner"
+              />
+            ) : (
+              <span />
+            )}
+            <AssigneeStack people={assignees} />
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -194,6 +287,8 @@ const QueriesManagement = () => {
   const { toast } = useToast();
 
   const [dragOverLane, setDragOverLane] = useState<LaneKey | null>(null);
+  // When a query is moved to In Progress with no jobs, prompt to add some.
+  const [jobPromptQueryId, setJobPromptQueryId] = useState<string | null>(null);
   // Job completion per query, kept in a ref so card updates don't re-render the
   // board; the drop handler reads the latest values to gate the Done lane.
   const jobSummaries = useRef<Record<string, JobSummary>>({});
@@ -305,6 +400,14 @@ const QueriesManagement = () => {
             description: res.message || "Failed to move query.",
             variant: "destructive",
           });
+          return;
+        }
+        // Moved to In Progress with no jobs yet — nudge the user to add some.
+        if (laneKey === "in_progress") {
+          const s = jobSummaries.current[queryId];
+          if (!s || s.total === 0) {
+            setJobPromptQueryId(queryId);
+          }
         }
       } catch {
         toast({ title: "Error", description: "Failed to move query.", variant: "destructive" });
@@ -380,6 +483,33 @@ const QueriesManagement = () => {
           </div>
         )}
       </main>
+
+      <AlertDialog
+        open={!!jobPromptQueryId}
+        onOpenChange={(open) => !open && setJobPromptQueryId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Add jobs to this query?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This query is now In Progress but has no jobs yet. Jobs are how the work
+              gets assigned and tracked. Would you like to add jobs now?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Not now</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const id = jobPromptQueryId;
+                setJobPromptQueryId(null);
+                if (id) navigate(`/queries/${id}#jobs`);
+              }}
+            >
+              Add jobs
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

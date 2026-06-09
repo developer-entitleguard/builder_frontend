@@ -86,6 +86,31 @@ function completedWithinWindow(iso?: string | null): boolean {
   return Date.now() - then <= DONE_VISIBLE_DAYS * 86400000;
 }
 
+function ageInDays(iso?: string | null): number {
+  const then = parseTs(iso);
+  if (Number.isNaN(then)) return 0;
+  return (Date.now() - then) / 86400000;
+}
+
+// Age-based severity: the older a query sits, the more it needs attention.
+//   < 5 days → green · 5–10 days → amber · > 10 days → red
+function severityStyles(iso?: string | null): { border: string; text: string } {
+  const days = ageInDays(iso);
+  if (days > 10) return { border: "border-l-red-500", text: "text-red-600" };
+  if (days >= 5) return { border: "border-l-amber-500", text: "text-amber-600" };
+  return { border: "border-l-emerald-500", text: "text-emerald-600" };
+}
+
+// Oldest first (smallest timestamp on top); undated cards sink to the bottom.
+function byOldestFirst(a: BuilderQuery, b: BuilderQuery): number {
+  const ta = parseTs(a.createdAt);
+  const tb = parseTs(b.createdAt);
+  if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+  if (Number.isNaN(ta)) return 1;
+  if (Number.isNaN(tb)) return -1;
+  return ta - tb;
+}
+
 interface JobSummary {
   done: number;
   total: number;
@@ -123,6 +148,8 @@ const KanbanCard = ({
     if (isSuccess) onJobSummary(query.id, summary);
   }, [isSuccess, summary, query.id, onJobSummary]);
 
+  const severity = severityStyles(query.createdAt);
+
   return (
     <Card
       draggable
@@ -131,7 +158,10 @@ const KanbanCard = ({
         e.dataTransfer.effectAllowed = "move";
       }}
       onClick={() => navigate(`/queries/${query.id}`)}
-      className="cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow"
+      className={cn(
+        "cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow border-l-4",
+        severity.border,
+      )}
     >
       <CardContent className="p-3 space-y-2">
         <p className="font-medium text-sm leading-snug line-clamp-2">
@@ -146,7 +176,7 @@ const KanbanCard = ({
             <Briefcase className="h-3 w-3 shrink-0" />
             {isSuccess ? `${summary.done}/${summary.total}` : "…"}
           </span>
-          <span className="inline-flex items-center gap-1" title="Age">
+          <span className={cn("inline-flex items-center gap-1 font-medium", severity.text)} title="Age">
             <Clock className="h-3 w-3 shrink-0" />
             {formatAge(query.createdAt)}
           </span>
@@ -223,6 +253,10 @@ const QueriesManagement = () => {
     }
     // Hide queries that have been Done for more than the visible window.
     groups.done = groups.done.filter((q) => completedWithinWindow(q.updatedAt ?? q.createdAt));
+    // Oldest on top in every lane so the most aged (severe) cards surface first.
+    for (const key of Object.keys(groups) as LaneKey[]) {
+      groups[key].sort(byOldestFirst);
+    }
     return groups;
   }, [allQueries]);
 

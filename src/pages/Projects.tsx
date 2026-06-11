@@ -93,9 +93,16 @@ const ProjectCard = ({ project }: { project: Project }) => {
             <div className={`p-2 rounded-lg ${typeConfig.color}`}>
               <TypeIcon className="h-5 w-5" />
             </div>
-            <Badge variant="secondary" className={status.color}>
-              {status.label}
-            </Badge>
+            <div className="flex items-center gap-1.5">
+              {project.access_role === "SCOPED_BUILDER" && (
+                <Badge variant="outline" className="border-primary/40 text-primary">
+                  Delegated
+                </Badge>
+              )}
+              <Badge variant="secondary" className={status.color}>
+                {status.label}
+              </Badge>
+            </div>
           </div>
 
           <h3 className="font-semibold text-lg mb-1 text-foreground">{project.name}</h3>

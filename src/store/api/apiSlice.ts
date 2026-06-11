@@ -86,6 +86,8 @@ export const api = createApi({
     'HandoverReadiness',
     // Platform Synergy PRD §3.4 — effective entitlements (org modules/capabilities + caller permissions).
     'Entitlements',
+    // Developer/Builder Decoupling PRD — scoped builder delegation per project.
+    'ProjectShares',
   ],
   endpoints: () => ({}),
 });

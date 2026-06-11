@@ -16,6 +16,10 @@ export interface ComplianceDocumentApi {
   appliesTo: string | null;
   status: string | null;
   source: string | null;
+  /** Developer/Builder Decoupling: DEVELOPER | BUILDER | TRADE. */
+  responsibleParty?: string | null;
+  /** Developer/Builder Decoupling: compliance jurisdiction (NSW for now). */
+  jurisdiction?: string | null;
   notes: string | null;
   orderIndex: number | null;
   isActive?: boolean;
@@ -463,6 +467,46 @@ export const complianceDocumentsApi = api.injectEndpoints({
       ],
     }),
 
+    // Developer/Builder Decoupling PRD (Req 11). Bulk per-unit document intake:
+    // POST several files at once; each is best-effort matched to a checklist line.
+    bulkAttachRegistrationFiles: build.mutation<
+      ListResponse<{ matched: unknown[]; unmatched: string[] }>,
+      { registrationId: string; files: File[] }
+    >({
+      queryFn: async ({ registrationId, files }) => {
+        try {
+          const form = new FormData();
+          files.forEach((f) => form.append("files", f));
+          const jwt = jwtFromStorage();
+          const path = `/api/builder/registrations/${registrationId}/compliance-documents/bulk-attach`;
+          const res = await fetch(`${getApiBaseUrl()}${path}`, {
+            method: "POST",
+            headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
+            body: form,
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            return { error: { status: res.status, data: text } } as {
+              error: { status: number; data: string };
+            };
+          }
+          const data = (await res.json()) as ListResponse<{ matched: unknown[]; unmatched: string[] }>;
+          return { data };
+        } catch (e) {
+          return {
+            error: {
+              status: "CUSTOM_ERROR",
+              error: e instanceof Error ? e.message : "Unknown",
+            },
+          } as { error: { status: "CUSTOM_ERROR"; error: string } };
+        }
+      },
+      invalidatesTags: (_r, _e, { registrationId }) => [
+        { type: "ComplianceDocuments" as const, id: `registration-${registrationId}` },
+        { type: "HandoverReadiness" as const, id: registrationId },
+      ],
+    }),
+
     // POST a link attachment for a project or registration document
     linkComplianceAttachment: build.mutation<
       ListResponse<ComplianceAttachmentApi[]>,
@@ -609,6 +653,7 @@ export const {
   useDeleteRegistrationComplianceDocumentMutation,
   useGetComplianceAttachmentsQuery,
   useUploadComplianceAttachmentMutation,
+  useBulkAttachRegistrationFilesMutation,
   useLinkComplianceAttachmentMutation,
   useDeleteComplianceAttachmentMutation,
   useGetHandoverReadinessQuery,

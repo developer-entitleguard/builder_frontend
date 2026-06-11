@@ -33,9 +33,20 @@ import { GenerateComplianceDialog } from "./GenerateComplianceDialog";
 
 interface ProjectComplianceSectionProps {
   projectId: string;
+  /** Developer/Builder Decoupling: "OPERATOR" or "SCOPED_BUILDER" for the caller. */
+  accessRole?: string;
+  /** Developer/Builder Decoupling: NSW reference version this checklist was generated against. */
+  matrixReferenceVersion?: string | null;
+  jurisdiction?: string | null;
 }
 
-export const ProjectComplianceSection = ({ projectId }: ProjectComplianceSectionProps) => {
+export const ProjectComplianceSection = ({
+  projectId,
+  accessRole,
+  matrixReferenceVersion,
+  jurisdiction,
+}: ProjectComplianceSectionProps) => {
+  const isScopedBuilder = accessRole === "SCOPED_BUILDER";
   const { toast } = useToast();
   const { data: docsResponse, isLoading } = useGetProjectComplianceDocumentsQuery({ projectId });
   const { data: completenessResponse } = useGetProjectComplianceCompletenessQuery({ projectId });
@@ -160,25 +171,35 @@ export const ProjectComplianceSection = ({ projectId }: ProjectComplianceSection
           <p className="text-sm text-muted-foreground">
             Project-level documents. These are inherited by every registration in this project.
           </p>
+          {matrixReferenceVersion && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Generated from {jurisdiction ?? "NSW"} compliance reference{" "}
+              <span className="font-mono">{matrixReferenceVersion}</span>
+            </p>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setResetOpen(true)}
-            disabled={resetting || generating || documents.length === 0}
-          >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Reset to default
-          </Button>
-          <Button variant="outline" onClick={() => setGenerateOpen(true)}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Generate
-          </Button>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add document
-          </Button>
-        </div>
+        {/* Generating, resetting and adding statutory documents are operator
+            (developer) actions; a delegated builder works the resulting list. */}
+        {!isScopedBuilder && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setResetOpen(true)}
+              disabled={resetting || generating || documents.length === 0}
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reset to default
+            </Button>
+            <Button variant="outline" onClick={() => setGenerateOpen(true)}>
+              <Sparkles className="h-4 w-4 mr-2" />
+              Generate
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add document
+            </Button>
+          </div>
+        )}
       </div>
 
       {completeness && <ComplianceCompletenessBar completeness={completeness} />}
@@ -192,6 +213,7 @@ export const ProjectComplianceSection = ({ projectId }: ProjectComplianceSection
           documents={documents}
           ownerType="PROJECT"
           ownerId={projectId}
+          scopedBuilder={isScopedBuilder}
           onEdit={openEdit}
           onDelete={(doc) => setDeletingDoc(doc)}
           onAssign={(doc) => setAssigningDoc(doc)}

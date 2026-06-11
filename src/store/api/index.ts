@@ -32,6 +32,8 @@ import './orgTerms';
 import './complianceDocuments';
 // Platform Synergy PRD §3.4 — effective-entitlements gate.
 import './entitlements';
+// Developer/Builder Decoupling PRD — scoped builder delegation per project.
+import './projectShares';
 
 // Export the main API slice
 export { api } from './apiSlice';
@@ -120,6 +122,9 @@ export * from './complianceDocuments';
 
 // Effective entitlements (Platform Synergy §3.4)
 export * from './entitlements';
+
+// Project shares (Developer/Builder Decoupling)
+export * from './projectShares';
 
 // Re-export types
 export type * from '@/lib/api/types';

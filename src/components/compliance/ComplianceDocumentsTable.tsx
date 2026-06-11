@@ -32,6 +32,12 @@ interface ComplianceDocumentsTableProps {
   ownerType: "PROJECT" | "REGISTRATION";
   ownerId: string;
   readOnly?: boolean;
+  /**
+   * Developer/Builder Decoupling PRD (Req 5). When true the viewer is a delegated
+   * (scoped) builder, so DEVELOPER-responsible statutory documents render
+   * read-only even though the rest of the worklist is editable.
+   */
+  scopedBuilder?: boolean;
   onEdit?: (doc: ComplianceDocumentApi) => void;
   onDelete?: (doc: ComplianceDocumentApi) => void;
   onAssign?: (doc: ComplianceDocumentApi) => void;
@@ -44,6 +50,7 @@ export const ComplianceDocumentsTable = ({
   ownerType,
   ownerId,
   readOnly = false,
+  scopedBuilder = false,
   onEdit,
   onDelete,
   onAssign,
@@ -69,10 +76,38 @@ export const ComplianceDocumentsTable = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {documents.map((doc) => (
+            {documents.map((doc) => {
+              const party = (doc.responsibleParty ?? "").toUpperCase();
+              // A scoped builder may not edit developer-supplied statutory docs.
+              const rowReadOnly =
+                readOnly || (scopedBuilder && party === "DEVELOPER");
+              return (
               <TableRow key={doc.id}>
                 <TableCell>
-                  <div className="font-medium">{doc.documentName}</div>
+                  <div className="font-medium flex items-center gap-2">
+                    {doc.documentName}
+                    {party && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] uppercase tracking-wide"
+                        title={
+                          party === "DEVELOPER"
+                            ? "Developer-supplied statutory document"
+                            : party === "TRADE"
+                            ? "Trade-issued certificate"
+                            : "Builder-collated certificate"
+                        }
+                      >
+                        {party === "DEVELOPER"
+                          ? scopedBuilder
+                            ? "Developer · read-only"
+                            : "Developer"
+                          : party === "TRADE"
+                          ? "Trade"
+                          : "Builder"}
+                      </Badge>
+                    )}
+                  </div>
                   {doc.category && (
                     <div className="text-xs text-muted-foreground">{doc.category}</div>
                   )}
@@ -88,7 +123,7 @@ export const ComplianceDocumentsTable = ({
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  {readOnly || !onStatusChange ? (
+                  {rowReadOnly || !onStatusChange ? (
                     <Badge className={statusBadgeClass(doc.status)}>
                       {statusLabel(doc.status)}
                     </Badge>
@@ -121,7 +156,7 @@ export const ComplianceDocumentsTable = ({
                     >
                       <Paperclip className="h-4 w-4" />
                     </Button>
-                    {!readOnly &&
+                    {!rowReadOnly &&
                       onAssign &&
                       (doc.status ?? "").toUpperCase() !== "RECEIVED" && (
                         <Button
@@ -134,7 +169,7 @@ export const ComplianceDocumentsTable = ({
                           <UserPlus className="h-4 w-4" />
                         </Button>
                       )}
-                    {!readOnly && onEdit && (
+                    {!rowReadOnly && onEdit && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -145,7 +180,7 @@ export const ComplianceDocumentsTable = ({
                         <Pencil className="h-4 w-4" />
                       </Button>
                     )}
-                    {!readOnly && onDelete && (
+                    {!rowReadOnly && onDelete && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -159,7 +194,8 @@ export const ComplianceDocumentsTable = ({
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>
@@ -172,7 +208,11 @@ export const ComplianceDocumentsTable = ({
           ownerId={ownerId}
           documentId={attachmentDoc.id}
           documentName={attachmentDoc.documentName}
-          readOnly={readOnly}
+          readOnly={
+            readOnly ||
+            (scopedBuilder &&
+              (attachmentDoc.responsibleParty ?? "").toUpperCase() === "DEVELOPER")
+          }
         />
       )}
     </>

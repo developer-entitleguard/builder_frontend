@@ -18,7 +18,9 @@ import { ApprovalsList } from "@/components/projects/ApprovalsList";
 import { ProjectRegistrations } from "@/components/projects/ProjectRegistrations";
 import { ProjectPricing } from "@/components/projects/ProjectPricing";
 import { ProjectComplianceSection } from "@/components/compliance/ProjectComplianceSection";
+import { ProjectSharesCard } from "@/components/projects/ProjectSharesCard";
 import { EditProjectDialog } from "@/components/projects/EditProjectDialog";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { 
   ArrowLeft,
   Home,
@@ -111,6 +113,10 @@ const mapStatusLocal = (value: string | null | undefined): ProjectStatus => {
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
   const isAdmin = readBuilderRoleFromStorage() === BUILDER_ROLES.ADMINISTRATOR;
+  // Developer/Builder Decoupling PRD (Req 2): the "Builders" tab (delegate the
+  // build to a separate builder org) is only meaningful for developer-capable orgs.
+  const { hasCapability } = useEntitlements();
+  const canDevelop = hasCapability("DEVELOP");
   const { user, loading: authLoading } = useAuth();
   const { updateProject } = useProjects();
   const { activities, loading: activitiesLoading, fetchActivities, createActivity, updateActivity, deleteActivity, fetchUpdates, postUpdate } = useActivities(id);
@@ -339,6 +345,11 @@ const ProjectDetail = () => {
               <DollarSign className="h-4 w-4" />
               Pricing
             </TabsTrigger>
+            {canDevelop && (
+              <TabsTrigger value="builders">
+                Builders
+              </TabsTrigger>
+            )}
           </TabsList>
           
           <TabsContent value="activities">
@@ -378,7 +389,12 @@ const ProjectDetail = () => {
           </TabsContent>
           
           <TabsContent value="compliance">
-            <ProjectComplianceSection projectId={id!} />
+            <ProjectComplianceSection
+              projectId={id!}
+              accessRole={projectResponse?.data?.accessRole}
+              matrixReferenceVersion={projectResponse?.data?.matrixReferenceVersion}
+              jurisdiction={projectResponse?.data?.complianceJurisdiction}
+            />
           </TabsContent>
 
           <TabsContent value="pricing">
@@ -387,6 +403,12 @@ const ProjectDetail = () => {
               activities={activities}
             />
           </TabsContent>
+
+          {canDevelop && (
+            <TabsContent value="builders">
+              <ProjectSharesCard projectId={id!} />
+            </TabsContent>
+          )}
         </Tabs>
       </main>
 

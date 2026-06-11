@@ -35,6 +35,8 @@ export interface Project {
   activities_visible_to_homeowner: boolean;
   created_at: string;
   updated_at: string;
+  /** Developer/Builder Decoupling: OPERATOR (owns) or SCOPED_BUILDER (delegated). */
+  access_role?: "OPERATOR" | "SCOPED_BUILDER";
 }
 
 export interface CreateProjectData {
@@ -149,6 +151,7 @@ export const useProjects = () => {
       activities_visible_to_homeowner: p.activitiesVisibleToHomeowner,
       created_at: p.createdAt,
       updated_at: p.createdAt,
+      access_role: p.accessRole,
     }));
     setProjects(mapped);
   }, [apiProjects]);

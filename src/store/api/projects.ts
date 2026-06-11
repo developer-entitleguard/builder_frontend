@@ -21,6 +21,16 @@ export interface BuilderProjectApi {
   topographyTypeText: string | null;
   activitiesVisibleToHomeowner: boolean;
   createdAt: string;
+  /**
+   * Developer/Builder Decoupling PRD (Req 2). The caller's relationship to this
+   * project: "OPERATOR" (their org owns it) or "SCOPED_BUILDER" (delegated to
+   * them via an active project share). Absent on older responses.
+   */
+  accessRole?: "OPERATOR" | "SCOPED_BUILDER";
+  /** Developer/Builder Decoupling: NSW reference version the checklist was generated against. */
+  matrixReferenceVersion?: string | null;
+  /** Developer/Builder Decoupling: compliance jurisdiction (NSW for now). */
+  complianceJurisdiction?: string | null;
 }
 
 export interface BuilderProjectsResponse {

@@ -61,9 +61,6 @@ const propertyTypes: { value: PropertyType; label: string; description: string; 
   { value: 'townhouse', label: 'Townhouse', description: 'Multi-story attached home', icon: Building2 },
   { value: 'apartment', label: 'Apartment', description: 'Unit in multi-dwelling building', icon: Building },
   { value: 'duplex', label: 'Duplex', description: 'Two separate dwellings', icon: LayoutGrid },
-  { value: 'renovation', label: 'Renovation', description: 'Existing property upgrade', icon: Hammer },
-  { value: 'extension', label: 'Extension', description: 'Addition to existing property', icon: PlusCircle },
-  { value: 'custom', label: 'Custom', description: 'Other project type', icon: Settings }
 ];
 
 const australianStates = [

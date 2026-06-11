@@ -20,8 +20,9 @@ import { ProjectPricing } from "@/components/projects/ProjectPricing";
 import { ProjectComplianceSection } from "@/components/compliance/ProjectComplianceSection";
 import { ProjectSharesCard } from "@/components/projects/ProjectSharesCard";
 import { EditProjectDialog } from "@/components/projects/EditProjectDialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useEntitlements } from "@/hooks/useEntitlements";
-import { 
+import {
   ArrowLeft,
   Home,
   Building2,
@@ -32,6 +33,7 @@ import {
   Settings,
   MapPin,
   Edit,
+  Share2,
   DollarSign,
   FileBarChart
 } from "lucide-react";
@@ -127,6 +129,7 @@ const ProjectDetail = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const isBuilder = hasBuilderAuth();
 
@@ -320,6 +323,12 @@ const ProjectDetail = () => {
                 <Edit className="h-4 w-4 mr-2" />
                 Edit
               </Button>
+              {canDevelop && (
+                <Button variant="outline" size="sm" onClick={() => setShareDialogOpen(true)}>
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -345,11 +354,6 @@ const ProjectDetail = () => {
               <DollarSign className="h-4 w-4" />
               Pricing
             </TabsTrigger>
-            {canDevelop && (
-              <TabsTrigger value="builders">
-                Builders
-              </TabsTrigger>
-            )}
           </TabsList>
           
           <TabsContent value="activities">
@@ -403,12 +407,6 @@ const ProjectDetail = () => {
               activities={activities}
             />
           </TabsContent>
-
-          {canDevelop && (
-            <TabsContent value="builders">
-              <ProjectSharesCard projectId={id!} />
-            </TabsContent>
-          )}
         </Tabs>
       </main>
 
@@ -419,6 +417,18 @@ const ProjectDetail = () => {
         project={project}
         onSave={handleSaveProject}
       />
+
+      {/* Share with a developer organisation (moved from a tab to this dialog). */}
+      {canDevelop && (
+        <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Share project</DialogTitle>
+            </DialogHeader>
+            <ProjectSharesCard projectId={id!} />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };

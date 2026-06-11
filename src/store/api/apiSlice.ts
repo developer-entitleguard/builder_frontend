@@ -18,7 +18,7 @@ const baseQuery = fetchBaseQuery({
         console.warn('Failed to get JWT token for API request:', error);
       }
     }
-    
+
     // Do NOT hard-set Content-Type here. Once it's explicitly set, neither
     // fetchBaseQuery nor the browser will replace it — which mislabels multipart
     // FormData uploads as application/json (no boundary) and yields HTTP 415.

@@ -3,6 +3,10 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
+// Backend the dev proxy forwards to. Defaults to the standard local backend on
+// :8080; override with VITE_PROXY_TARGET to point at an alternate instance.
+const proxyTarget = process.env.VITE_PROXY_TARGET || "http://localhost:8080";
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
@@ -10,7 +14,7 @@ export default defineConfig(({ mode }) => ({
     port: 3000,
     proxy: {
       "/api": {
-        target: "http://localhost:8080",
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
@@ -20,7 +24,7 @@ export default defineConfig(({ mode }) => ({
         },
       },
       "/unsecure": {
-        target: "http://localhost:8080",
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
@@ -30,7 +34,7 @@ export default defineConfig(({ mode }) => ({
         },
       },
       "/profile": {
-        target: "http://localhost:8080",
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
@@ -40,7 +44,7 @@ export default defineConfig(({ mode }) => ({
         },
       },
       "/signup": {
-        target: "http://localhost:8080",
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
@@ -50,7 +54,7 @@ export default defineConfig(({ mode }) => ({
         },
       },
       "/signout": {
-        target: "http://localhost:8080",
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
@@ -60,7 +64,7 @@ export default defineConfig(({ mode }) => ({
         },
       },
       "/update-password": {
-        target: "http://localhost:8080",
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
@@ -70,7 +74,7 @@ export default defineConfig(({ mode }) => ({
         },
       },
       "/verify-email": {
-        target: "http://localhost:8080",
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
@@ -80,7 +84,7 @@ export default defineConfig(({ mode }) => ({
         },
       },
       "/resend-verification": {
-        target: "http://localhost:8080",
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {

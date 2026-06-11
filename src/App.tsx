@@ -41,6 +41,12 @@ import MyAssignmentDetail from "./pages/MyAssignmentDetail";
 import TicketsTriage from "./pages/TicketsTriage";
 import TicketDetail from "./pages/TicketDetail";
 import Notifications from "./pages/Notifications";
+import AdminProtectedRoute from "@/components/admin-portal/AdminProtectedRoute";
+import AdminLogin from "./pages/admin-portal/AdminLogin";
+import AdminOrgList from "./pages/admin-portal/AdminOrgList";
+import AdminOrgCreate from "./pages/admin-portal/AdminOrgCreate";
+import AdminOrgDetail from "./pages/admin-portal/AdminOrgDetail";
+import AdminAdmins from "./pages/admin-portal/AdminAdmins";
 import { useValidateTokenQuery } from "@/store/api";
 
 const queryClient = new QueryClient();
@@ -303,6 +309,23 @@ const App = () => (
                     <Notifications />
                   </RoleGate>
                 </ProtectedRoute>
+              } />
+              {/* Platform super-admin portal — fully separate auth (adminData),
+                  outside ProtectedRoute / OrganizationProvider. Designed to lift
+                  into a standalone frontend later. */}
+              <Route path="/platform-admin" element={<Navigate to="/platform-admin/orgs" replace />} />
+              <Route path="/platform-admin/login" element={<AdminLogin />} />
+              <Route path="/platform-admin/orgs" element={
+                <AdminProtectedRoute><AdminOrgList /></AdminProtectedRoute>
+              } />
+              <Route path="/platform-admin/orgs/:orgType/new" element={
+                <AdminProtectedRoute><AdminOrgCreate /></AdminProtectedRoute>
+              } />
+              <Route path="/platform-admin/orgs/:orgType/:id" element={
+                <AdminProtectedRoute><AdminOrgDetail /></AdminProtectedRoute>
+              } />
+              <Route path="/platform-admin/admins" element={
+                <AdminProtectedRoute><AdminAdmins /></AdminProtectedRoute>
               } />
               <Route path="/vendor/query" element={<VendorQuery />} />
               <Route path="/consent" element={<ConsentConfirmation />} />

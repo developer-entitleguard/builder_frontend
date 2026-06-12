@@ -176,6 +176,31 @@ export const activitiesApi = api.injectEndpoints({
       ],
     }),
 
+    // POST /api/builder/projects/:projectId/activities/schedule (AI auto-schedule)
+    scheduleActivities: build.mutation<
+      {
+        success: boolean;
+        message: string;
+        data: {
+          feasibility?: string;
+          message?: string;
+          recommendedEndDate?: string | null;
+          activitiesUpdated?: number;
+        } | null;
+      },
+      { projectId: string }
+    >({
+      query: ({ projectId }) => ({
+        url: `/api/builder/projects/${projectId}/activities/schedule`,
+        method: "POST",
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: "Activities", id: projectId },
+        { type: "Projects", id: projectId },
+        "Projects",
+      ],
+    }),
+
     // PUT /api/builder/projects/:projectId/activities/:id
     updateActivity: build.mutation<
       BuilderActivityResponse,
@@ -275,6 +300,7 @@ export const {
   usePostActivityUpdateMutation,
   useCreateActivityMutation,
   useGenerateActivitiesMutation,
+  useScheduleActivitiesMutation,
   useUpdateActivityMutation,
   useAssignActivityMutation,
   useDeleteActivityMutation,

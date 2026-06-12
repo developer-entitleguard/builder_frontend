@@ -147,6 +147,9 @@ const ProjectDetail = () => {
     data: projectResponse,
     isLoading: projectLoading,
   } = useProjectByIdQuery({ id: id! });
+  // Pricing is the builder's data — hidden from a developer-operator of a decoupled
+  // project. Defaults to visible when the flag is absent (older responses).
+  const pricingVisible = projectResponse?.data?.pricingVisible !== false;
 
   const { data: statusResponse } = useGetStatusesByModuleQuery({ module: "PROJECT" });
   const projectStatuses = statusResponse?.data ?? [];
@@ -350,10 +353,12 @@ const ProjectDetail = () => {
             <TabsTrigger value="compliance">
               Compliance
             </TabsTrigger>
-            <TabsTrigger value="pricing" className="flex items-center gap-1">
-              <DollarSign className="h-4 w-4" />
-              Pricing
-            </TabsTrigger>
+            {pricingVisible && (
+              <TabsTrigger value="pricing" className="flex items-center gap-1">
+                <DollarSign className="h-4 w-4" />
+                Pricing
+              </TabsTrigger>
+            )}
           </TabsList>
           
           <TabsContent value="activities">
@@ -376,6 +381,9 @@ const ProjectDetail = () => {
               onDeleteCategory={deleteCategory}
               onRefresh={fetchActivities}
               onRefreshCategories={refetchCategories}
+              scheduleFeasibility={projectResponse?.data?.scheduleFeasibility}
+              scheduleMessage={projectResponse?.data?.scheduleMessage}
+              scheduleRecommendedEndDate={projectResponse?.data?.scheduleRecommendedEndDate}
             />
           </TabsContent>
           
@@ -401,12 +409,14 @@ const ProjectDetail = () => {
             />
           </TabsContent>
 
-          <TabsContent value="pricing">
-            <ProjectPricing
-              project={project}
-              activities={activities}
-            />
-          </TabsContent>
+          {pricingVisible && (
+            <TabsContent value="pricing">
+              <ProjectPricing
+                project={project}
+                activities={activities}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </main>
 

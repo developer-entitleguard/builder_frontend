@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Activity, ActivityStatus, ActivityUpdate, CreateActivityData } from "@/hooks/useActivities";
 import { ActivityCategory, CreateCategoryData } from "@/hooks/useActivityCategories";
 import { CreateApprovalData } from "@/hooks/useApprovals";
-import { useDeleteActivitiesMutation } from "@/store/api/activities";
+import { useDeleteActivitiesMutation, useScheduleActivitiesMutation } from "@/store/api/activities";
+import { useToast } from "@/hooks/use-toast";
 import { useOrgVendors } from "@/hooks/useOrgVendors";
 import { AddActivityDialog } from "./AddActivityDialog";
 import { ActivityDetail } from "./ActivityDetail";
@@ -36,7 +37,9 @@ import {
   Trash2,
   Pencil,
   FileSpreadsheet,
-  Sparkles
+  Sparkles,
+  CalendarClock,
+  AlertTriangle
 } from "lucide-react";
 
 interface ActivityListProps {
@@ -61,6 +64,10 @@ interface ActivityListProps {
   onDeleteCategory: (id: string) => Promise<boolean>;
   onRefresh?: () => void;
   onRefreshCategories?: () => void;
+  /** AI auto-schedule verdict from the project (drives the at-risk banner). */
+  scheduleFeasibility?: string | null;
+  scheduleMessage?: string | null;
+  scheduleRecommendedEndDate?: string | null;
 }
 
 // Builder auth helper for JWT stored in localStorage.userData
@@ -93,10 +100,39 @@ export const ActivityList = ({
   onUpdateCategory,
   onDeleteCategory,
   onRefresh,
-  onRefreshCategories
+  onRefreshCategories,
+  scheduleFeasibility,
+  scheduleMessage,
+  scheduleRecommendedEndDate
 }: ActivityListProps) => {
   const [typeDialogOpen, setTypeDialogOpen] = useState(false);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const { toast } = useToast();
+  const [scheduleActivities, { isLoading: isScheduling }] = useScheduleActivitiesMutation();
+
+  const handleAutoSchedule = async () => {
+    try {
+      const res = await scheduleActivities({ projectId }).unwrap();
+      if (res.success) {
+        toast({
+          title: res.message || "Activities scheduled",
+          description: res.data?.feasibility ? `On-time status: ${res.data.feasibility.replace("_", " ")}` : undefined,
+        });
+        onRefresh?.();
+      } else {
+        toast({ title: res.message || "Could not schedule activities", variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Could not schedule activities",
+        description: err?.data?.message ?? "Please ensure the project has start and target end dates.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const scheduleRisk = (scheduleFeasibility ?? "").toUpperCase();
+  const showRiskBanner = scheduleRisk === "AT_RISK" || scheduleRisk === "NOT_FEASIBLE";
   const [singleDialogOpen, setSingleDialogOpen] = useState(false);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -298,6 +334,34 @@ export const ActivityList = ({
 
   return (
     <div>
+      {showRiskBanner && (
+        <div
+          className={`mb-4 flex items-start gap-3 rounded-lg border p-4 ${
+            scheduleRisk === "NOT_FEASIBLE"
+              ? "border-destructive/40 bg-destructive/10 text-destructive"
+              : "border-amber-400/50 bg-amber-50 text-amber-800"
+          }`}
+        >
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="text-sm">
+            <p className="font-semibold">
+              {scheduleRisk === "NOT_FEASIBLE"
+                ? "Target completion date is not achievable"
+                : "Completing on time is at risk"}
+            </p>
+            <p className="mt-0.5">
+              {scheduleMessage ||
+                "Based on the scheduled activities and contingency, the project may not finish by the target end date."}
+            </p>
+            {scheduleRecommendedEndDate && (
+              <p className="mt-0.5">
+                Realistic completion: <span className="font-medium">{scheduleRecommendedEndDate}</span>
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-4 py-2">
@@ -324,6 +388,10 @@ export const ActivityList = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleAutoSchedule} disabled={isScheduling}>
+            <CalendarClock className="h-4 w-4 mr-2" />
+            {isScheduling ? "Scheduling…" : "Auto-schedule"}
+          </Button>
           <Button variant="outline" onClick={() => setTypeDialogOpen(true)}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Import CSV

@@ -31,6 +31,12 @@ export interface BuilderProjectApi {
   matrixReferenceVersion?: string | null;
   /** Developer/Builder Decoupling: compliance jurisdiction (NSW for now). */
   complianceJurisdiction?: string | null;
+  /** Whether the current user may see pricing (hidden from a developer-operator of a decoupled project). */
+  pricingVisible?: boolean;
+  /** AI auto-schedule verdict: ON_TRACK | AT_RISK | NOT_FEASIBLE. */
+  scheduleFeasibility?: string | null;
+  scheduleMessage?: string | null;
+  scheduleRecommendedEndDate?: string | null;
 }
 
 export interface BuilderProjectsResponse {

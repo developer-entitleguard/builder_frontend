@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plus, RotateCcw, Sparkles } from "lucide-react";
+import { Loader2, Plus, RotateCcw, Sparkles, Upload, Home } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   useGetProjectComplianceDocumentsQuery,
@@ -21,10 +21,13 @@ import {
   useDeleteProjectComplianceDocumentMutation,
   useResetProjectComplianceDocumentsMutation,
   useAssignProjectComplianceDocumentMutation,
+  useGetProjectRegistrationDocTypesQuery,
   type ComplianceAssignBody,
   type ComplianceDocumentApi,
   type ComplianceDocumentBody,
 } from "@/store/api/complianceDocuments";
+import { PerUnitUploadDialog } from "./PerUnitUploadDialog";
+import { Badge } from "@/components/ui/badge";
 import { ComplianceDocumentsTable } from "./ComplianceDocumentsTable";
 import { ComplianceCompletenessBar } from "./ComplianceCompletenessBar";
 import { ComplianceDocumentDialog } from "./ComplianceDocumentDialog";
@@ -50,6 +53,10 @@ export const ProjectComplianceSection = ({
   const { toast } = useToast();
   const { data: docsResponse, isLoading } = useGetProjectComplianceDocumentsQuery({ projectId });
   const { data: completenessResponse } = useGetProjectComplianceCompletenessQuery({ projectId });
+  // D3: per-unit (registration-scope) document types shown as a separate group.
+  const { data: perUnitResponse } = useGetProjectRegistrationDocTypesQuery(projectId);
+  const perUnitDocs = perUnitResponse?.data ?? [];
+  const [perUnitDoc, setPerUnitDoc] = useState<{ documentName: string; category: string | null } | null>(null);
 
   const [generate, { isLoading: generating }] = useGenerateProjectComplianceDocumentsMutation();
   const [createDoc, { isLoading: creating }] = useCreateProjectComplianceDocumentMutation();
@@ -209,16 +216,72 @@ export const ProjectComplianceSection = ({
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <ComplianceDocumentsTable
-          documents={documents}
-          ownerType="PROJECT"
-          ownerId={projectId}
-          scopedBuilder={isScopedBuilder}
-          onEdit={openEdit}
-          onDelete={(doc) => setDeletingDoc(doc)}
-          onAssign={(doc) => setAssigningDoc(doc)}
-          onStatusChange={handleStatusChange}
-          emptyMessage="No compliance documents yet. Generate the list or add one manually."
+        <>
+          <h4 className="mb-2 text-sm font-semibold">Project documents</h4>
+          <ComplianceDocumentsTable
+            documents={documents}
+            ownerType="PROJECT"
+            ownerId={projectId}
+            scopedBuilder={isScopedBuilder}
+            onEdit={openEdit}
+            onDelete={(doc) => setDeletingDoc(doc)}
+            onAssign={(doc) => setAssigningDoc(doc)}
+            onStatusChange={handleStatusChange}
+            emptyMessage="No project-level compliance documents yet. Generate the list or add one manually."
+          />
+
+          {/* D3: per-unit (registration-scope) document types — one upload modal per unit. */}
+          {perUnitDocs.length > 0 && (
+            <div className="mt-8">
+              <h4 className="mb-1 text-sm font-semibold">Per-unit documents</h4>
+              <p className="mb-2 text-xs text-muted-foreground">
+                These apply to each unit. Click upload to choose which unit a document belongs to.
+              </p>
+              <div className="rounded-lg border border-border overflow-hidden divide-y">
+                {perUnitDocs.map((d) => (
+                  <div key={d.documentName} className="flex items-center justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Home className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm font-medium">{d.documentName}</span>
+                        {d.responsibleParty && (
+                          <Badge variant="outline" className="text-[10px] uppercase">
+                            {d.responsibleParty}
+                          </Badge>
+                        )}
+                      </div>
+                      {d.category && (
+                        <div className="ml-6 text-xs text-muted-foreground">{d.category}</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {d.unitsReceived}/{d.unitsTotal} units
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPerUnitDoc({ documentName: d.documentName, category: d.category })}
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {perUnitDoc && (
+        <PerUnitUploadDialog
+          open={!!perUnitDoc}
+          onOpenChange={(o) => !o && setPerUnitDoc(null)}
+          projectId={projectId}
+          documentName={perUnitDoc.documentName}
+          category={perUnitDoc.category}
         />
       )}
 

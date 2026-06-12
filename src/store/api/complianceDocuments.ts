@@ -467,6 +467,68 @@ export const complianceDocumentsApi = api.injectEndpoints({
       ],
     }),
 
+    // D3: the distinct per-unit (registration-scope) document TYPES across a project.
+    getProjectRegistrationDocTypes: build.query<
+      {
+        success: boolean;
+        message: string;
+        data: Array<{
+          documentName: string;
+          category: string | null;
+          responsibleParty: string | null;
+          mandatory: string | null;
+          unitsTotal: number;
+          unitsReceived: number;
+        }>;
+      },
+      string
+    >({
+      query: (projectId) => ({
+        url: `/api/builder/projects/${projectId}/compliance-documents/registration-types`,
+        method: "GET",
+      }),
+      providesTags: (_r, _e, projectId) => [
+        { type: "ComplianceDocuments" as const, id: `registration-types-${projectId}` },
+      ],
+    }),
+
+    // D3: upload a per-unit document against a chosen registration (find/create by name).
+    attachComplianceByName: build.mutation<
+      ListResponse<ComplianceDocumentApi>,
+      { registrationId: string; documentName: string; category?: string | null; file: File; projectId: string }
+    >({
+      queryFn: async ({ registrationId, documentName, category, file }) => {
+        try {
+          const form = new FormData();
+          form.append("file", file);
+          form.append("documentName", documentName);
+          if (category) form.append("category", category);
+          const jwt = jwtFromStorage();
+          const path = `/api/builder/registrations/${registrationId}/compliance-documents/attach-by-name`;
+          const res = await fetch(`${getApiBaseUrl()}${path}`, {
+            method: "POST",
+            headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
+            body: form,
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            return { error: { status: res.status, data: text } } as {
+              error: { status: number; data: string };
+            };
+          }
+          const data = (await res.json()) as ListResponse<ComplianceDocumentApi>;
+          return { data };
+        } catch (e) {
+          return {
+            error: { status: "CUSTOM_ERROR", error: e instanceof Error ? e.message : "Unknown" },
+          } as { error: { status: "CUSTOM_ERROR"; error: string } };
+        }
+      },
+      invalidatesTags: (_r, _e, { projectId }) => [
+        { type: "ComplianceDocuments" as const, id: `registration-types-${projectId}` },
+      ],
+    }),
+
     // Developer/Builder Decoupling PRD (Req 11). Bulk per-unit document intake:
     // POST several files at once; each is best-effort matched to a checklist line.
     bulkAttachRegistrationFiles: build.mutation<
@@ -654,6 +716,8 @@ export const {
   useGetComplianceAttachmentsQuery,
   useUploadComplianceAttachmentMutation,
   useBulkAttachRegistrationFilesMutation,
+  useGetProjectRegistrationDocTypesQuery,
+  useAttachComplianceByNameMutation,
   useLinkComplianceAttachmentMutation,
   useDeleteComplianceAttachmentMutation,
   useGetHandoverReadinessQuery,

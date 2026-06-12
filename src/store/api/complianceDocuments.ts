@@ -200,12 +200,22 @@ export const complianceDocumentsApi = api.injectEndpoints({
     // POST /api/builder/projects/:projectId/compliance-documents/generate
     generateProjectComplianceDocuments: build.mutation<
       GenerateComplianceResponse,
-      { projectId: string; prompt?: string }
+      {
+        projectId: string;
+        prompt?: string;
+        // Feature flags that gate conditional certificates (gas, HVAC, pool, lift, strata).
+        hasGas?: boolean;
+        hasDuctedHvac?: boolean;
+        hasPool?: boolean;
+        hasLift?: boolean;
+        isStrata?: boolean;
+        storeys?: number;
+      }
     >({
-      query: ({ projectId, prompt }) => ({
+      query: ({ projectId, ...body }) => ({
         url: `/api/builder/projects/${projectId}/compliance-documents/generate`,
         method: "POST",
-        body: prompt ? { prompt } : {},
+        body,
       }),
       invalidatesTags: (_r, _e, { projectId }) => [
         { type: "ComplianceDocuments", id: `project-${projectId}` },

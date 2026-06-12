@@ -297,7 +297,7 @@ export const ProjectComplianceSection = ({
         open={generateOpen}
         onOpenChange={setGenerateOpen}
         isLoading={generating}
-        onGenerate={(prompt) => generate({ projectId, prompt }).unwrap()}
+        onGenerate={(prompt, features) => generate({ projectId, prompt, ...features }).unwrap()}
       />
 
       <ComplianceDocumentDialog

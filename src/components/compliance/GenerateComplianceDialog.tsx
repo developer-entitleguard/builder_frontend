@@ -12,16 +12,37 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Sparkles, Loader2, Info, AlertCircle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import type { GenerateComplianceResponse } from "@/store/api/complianceDocuments";
+
+/** Property features that gate conditional certificates (gas, HVAC, pool, lift, strata). */
+export interface ComplianceFeatureFlags {
+  hasGas?: boolean;
+  hasDuctedHvac?: boolean;
+  hasPool?: boolean;
+  hasLift?: boolean;
+  isStrata?: boolean;
+}
 
 interface GenerateComplianceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isLoading: boolean;
-  onGenerate: (prompt?: string) => Promise<GenerateComplianceResponse>;
+  onGenerate: (
+    prompt: string | undefined,
+    features: ComplianceFeatureFlags
+  ) => Promise<GenerateComplianceResponse>;
   onSuccess?: () => void;
 }
+
+const FEATURES: { key: keyof ComplianceFeatureFlags; label: string }[] = [
+  { key: "hasGas", label: "Gas connection" },
+  { key: "hasDuctedHvac", label: "Ducted air conditioning" },
+  { key: "hasPool", label: "Swimming pool / spa" },
+  { key: "hasLift", label: "Lift" },
+  { key: "isStrata", label: "Strata scheme" },
+];
 
 const GENERIC_ERROR =
   "We couldn't generate the compliance document list right now. Please try again in a moment.";
@@ -37,10 +58,12 @@ export const GenerateComplianceDialog = ({
 }: GenerateComplianceDialogProps) => {
   const { toast } = useToast();
   const [prompt, setPrompt] = useState("");
+  const [features, setFeatures] = useState<ComplianceFeatureFlags>({});
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
   const reset = () => {
     setPrompt("");
+    setFeatures({});
     setFeedback(null);
   };
 
@@ -54,7 +77,7 @@ export const GenerateComplianceDialog = ({
     setFeedback(null);
     const trimmed = prompt.trim();
     try {
-      const result = await onGenerate(trimmed || undefined);
+      const result = await onGenerate(trimmed || undefined, features);
       if (!result?.success) {
         const reason =
           result?.data && !Array.isArray(result.data) ? result.data.reason : undefined;
@@ -111,6 +134,28 @@ export const GenerateComplianceDialog = ({
               </AlertDescription>
             </Alert>
           )}
+
+          <div className="space-y-2">
+            <Label>Property features</Label>
+            <p className="text-xs text-muted-foreground">
+              Tick what applies so the matching certificates are included (e.g. gas, ducted
+              A/C, pool). Standard certificates like electrical and smoke alarms are always added.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {FEATURES.map((f) => (
+                <label key={f.key} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={!!features[f.key]}
+                    disabled={isLoading}
+                    onCheckedChange={(v) =>
+                      setFeatures((prev) => ({ ...prev, [f.key]: v === true }))
+                    }
+                  />
+                  {f.label}
+                </label>
+              ))}
+            </div>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="generate-compliance-prompt">

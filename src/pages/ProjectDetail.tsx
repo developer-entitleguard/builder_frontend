@@ -10,7 +10,18 @@ import { useActivityCategories } from "@/hooks/useActivityCategories";
 import { useApprovals } from "@/hooks/useApprovals";
 import { useAuth } from "@/hooks/useAuth";
 import { BUILDER_ROLES, readBuilderRoleFromStorage } from "@/lib/roles";
-import { useProjectByIdQuery, type BuilderProjectApi } from "@/store/api/projects";
+import { useProjectByIdQuery, useDeleteProjectMutation, type BuilderProjectApi } from "@/store/api/projects";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useGetProjectApprovalsQuery } from "@/store/api/approvals";
 import { useGetStatusesByModuleQuery } from "@/store/api/status";
 import { ActivityList } from "@/components/projects/ActivityList";
@@ -34,6 +45,7 @@ import {
   MapPin,
   Edit,
   Share2,
+  Trash2,
   DollarSign,
   FileBarChart
 } from "lucide-react";
@@ -150,6 +162,34 @@ const ProjectDetail = () => {
   // Pricing is the builder's data — hidden from a developer-operator of a decoupled
   // project. Defaults to visible when the flag is absent (older responses).
   const pricingVisible = projectResponse?.data?.pricingVisible !== false;
+  // Delete is an operator action and only while the project is still in flight
+  // (not completed). The server additionally blocks it once any unit is handed over.
+  const isOperatorRole = projectResponse?.data?.accessRole !== "SCOPED_BUILDER";
+  const projectCompleted = (projectResponse?.data?.status ?? "").toLowerCase() === "completed";
+  const canDelete = isOperatorRole && !projectCompleted;
+  const { toast } = useToast();
+  const [deleteProjectMutation, { isLoading: deletingProject }] = useDeleteProjectMutation();
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  const handleDeleteProject = async () => {
+    try {
+      const res = await deleteProjectMutation(id!).unwrap();
+      if (res.success) {
+        toast({ title: res.message || "Project deleted" });
+        navigate("/projects");
+      } else {
+        toast({ title: res.message || "Could not delete project", variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Could not delete project",
+        description: err?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleteConfirmOpen(false);
+    }
+  };
 
   const { data: statusResponse } = useGetStatusesByModuleQuery({ module: "PROJECT" });
   const projectStatuses = statusResponse?.data ?? [];
@@ -332,6 +372,17 @@ const ProjectDetail = () => {
                   Share
                 </Button>
               )}
+              {canDelete && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setDeleteConfirmOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -427,6 +478,31 @@ const ProjectDetail = () => {
         project={project}
         onSave={handleSaveProject}
       />
+
+      {/* Delete project + all its registrations (guarded server-side). */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes <span className="font-medium">{project?.name}</span> and{" "}
+              <span className="font-medium">all of its registrations</span>. This can only be done
+              while the project is in progress — it is blocked once the project is completed or any
+              unit has been handed over to a homeowner. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProject}
+              disabled={deletingProject}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingProject ? "Deleting…" : "Delete project"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Share with a developer organisation (moved from a tab to this dialog). */}
       {canDevelop && (

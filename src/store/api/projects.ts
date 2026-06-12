@@ -197,6 +197,16 @@ export const projectsApi = api.injectEndpoints({
       }),
       invalidatesTags: ["Projects"],
     }),
+    // DELETE /api/builder/projects/:id — soft-deletes the project AND all its
+    // registrations. Blocked server-side once the project is completed or any
+    // unit has been handed over.
+    deleteProject: build.mutation<{ success: boolean; message: string }, string>({
+      query: (id) => ({
+        url: `/api/builder/projects/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Projects"],
+    }),
   }),
 });
 
@@ -208,5 +218,6 @@ export const {
   useUpdateProjectRegistrationsMutation,
   useCreateProjectMutation,
   useUpdateProjectMutation,
+  useDeleteProjectMutation,
 } = projectsApi;
 

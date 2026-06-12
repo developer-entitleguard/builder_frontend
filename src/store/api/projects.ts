@@ -21,6 +21,12 @@ export interface BuilderProjectApi {
   topographyTypeText: string | null;
   activitiesVisibleToHomeowner: boolean;
   createdAt: string;
+  // Property features that gate which compliance certificates apply.
+  hasGas?: boolean | null;
+  hasPool?: boolean | null;
+  hasLift?: boolean | null;
+  isStrata?: boolean | null;
+  hasDuctedHvac?: boolean | null;
   /**
    * Developer/Builder Decoupling PRD (Req 2). The caller's relationship to this
    * project: "OPERATOR" (their org owns it) or "SCOPED_BUILDER" (delegated to
@@ -33,6 +39,8 @@ export interface BuilderProjectApi {
   complianceJurisdiction?: string | null;
   /** Whether the current user may see pricing (hidden from a developer-operator of a decoupled project). */
   pricingVisible?: boolean;
+  /** True when the build is delegated to a separate builder via an active share. */
+  delegatedToBuilder?: boolean;
   /** AI auto-schedule verdict: ON_TRACK | AT_RISK | NOT_FEASIBLE. */
   scheduleFeasibility?: string | null;
   scheduleMessage?: string | null;
@@ -76,6 +84,12 @@ export interface CreateBuilderProjectBody {
   topographyTypeId?: string | null;
   autoGenerate?: boolean;
   dwellingCount?: number | null;
+  // Property features that gate which compliance certificates apply.
+  hasGas?: boolean | null;
+  hasPool?: boolean | null;
+  hasLift?: boolean | null;
+  isStrata?: boolean | null;
+  hasDuctedHvac?: boolean | null;
 }
 
 export type UpdateBuilderProjectBody = CreateBuilderProjectBody;

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Project, PropertyType, ProjectStatus, CreateProjectData } from "@/hooks/useProjects";
 import { BUILDING_CLASS_OPTIONS, DEFAULT_BUILDING_CLASS_BY_TYPE } from "@/lib/buildingClass";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
@@ -32,9 +33,15 @@ const propertyTypes: { value: PropertyType; label: string; icon: React.ElementTy
   { value: 'townhouse', label: 'Townhouse', icon: Building2 },
   { value: 'apartment', label: 'Apartment', icon: Building },
   { value: 'duplex', label: 'Duplex', icon: LayoutGrid },
-  { value: 'renovation', label: 'Renovation', icon: Hammer },
-  { value: 'extension', label: 'Extension', icon: PlusCircle },
-  { value: 'custom', label: 'Custom', icon: Settings }
+];
+
+/** Property features that gate which compliance certificates apply. */
+const PROPERTY_FEATURES: { key: "has_gas" | "has_ducted_hvac" | "has_pool" | "has_lift" | "is_strata"; label: string }[] = [
+  { key: "has_gas", label: "Gas connection" },
+  { key: "has_ducted_hvac", label: "Ducted air conditioning" },
+  { key: "has_pool", label: "Swimming pool / spa" },
+  { key: "has_lift", label: "Lift" },
+  { key: "is_strata", label: "Strata scheme" },
 ];
 
 const australianStates = [
@@ -87,7 +94,12 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
     status: project.status,
     description: project.description,
     bal_rating: project.bal_rating,
-    topography_type: project.topography_type
+    topography_type: project.topography_type,
+    has_gas: project.has_gas,
+    has_pool: project.has_pool,
+    has_lift: project.has_lift,
+    is_strata: project.is_strata,
+    has_ducted_hvac: project.has_ducted_hvac
   });
 
   useEffect(() => {
@@ -106,7 +118,12 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
         statusId: null, // reset so the useEffect below re-matches from API
         description: project.description,
         bal_rating: project.bal_rating,
-        topography_type: project.topography_type
+        topography_type: project.topography_type,
+        has_gas: project.has_gas,
+        has_pool: project.has_pool,
+        has_lift: project.has_lift,
+        is_strata: project.is_strata,
+        has_ducted_hvac: project.has_ducted_hvac
       });
     }
   }, [open, project]);
@@ -223,6 +240,25 @@ export const EditProjectDialog = ({ open, onOpenChange, project, onSave }: EditP
               {BUILDING_CLASS_OPTIONS.find(o => o.code === formData.building_class)?.description ??
                 'Drives which compliance documents apply.'}
             </p>
+          </div>
+
+          {/* Property features (gate which compliance certificates apply) */}
+          <div>
+            <Label>Property features</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Tick what applies so the matching certificates are included.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {PROPERTY_FEATURES.map(f => (
+                <label key={f.key} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={!!formData[f.key]}
+                    onCheckedChange={v => updateField(f.key, v === true)}
+                  />
+                  {f.label}
+                </label>
+              ))}
+            </div>
           </div>
 
           {/* Address */}

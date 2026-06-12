@@ -37,6 +37,12 @@ export interface Project {
   updated_at: string;
   /** Developer/Builder Decoupling: OPERATOR (owns) or SCOPED_BUILDER (delegated). */
   access_role?: "OPERATOR" | "SCOPED_BUILDER";
+  // Property features that gate which compliance certificates apply.
+  has_gas?: boolean | null;
+  has_pool?: boolean | null;
+  has_lift?: boolean | null;
+  is_strata?: boolean | null;
+  has_ducted_hvac?: boolean | null;
 }
 
 export interface CreateProjectData {
@@ -61,6 +67,12 @@ export interface CreateProjectData {
   auto_generate?: boolean;
   /** Number of units for multi-dwelling types (townhouse/apartment); duplex is always 2. */
   dwelling_count?: number | null;
+  // Property features that gate which compliance certificates apply.
+  has_gas?: boolean | null;
+  has_pool?: boolean | null;
+  has_lift?: boolean | null;
+  is_strata?: boolean | null;
+  has_ducted_hvac?: boolean | null;
 }
 
 const mapPropertyType = (value: string | null | undefined): PropertyType => {
@@ -221,6 +233,11 @@ export const useProjects = () => {
         topographyTypeId: data.topography_type ?? null,
         autoGenerate: data.auto_generate ?? true,
         dwellingCount: data.dwelling_count ?? null,
+        hasGas: data.has_gas ?? null,
+        hasPool: data.has_pool ?? null,
+        hasLift: data.has_lift ?? null,
+        isStrata: data.is_strata ?? null,
+        hasDuctedHvac: data.has_ducted_hvac ?? null,
       };
       const result = await createProjectMutation(body).unwrap();
       if (!result?.success) {
@@ -269,6 +286,11 @@ export const useProjects = () => {
         statusId: data.statusId ?? data.status ?? "planning",
         targetEndDate: data.target_end_date ?? "",
         topographyTypeId: data.topography_type ?? null,
+        hasGas: data.has_gas ?? null,
+        hasPool: data.has_pool ?? null,
+        hasLift: data.has_lift ?? null,
+        isStrata: data.is_strata ?? null,
+        hasDuctedHvac: data.has_ducted_hvac ?? null,
       };
 
       const result = await updateProjectMutation({ id, body }).unwrap();

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -55,6 +56,15 @@ const describeGuidance: Record<PropertyType, string> = {
 
 // Property types that produce more than one dwelling/registration.
 const MULTI_DWELLING: PropertyType[] = ["townhouse", "apartment", "duplex"];
+
+/** Property features that gate which compliance certificates apply. */
+const PROPERTY_FEATURES: { key: "has_gas" | "has_ducted_hvac" | "has_pool" | "has_lift" | "is_strata"; label: string }[] = [
+  { key: "has_gas", label: "Gas connection" },
+  { key: "has_ducted_hvac", label: "Ducted air conditioning" },
+  { key: "has_pool", label: "Swimming pool / spa" },
+  { key: "has_lift", label: "Lift" },
+  { key: "is_strata", label: "Strata scheme" },
+];
 
 const propertyTypes: { value: PropertyType; label: string; description: string; icon: React.ElementType }[] = [
   { value: 'house', label: 'House', description: 'Single family home', icon: Home },
@@ -373,6 +383,25 @@ const ProjectCreate = () => {
             {BUILDING_CLASS_OPTIONS.find(o => o.code === formData.building_class)?.description ??
               'Auto-selected from the property type — adjust if needed. Drives which compliance documents apply.'}
           </p>
+        </div>
+
+        {/* Property features (gate which compliance certificates apply) */}
+        <div>
+          <Label>Property features</Label>
+          <p className="text-xs text-muted-foreground mb-2">
+            Tick what applies so the matching certificates are included.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {PROPERTY_FEATURES.map(f => (
+              <label key={f.key} className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={!!formData[f.key]}
+                  onCheckedChange={v => updateField(f.key, v === true)}
+                />
+                {f.label}
+              </label>
+            ))}
+          </div>
         </div>
 
         {/* Number of units for multi-dwelling developments */}

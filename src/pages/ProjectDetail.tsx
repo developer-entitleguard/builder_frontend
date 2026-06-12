@@ -25,6 +25,7 @@ import {
 import { useGetProjectApprovalsQuery } from "@/store/api/approvals";
 import { useGetStatusesByModuleQuery } from "@/store/api/status";
 import { ActivityList } from "@/components/projects/ActivityList";
+import { ActivitySummary } from "@/components/projects/ActivitySummary";
 import { ApprovalsList } from "@/components/projects/ApprovalsList";
 import { ProjectRegistrations } from "@/components/projects/ProjectRegistrations";
 import { ProjectPricing } from "@/components/projects/ProjectPricing";
@@ -165,6 +166,9 @@ const ProjectDetail = () => {
   // Delete is an operator action and only while the project is still in flight
   // (not completed). The server additionally blocks it once any unit is handed over.
   const isOperatorRole = projectResponse?.data?.accessRole !== "SCOPED_BUILDER";
+  // A developer-operator whose build is delegated to a builder sees a read-only
+  // activities summary (progress only) — not the editable activities page.
+  const activitiesSummaryOnly = isOperatorRole && projectResponse?.data?.delegatedToBuilder === true;
   const projectCompleted = (projectResponse?.data?.status ?? "").toLowerCase() === "completed";
   const canDelete = isOperatorRole && !projectCompleted;
   const { toast } = useToast();
@@ -212,6 +216,7 @@ const ProjectDetail = () => {
       state: p.state,
       postcode: p.postcode,
       property_type: mapPropertyTypeLocal(p.propertyType),
+      building_class: p.buildingClass ?? null,
       start_date: p.startDate,
       target_end_date: p.targetEndDate,
       actual_end_date: p.actualEndDate,
@@ -222,6 +227,11 @@ const ProjectDetail = () => {
       activities_visible_to_homeowner: p.activitiesVisibleToHomeowner,
       created_at: p.createdAt,
       updated_at: p.createdAt,
+      has_gas: p.hasGas ?? null,
+      has_pool: p.hasPool ?? null,
+      has_lift: p.hasLift ?? null,
+      is_strata: p.isStrata ?? null,
+      has_ducted_hvac: p.hasDuctedHvac ?? null,
     };
     setProject(mapped);
     fetchActivities();
@@ -413,29 +423,39 @@ const ProjectDetail = () => {
           </TabsList>
           
           <TabsContent value="activities">
-            <ActivityList
-              activities={activities}
-              categories={categories}
-              loading={activitiesLoading}
-              projectId={id!}
-              approvals={approvals}
-              activitiesVisibleToHomeowner={project.activities_visible_to_homeowner}
-              onCreateActivity={createActivity}
-              onUpdateActivity={updateActivity}
-              onDeleteActivity={deleteActivity}
-              onFetchUpdates={fetchUpdates}
-              onPostUpdate={postUpdate}
-              onRequestApproval={requestApproval}
-              onToggleHomeownerVisibility={handleToggleHomeownerVisibility}
-              onCreateCategory={createCategory}
-              onUpdateCategory={updateCategory}
-              onDeleteCategory={deleteCategory}
-              onRefresh={fetchActivities}
-              onRefreshCategories={refetchCategories}
-              scheduleFeasibility={projectResponse?.data?.scheduleFeasibility}
-              scheduleMessage={projectResponse?.data?.scheduleMessage}
-              scheduleRecommendedEndDate={projectResponse?.data?.scheduleRecommendedEndDate}
-            />
+            {activitiesSummaryOnly ? (
+              <ActivitySummary
+                activities={activities}
+                categories={categories}
+                scheduleFeasibility={projectResponse?.data?.scheduleFeasibility}
+                scheduleMessage={projectResponse?.data?.scheduleMessage}
+                scheduleRecommendedEndDate={projectResponse?.data?.scheduleRecommendedEndDate}
+              />
+            ) : (
+              <ActivityList
+                activities={activities}
+                categories={categories}
+                loading={activitiesLoading}
+                projectId={id!}
+                approvals={approvals}
+                activitiesVisibleToHomeowner={project.activities_visible_to_homeowner}
+                onCreateActivity={createActivity}
+                onUpdateActivity={updateActivity}
+                onDeleteActivity={deleteActivity}
+                onFetchUpdates={fetchUpdates}
+                onPostUpdate={postUpdate}
+                onRequestApproval={requestApproval}
+                onToggleHomeownerVisibility={handleToggleHomeownerVisibility}
+                onCreateCategory={createCategory}
+                onUpdateCategory={updateCategory}
+                onDeleteCategory={deleteCategory}
+                onRefresh={fetchActivities}
+                onRefreshCategories={refetchCategories}
+                scheduleFeasibility={projectResponse?.data?.scheduleFeasibility}
+                scheduleMessage={projectResponse?.data?.scheduleMessage}
+                scheduleRecommendedEndDate={projectResponse?.data?.scheduleRecommendedEndDate}
+              />
+            )}
           </TabsContent>
           
           <TabsContent value="registrations">

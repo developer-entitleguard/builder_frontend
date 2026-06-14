@@ -24,6 +24,14 @@ import NotFound from "./pages/NotFound";
 import ConsentConfirmation from "./pages/ConsentConfirmation";
 import Projects from "./pages/Projects";
 import ProjectCreate from "./pages/ProjectCreate";
+import Customers from "./pages/Customers";
+import Quotes from "./pages/Quotes";
+import QuoteCreate from "./pages/QuoteCreate";
+import QuoteDetail from "./pages/QuoteDetail";
+import Invoices from "./pages/Invoices";
+import InvoiceDetail from "./pages/InvoiceDetail";
+import Payments from "./pages/Payments";
+import PublicQuote from "./pages/PublicQuote";
 import BuilderOnboarding from "./pages/BuilderOnboarding";
 import ProjectDetail from "./pages/ProjectDetail";
 import ProjectReport from "./pages/ProjectReport";
@@ -220,6 +228,56 @@ const App = () => (
                   <RegistrationDetail />
                 </ProtectedRoute>
               } />
+              {/* Sales module (SALES bolt-on) — customers, quotes, invoices, payments. */}
+              <Route path="/customers" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                    <Customers />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/quotes" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                    <Quotes />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/quotes/new" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                    <QuoteCreate />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/quotes/:id" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                    <QuoteDetail />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/invoices" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                    <Invoices />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/invoices/:id" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                    <InvoiceDetail />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/payments" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                    <Payments />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
               <Route path="/projects" element={
                 <ProtectedRoute>
                   <Projects />
@@ -327,6 +385,8 @@ const App = () => (
               <Route path="/platform-admin/admins" element={
                 <AdminProtectedRoute><AdminAdmins /></AdminProtectedRoute>
               } />
+              {/* Public customer-facing quote view — token is the credential, no auth. */}
+              <Route path="/q/:token" element={<PublicQuote />} />
               <Route path="/vendor/query" element={<VendorQuery />} />
               <Route path="/consent" element={<ConsentConfirmation />} />
               <Route path="/accept-invitation" element={<AcceptInvitation />} />

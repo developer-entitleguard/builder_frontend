@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useProjects, Project, ProjectStatus, PropertyType } from "@/hooks/useProjects";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { canManageProjects } from "@/lib/roles";
@@ -163,9 +164,17 @@ const Projects = () => {
   const { user, loading: authLoading } = useAuth();
   const { currentProjects, completedProjects, loading, fetchProjects } = useProjects();
   const { effectiveOrganization, builderRole } = useOrganization();
+  const { hasModule } = useEntitlements();
   const navigate = useNavigate();
   const [importOpen, setImportOpen] = useState(false);
   const canImport = canManageProjects(builderRole);
+  // PROJECTS was split into per-tab modules; the project list shows when the org
+  // holds any project-scoped module. hasModule fails open while entitlements load.
+  const hasAnyProjectModule =
+    hasModule("ACTIVITIES") ||
+    hasModule("APPROVALS") ||
+    hasModule("PRICING") ||
+    hasModule("COMPLIANCE_DOCS");
 
   useEffect(() => {
     // Redirect only when neither Supabase user nor builder JWT is present
@@ -192,12 +201,32 @@ const Projects = () => {
     );
   }
 
+  if (!hasAnyProjectModule) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center py-16">
+            <div className="mx-auto w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+              <FolderOpen className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Projects aren't enabled</h3>
+            <p className="text-muted-foreground max-w-sm mx-auto">
+              Your organisation doesn't have any project modules enabled. Contact your administrator
+              to enable Activities, Approvals, Pricing, or Compliance.
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   const hasProjects = currentProjects.length > 0 || completedProjects.length > 0;
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>

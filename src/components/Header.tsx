@@ -77,8 +77,18 @@ const Header = () => {
   const isVendor = isInternalVendor(effectiveBuilderRole) || isExternalVendor(effectiveBuilderRole);
 
   const showOrgNavItems = (!isSuperAdmin || isImpersonating) && !isVendor;
-  const showProjectsTab = (canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null) && hasModule("PROJECTS");
-  const showQueriesTab = !isExternalVendor(effectiveBuilderRole) && hasModule("QUERIES");
+  // Projects no longer have a single PROJECTS module — the tab shows when the org
+  // holds any project-scoped sub-module (Activities / Approvals / Pricing /
+  // Compliance docs). Individual tabs inside a project gate on their own module.
+  const hasAnyProjectModule =
+    hasModule("ACTIVITIES") ||
+    hasModule("APPROVALS") ||
+    hasModule("PRICING") ||
+    hasModule("COMPLIANCE_DOCS");
+  const showProjectsTab = (canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null) && hasAnyProjectModule;
+  const showQueriesTab = !isExternalVendor(effectiveBuilderRole) && hasModule("SUPPORT");
+  // Sales section (SALES bolt-on) — customers, quotes, invoices, payments.
+  const showSalesTab = (canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null) && hasModule("SALES");
   const showItemsTab = effectiveBuilderRole === null || canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === "CUSTOMER_SUPPORT";
   const showRegistrationsTab =
     (effectiveBuilderRole === null
@@ -162,6 +172,12 @@ const Header = () => {
         to: "/tickets",
         activePrefix: "/tickets",
       });
+    }
+    if (showSalesTab) {
+      mobileNavItems.push({ label: "Customers", to: "/customers", activePrefix: "/customers" });
+      mobileNavItems.push({ label: "Quotes", to: "/quotes", activePrefix: "/quotes" });
+      mobileNavItems.push({ label: "Invoices", to: "/invoices", activePrefix: "/invoices" });
+      mobileNavItems.push({ label: "Payments", to: "/payments", activePrefix: "/payments" });
     }
   }
   if (showMyScheduleTab) {
@@ -347,6 +363,48 @@ const Header = () => {
                                 </Link>
                               </DropdownMenuItem>
                             )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                      {showSalesTab && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant={
+                                location.pathname.startsWith("/customers") ||
+                                location.pathname.startsWith("/quotes") ||
+                                location.pathname.startsWith("/invoices") ||
+                                location.pathname.startsWith("/payments")
+                                  ? "default"
+                                  : "ghost"
+                              }
+                              size="sm"
+                            >
+                              Sales
+                              <ChevronDown className="h-3 w-3 ml-1 opacity-70" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            <DropdownMenuItem asChild>
+                              <Link to="/customers" className="cursor-pointer">
+                                Customers
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/quotes" className="cursor-pointer">
+                                Quotes
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/invoices" className="cursor-pointer">
+                                Invoices
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/payments" className="cursor-pointer">
+                                Payments
+                              </Link>
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}

@@ -34,6 +34,10 @@ import './complianceDocuments';
 import './entitlements';
 // Developer/Builder Decoupling PRD — scoped builder delegation per project.
 import './projectShares';
+// Sales module (SALES bolt-on) — quotes, invoices, sales-customer directory.
+import './quotes';
+import './invoices';
+import './customers';
 
 // Export the main API slice
 export { api } from './apiSlice';
@@ -125,6 +129,11 @@ export * from './entitlements';
 
 // Project shares (Developer/Builder Decoupling)
 export * from './projectShares';
+
+// Sales (quotes, invoices, sales customers)
+export * from './quotes';
+export * from './invoices';
+export * from './customers';
 
 // Re-export types
 export type * from '@/lib/api/types';

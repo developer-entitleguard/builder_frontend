@@ -88,6 +88,10 @@ export const api = createApi({
     'Entitlements',
     // Developer/Builder Decoupling PRD — scoped builder delegation per project.
     'ProjectShares',
+    // Sales module (SALES bolt-on) — quotes, invoices, sales-customer directory.
+    'Quote',
+    'Invoice',
+    'Customer',
   ],
   endpoints: () => ({}),
 });

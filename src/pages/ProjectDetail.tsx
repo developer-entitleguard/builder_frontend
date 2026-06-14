@@ -130,7 +130,7 @@ const ProjectDetail = () => {
   const isAdmin = readBuilderRoleFromStorage() === BUILDER_ROLES.ADMINISTRATOR;
   // Developer/Builder Decoupling PRD (Req 2): the "Builders" tab (delegate the
   // build to a separate builder org) is only meaningful for developer-capable orgs.
-  const { hasCapability } = useEntitlements();
+  const { hasCapability, hasModule } = useEntitlements();
   const canDevelop = hasCapability("DEVELOP");
   const { user, loading: authLoading } = useAuth();
   const { updateProject } = useProjects();
@@ -163,6 +163,25 @@ const ProjectDetail = () => {
   // Pricing is the builder's data — hidden from a developer-operator of a decoupled
   // project. Defaults to visible when the flag is absent (older responses).
   const pricingVisible = projectResponse?.data?.pricingVisible !== false;
+  // Project tabs are individually entitled now that PROJECTS was split into
+  // per-tab modules. hasModule fails open while entitlements load, so tabs never
+  // flash-hide. Compliance reuses the existing COMPLIANCE_DOCS module.
+  const showActivitiesTab = hasModule("ACTIVITIES");
+  const showRegistrationsTab = hasModule("REGISTRATIONS");
+  const showApprovalsTab = hasModule("APPROVALS");
+  const showComplianceTab = hasModule("COMPLIANCE_DOCS");
+  const showPricingTab = pricingVisible && hasModule("PRICING");
+  const defaultProjectTab = showActivitiesTab
+    ? "activities"
+    : showRegistrationsTab
+    ? "registrations"
+    : showApprovalsTab
+    ? "approvals"
+    : showComplianceTab
+    ? "compliance"
+    : showPricingTab
+    ? "pricing"
+    : "activities";
   // Delete is an operator action and only while the project is still in flight
   // (not completed). The server additionally blocks it once any unit is handed over.
   const isOperatorRole = projectResponse?.data?.accessRole !== "SCOPED_BUILDER";
@@ -400,28 +419,37 @@ const ProjectDetail = () => {
 
       {/* Main Content with Tabs */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <Tabs defaultValue="activities" className="w-full">
+        <Tabs defaultValue={defaultProjectTab} className="w-full">
           <TabsList className="mb-6">
-            <TabsTrigger value="activities">
-              Activities ({activities.length})
-            </TabsTrigger>
-            <TabsTrigger value="registrations">
-              Registrations
-            </TabsTrigger>
-            <TabsTrigger value="approvals">
-              Approvals ({approvalsCount})
-            </TabsTrigger>
-            <TabsTrigger value="compliance">
-              Compliance
-            </TabsTrigger>
-            {pricingVisible && (
+            {showActivitiesTab && (
+              <TabsTrigger value="activities">
+                Activities ({activities.length})
+              </TabsTrigger>
+            )}
+            {showRegistrationsTab && (
+              <TabsTrigger value="registrations">
+                Registrations
+              </TabsTrigger>
+            )}
+            {showApprovalsTab && (
+              <TabsTrigger value="approvals">
+                Approvals ({approvalsCount})
+              </TabsTrigger>
+            )}
+            {showComplianceTab && (
+              <TabsTrigger value="compliance">
+                Compliance
+              </TabsTrigger>
+            )}
+            {showPricingTab && (
               <TabsTrigger value="pricing" className="flex items-center gap-1">
                 <DollarSign className="h-4 w-4" />
                 Pricing
               </TabsTrigger>
             )}
           </TabsList>
-          
+
+          {showActivitiesTab && (
           <TabsContent value="activities">
             {activitiesSummaryOnly ? (
               <ActivitySummary
@@ -457,11 +485,15 @@ const ProjectDetail = () => {
               />
             )}
           </TabsContent>
-          
+          )}
+
+          {showRegistrationsTab && (
           <TabsContent value="registrations">
             <ProjectRegistrations projectId={id!} />
           </TabsContent>
-          
+          )}
+
+          {showApprovalsTab && (
           <TabsContent value="approvals">
             <ApprovalsList
               approvals={approvals}
@@ -470,7 +502,9 @@ const ProjectDetail = () => {
               projectId={id!}
             />
           </TabsContent>
-          
+          )}
+
+          {showComplianceTab && (
           <TabsContent value="compliance">
             <ProjectComplianceSection
               projectId={id!}
@@ -479,8 +513,9 @@ const ProjectDetail = () => {
               jurisdiction={projectResponse?.data?.complianceJurisdiction}
             />
           </TabsContent>
+          )}
 
-          {pricingVisible && (
+          {showPricingTab && (
             <TabsContent value="pricing">
               <ProjectPricing
                 project={project}

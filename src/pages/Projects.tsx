@@ -167,7 +167,9 @@ const Projects = () => {
   const { hasModule } = useEntitlements();
   const navigate = useNavigate();
   const [importOpen, setImportOpen] = useState(false);
-  const canImport = canManageProjects(builderRole);
+  // Bulk CSV import rides on the PROJECT_IMPORT bolt-on, so the in-page import
+  // affordance hides when the org doesn't have it (matching the nav).
+  const canImport = canManageProjects(builderRole) && hasModule("PROJECT_IMPORT");
   // PROJECTS was split into per-tab modules; the project list shows when the org
   // holds any project-scoped module. hasModule fails open while entitlements load.
   const hasAnyProjectModule =

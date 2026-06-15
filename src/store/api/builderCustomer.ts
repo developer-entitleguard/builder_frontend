@@ -5,6 +5,20 @@ import type {
 } from '@/lib/api/types';
 import { getApiBaseUrl } from '@/lib/config';
 import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
+import type { BulkOperationResponse } from './bulkTypes';
+
+/** Narrow inline-edit payload for a registration's detail page. */
+export interface UpdateCustomerDetailsRequest {
+  id: string;
+  patch: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    contact?: string;
+    unitNumber?: string;
+    totalBuiltUpArea?: number;
+  };
+}
 
 export interface BuilderItemFileDto {
   type: 'warranty' | 'Manual';
@@ -163,6 +177,45 @@ export const builderCustomerApi = api.injectEndpoints({
         method: 'POST',
       }),
     }),
+
+    // Project-section bulk action: flip selected (pre-handover) registrations to
+    // SENT. Body is a plain array of ids, mirroring the bulk-delete endpoint.
+    sendEntitlementBulk: build.mutation<BulkOperationResponse, string[]>({
+      query: (ids) => ({
+        url: '/api/builder/customers/send-entitlement',
+        method: 'POST',
+        body: ids,
+      }),
+      invalidatesTags: ['BuilderCustomer', 'CustomerDetails', 'Dashboard', 'Registration'],
+    }),
+
+    // Project-section bulk action: attach one item set to many registrations
+    // (replace semantics; handed-over rows skipped server-side).
+    bulkAttachItems: build.mutation<
+      BulkOperationResponse,
+      { customerIds: string[]; itemIds: string[] }
+    >({
+      query: (body) => ({
+        url: '/api/builder/customeritem/bulk',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['BuilderCustomer', 'CustomerDetails', 'CustomerItem'],
+    }),
+
+    // Narrow inline edit (customer details / unit number / built-up area).
+    // Only the provided fields are applied; locked once handed over.
+    updateCustomerDetails: build.mutation<
+      { success: boolean; message: string; data?: unknown },
+      UpdateCustomerDetailsRequest
+    >({
+      query: ({ id, patch }) => ({
+        url: `/api/builder/customer/${id}/details`,
+        method: 'PATCH',
+        body: patch,
+      }),
+      invalidatesTags: ['BuilderCustomer', 'CustomerDetails', 'Registration'],
+    }),
   }),
 });
 
@@ -172,4 +225,7 @@ export const {
   useUpdateBuilderCustomerMapMutation,
   useSendConsentMailMutation,
   useDeleteBuilderCustomersMutation,
+  useSendEntitlementBulkMutation,
+  useBulkAttachItemsMutation,
+  useUpdateCustomerDetailsMutation,
 } = builderCustomerApi;

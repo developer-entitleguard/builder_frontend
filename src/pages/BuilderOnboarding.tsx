@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 import Header from "@/components/Header";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -106,6 +108,7 @@ const rowOutcomeBadge = (row: OnboardingRow) => {
 
 const BuilderOnboarding = () => {
   const { toast } = useToast();
+  const { hasModule, ready } = useEntitlements();
 
   // --- file + preview state ---
   const [file, setFile] = useState<File | null>(null);
@@ -377,6 +380,13 @@ const BuilderOnboarding = () => {
       });
     }
   };
+
+  // Direct-URL guard: bulk upload is its own bolt-on (PROJECT_IMPORT). Redirect
+  // when the org doesn't have it. `ready` avoids a redirect flash before
+  // entitlements load (hasModule fails open during load anyway).
+  if (ready && !hasModule("PROJECT_IMPORT")) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-background">

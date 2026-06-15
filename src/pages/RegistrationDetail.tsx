@@ -4,8 +4,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { useCreateBuilderCustomerMutation, useGetCustomerDetailsQuery, useDeleteBuilderCustomerMutation, useGetStatusesByTypeQuery, useCreateCustomerEntitlementMutation, useGetBuilderCustomerTermsQuery, useUpdateBuilderCustomerTermsMutation } from '@/store/api';
+import { useCreateBuilderCustomerMutation, useGetCustomerDetailsQuery, useDeleteBuilderCustomerMutation, useGetStatusesByTypeQuery, useCreateCustomerEntitlementMutation, useGetBuilderCustomerTermsQuery, useUpdateBuilderCustomerTermsMutation, useUpdateCustomerDetailsMutation } from '@/store/api';
 import { TermsVersionPicker } from '@/components/TermsVersionPicker';
+import { HandoverDateDialog } from '@/components/projects/HandoverDateDialog';
+import { EditRegistrationDialog, type EditRegistrationValues, type RegistrationDetailsPatch } from '@/components/registrations/EditRegistrationDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -134,7 +136,9 @@ const RegistrationDetail = () => {
     { skip: !builderId }
   );
   const [createBuilderCustomer] = useCreateBuilderCustomerMutation();
-  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
+  const [createCustomerEntitlement, { isLoading: handingOver }] = useCreateCustomerEntitlementMutation();
+  const [updateCustomerDetails, { isLoading: savingEdit }] = useUpdateCustomerDetailsMutation();
+  const [editOpen, setEditOpen] = useState(false);
 
   const fetchRegistration = useCallback(async () => {
     if (!user || !id) return;
@@ -409,12 +413,12 @@ const RegistrationDetail = () => {
     }
   };
 
-  const handleMarkHandedOver = async () => {
+  const handleMarkHandedOver = async (handoverDate?: string) => {
     if (!registration) return;
 
     try {
       if (isBuilderFlow) {
-        const res = await createCustomerEntitlement({ builderCustomerId: registration.id }).unwrap();
+        const res = await createCustomerEntitlement({ builderCustomerId: registration.id, handoverDate }).unwrap();
         // The backend gates handover on outstanding compliance documents and
         // returns success=false with a human-readable reason when blocked.
         if (res && res.success === false) {
@@ -454,6 +458,56 @@ const RegistrationDetail = () => {
         title: "Error updating status",
         description: error instanceof Error ? error.message : String(error),
         variant: "destructive"
+      });
+    }
+  };
+
+  const editCustomerObj =
+    (customerDetailsResponse?.data?.customer as unknown as Record<string, unknown> | undefined);
+  const editInitial: EditRegistrationValues = {
+    firstName: String(editCustomerObj?.firstName ?? ''),
+    lastName: String(editCustomerObj?.lastName ?? ''),
+    email: String(editCustomerObj?.email ?? registration?.customer_email ?? ''),
+    contact: String(editCustomerObj?.contact ?? registration?.customer_phone ?? ''),
+    unitNumber: String(editCustomerObj?.unitNumber ?? ''),
+    totalBuiltUpArea:
+      editCustomerObj?.totalBuiltUpArea != null
+        ? String(editCustomerObj.totalBuiltUpArea)
+        : registration?.total_built_up_area != null
+          ? String(registration.total_built_up_area)
+          : '',
+  };
+
+  const handleSaveEdit = async (patch: RegistrationDetailsPatch) => {
+    if (!id) return;
+    if (Object.keys(patch).length === 0) {
+      setEditOpen(false);
+      return;
+    }
+    try {
+      const res = await updateCustomerDetails({ id, patch }).unwrap();
+      if (res && res.success === false) {
+        toast({
+          title: "Couldn't update registration",
+          description: res.message || 'Update failed.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({ title: 'Registration updated', description: 'Your changes have been saved.' });
+      setEditOpen(false);
+      await refetchCustomerDetails();
+      if (user) fetchRegistration();
+    } catch (error: unknown) {
+      const msg = error && typeof error === 'object' && 'data' in error
+        ? (error as { data?: unknown }).data
+        : error instanceof Error
+          ? error.message
+          : 'Failed to update registration';
+      toast({
+        title: 'Error updating registration',
+        description: String(msg ?? 'Failed to update registration'),
+        variant: 'destructive',
       });
     }
   };
@@ -546,6 +600,12 @@ const RegistrationDetail = () => {
             {getStatusBadge(registration.status, registration.status_name)}
             {!isHandedOver && (
               <>
+                {isBuilderFlow && !isHandedStatus && (
+                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                )}
                 <Button variant="outline" onClick={handleContinueOnboarding}>
                   <Edit className="h-4 w-4 mr-2" />
                   {isHandedStatus ? 'View Details' : 'Continue Editing'}
@@ -921,22 +981,23 @@ const RegistrationDetail = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={handoverDialogOpen} onOpenChange={setHandoverDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Mark as Handed Over</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to mark this property as handed over? Once marked, this registration will become read-only and cannot be edited.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleMarkHandedOver}>
-              Confirm Handover
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <HandoverDateDialog
+        open={handoverDialogOpen}
+        onOpenChange={setHandoverDialogOpen}
+        count={1}
+        loading={handingOver}
+        onConfirm={handleMarkHandedOver}
+      />
+
+      {isBuilderFlow && (
+        <EditRegistrationDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          initial={editInitial}
+          loading={savingEdit}
+          onConfirm={handleSaveEdit}
+        />
+      )}
     </div>
   );
 };

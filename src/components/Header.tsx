@@ -86,6 +86,9 @@ const Header = () => {
     hasModule("PRICING") ||
     hasModule("COMPLIANCE_DOCS");
   const showProjectsTab = (canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null) && hasAnyProjectModule;
+  // Bulk upload of past projects (CSV import / bulk onboarding) — its own bolt-on,
+  // so it can be hidden independently of the project list.
+  const showBulkImportTab = (canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null) && hasModule("PROJECT_IMPORT");
   const showQueriesTab = !isExternalVendor(effectiveBuilderRole) && hasModule("SUPPORT");
   // Sales section (SALES bolt-on) — customers, quotes, invoices, payments.
   const showSalesTab = (canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null) && hasModule("SALES");
@@ -149,7 +152,7 @@ const Header = () => {
         activePrefix: "/registrations",
       });
     }
-    if (showProjectsTab) {
+    if (showBulkImportTab) {
       mobileNavItems.push({
         label: "Bulk Onboarding",
         to: "/onboarding/bulk",
@@ -261,13 +264,14 @@ const Header = () => {
                 <nav className="flex space-x-2">
                   {showOrgNavItems && (
                     <>
-                      {(showProjectsTab || showRegistrationsTab) && (
+                      {(showProjectsTab || showRegistrationsTab || showBulkImportTab) && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant={
                                 location.pathname.startsWith("/projects") ||
-                                location.pathname.startsWith("/registrations")
+                                location.pathname.startsWith("/registrations") ||
+                                location.pathname.startsWith("/onboarding/bulk")
                                   ? "default"
                                   : "ghost"
                               }
@@ -292,7 +296,7 @@ const Header = () => {
                                 </Link>
                               </DropdownMenuItem>
                             )}
-                            {showProjectsTab && (
+                            {showBulkImportTab && (
                               <DropdownMenuItem asChild>
                                 <Link to="/onboarding/bulk" className="cursor-pointer">
                                   Bulk Onboarding

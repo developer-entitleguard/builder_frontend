@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import AdminPortalShell from './AdminPortalShell';
@@ -18,6 +19,9 @@ const AdminOrgDetail = () => {
 
   const { data: org, isLoading, isError } = useGetAdminOrgQuery({ orgType: type, id });
   const [updateOrg, { isLoading: saving }] = useUpdateAdminOrgMutation();
+  // Controlled tab so it survives the background refetch that every admin
+  // mutation triggers (a capability/user change bumps the global admin cache).
+  const [tab, setTab] = useState('profile');
 
   const handleSave = async (body: AdminOrg) => {
     try {
@@ -35,7 +39,10 @@ const AdminOrgDetail = () => {
         Back to organizations
       </Button>
 
-      {isLoading ? (
+      {/* Only show the full-page loader on the initial fetch (no org yet). On a
+          background refetch the admin query keeps the previous data, so the tabs
+          stay mounted instead of unmounting and resetting to Profile. */}
+      {isLoading && !org ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : isError || !org ? (
         <p className="text-sm text-destructive">Organization not found.</p>
@@ -49,7 +56,7 @@ const AdminOrgDetail = () => {
             </Badge>
           </div>
 
-          <Tabs defaultValue="profile" className="space-y-6">
+          <Tabs value={tab} onValueChange={setTab} className="space-y-6">
             <TabsList>
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="capabilities">Capabilities</TabsTrigger>

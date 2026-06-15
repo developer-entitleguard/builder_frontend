@@ -1,32 +1,36 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   Users,
   Plus,
   Link as LinkIcon,
-  Mail,
-  Phone,
-  MapPin,
-  Calendar,
   Package,
   Send,
   KeyRound,
+  Pencil,
 } from "lucide-react";
-import { format } from "date-fns";
 import { LinkRegistrationDialog } from "./LinkRegistrationDialog";
 import { HandoverDateDialog } from "./HandoverDateDialog";
 import { BulkAttachItemsDialog } from "./BulkAttachItemsDialog";
+import { RegistrationRow } from "./RegistrationRow";
+import {
+  EditRegistrationDialog,
+  type EditRegistrationValues,
+  type RegistrationDetailsPatch,
+} from "@/components/registrations/EditRegistrationDialog";
 import { useGetProjectRegistrationsQuery } from "@/store/api/projects";
 import {
   useSendEntitlementBulkMutation,
   useBulkAttachItemsMutation,
+  useUpdateCustomerDetailsMutation,
 } from "@/store/api/builderCustomer";
 import { useBulkHandoverMutation } from "@/store/api/customerEntitlement";
+import { useAssignBOMMutation } from "@/store/api";
 import { summariseBulk, type BulkOperationRow } from "@/store/api/bulkTypes";
 
 interface Registration {
@@ -36,8 +40,14 @@ interface Registration {
   customer_phone: string | null;
   property_address: string;
   status: string;
+  status_name: string | null;
   settlement_date: string | null;
   created_at: string;
+  // Raw editable fields (for the inline per-row edit).
+  first_name: string;
+  last_name: string;
+  unit_number: string;
+  total_built_up_area: number | null;
 }
 
 interface ProjectRegistrationsProps {
@@ -75,12 +85,16 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [attachOpen, setAttachOpen] = useState(false);
   const [handoverOpen, setHandoverOpen] = useState(false);
+  const [editing, setEditing] = useState<Registration | null>(null);
+  const [editMode, setEditMode] = useState(false);
 
   const builderId = getBuilderId();
 
   const [sendEntitlementBulk, { isLoading: sending }] = useSendEntitlementBulkMutation();
   const [bulkAttachItems, { isLoading: attaching }] = useBulkAttachItemsMutation();
+  const [assignBOM, { isLoading: assigningBom }] = useAssignBOMMutation();
   const [bulkHandover, { isLoading: handing }] = useBulkHandoverMutation();
+  const [updateCustomerDetails, { isLoading: savingEdit }] = useUpdateCustomerDetailsMutation();
 
   const {
     data: projectRegistrationsResponse,
@@ -114,6 +128,7 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
         settlement_date?: string | null;
         createdAt?: string | null;
         created_at?: string | null;
+        totalBuiltUpArea?: number | null;
       };
 
       const fullName = [r.firstName, r.lastName].filter(Boolean).join(" ");
@@ -152,8 +167,13 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
         customer_phone,
         property_address,
         status,
+        status_name: r.statusName ?? r.status ?? null,
         settlement_date,
         created_at,
+        first_name: r.firstName ?? "",
+        last_name: r.lastName ?? "",
+        unit_number: r.unitNumber ?? "",
+        total_built_up_area: r.totalBuiltUpArea ?? null,
       };
     });
     setRegistrations(mapped);
@@ -191,6 +211,14 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
   };
 
   const clearSelection = () => setSelectedIds(new Set());
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) =>
+      prev.size === registrations.length
+        ? new Set()
+        : new Set(registrations.map((r) => r.id))
+    );
+  };
 
   // Per-row outcome → single toast. Handed-over / blocked rows come back as
   // failures so the builder sees exactly what was skipped.
@@ -245,6 +273,90 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
         variant: "destructive",
       });
     }
+  };
+
+  const handleAttachBom = async (bomId: string) => {
+    if (!bomId) return;
+    try {
+      const res = await assignBOM({
+        billOfMaterialId: bomId,
+        customerIds: Array.from(selectedIds),
+      }).unwrap();
+      toast({
+        title: res.success ? "BOM attached" : "Couldn't attach BOM",
+        description: res.message ?? "",
+        variant: res.success ? "default" : "destructive",
+      });
+      setAttachOpen(false);
+      afterBulk();
+    } catch (e) {
+      toast({
+        title: "Error attaching BOM",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSaveEdit = async (patch: RegistrationDetailsPatch) => {
+    if (!editing) return;
+    if (Object.keys(patch).length === 0) {
+      setEditing(null);
+      return;
+    }
+    try {
+      const res = await updateCustomerDetails({ id: editing.id, patch }).unwrap();
+      if (res && res.success === false) {
+        toast({
+          title: "Couldn't update registration",
+          description: res.message || "Update failed.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Registration updated", description: "Your changes have been saved." });
+      setEditing(null);
+      fetchRegistrations();
+    } catch (e) {
+      toast({
+        title: "Error updating registration",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Inline (whole-page) edit autosave. Returns true on success so the row can
+  // show its saved indicator. Errors surface as a toast but don't throw.
+  const handleInlineUpdate = async (
+    rowId: string,
+    patch: RegistrationDetailsPatch
+  ): Promise<boolean> => {
+    try {
+      const res = await updateCustomerDetails({ id: rowId, patch }).unwrap();
+      if (res && res.success === false) {
+        toast({
+          title: "Couldn't save",
+          description: res.message || "Update failed.",
+          variant: "destructive",
+        });
+        return false;
+      }
+      return true;
+    } catch (e) {
+      toast({
+        title: "Couldn't save",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  const toggleEditMode = (on: boolean) => {
+    setEditMode(on);
+    // Pull fresh values when leaving edit mode so the read view reflects saves.
+    if (!on) fetchRegistrations();
   };
 
   const handleHandover = async (handoverDate: string) => {
@@ -305,25 +417,44 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
   }
 
   const selectedCount = selectedIds.size;
+  const allSelected = registrations.length > 0 && selectedCount === registrations.length;
 
   return (
     <div>
-      <div className="flex justify-end gap-3 mb-4">
-        <Button variant="outline" onClick={() => setLinkDialogOpen(true)}>
-          <LinkIcon className="h-4 w-4 mr-2" />
-          Link Existing
-        </Button>
-        <Button onClick={handleCreateRegistration}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Registration
-        </Button>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-1.5">
+          <Pencil className="h-4 w-4 text-muted-foreground" />
+          <Label htmlFor="edit-registrations" className="text-sm font-medium cursor-pointer">
+            Edit on page
+          </Label>
+          <Switch
+            id="edit-registrations"
+            checked={editMode}
+            onCheckedChange={toggleEditMode}
+          />
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => setLinkDialogOpen(true)}>
+            <LinkIcon className="h-4 w-4 mr-2" />
+            Link Existing
+          </Button>
+          <Button onClick={handleCreateRegistration}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Registration
+          </Button>
+        </div>
       </div>
 
-      {selectedCount > 0 && (
-        <div className="flex items-center justify-between gap-3 mb-4 p-3 rounded-lg border bg-muted/40">
-          <span className="text-sm font-medium">{selectedCount} selected</span>
+      <div className="flex items-center justify-between gap-3 mb-4 p-3 rounded-lg border bg-muted/40">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} aria-label="Select all" />
+          <span className="text-sm font-medium">
+            {selectedCount > 0 ? `${selectedCount} selected` : `Select all (${registrations.length})`}
+          </span>
+        </label>
+        {selectedCount > 0 && (
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => setAttachOpen(true)} disabled={attaching}>
+            <Button size="sm" variant="outline" onClick={() => setAttachOpen(true)} disabled={attaching || assigningBom}>
               <Package className="h-4 w-4 mr-2" />
               Attach Items
             </Button>
@@ -339,66 +470,30 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
               Clear
             </Button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="space-y-3">
         {registrations.map((reg) => {
           const status = statusConfig[reg.status] || statusConfig.draft;
-          const checked = selectedIds.has(reg.id);
+          const handed =
+            reg.status === "handed" ||
+            reg.status === "handed_over" ||
+            (reg.status_name ?? "").toUpperCase() === "HANDED";
 
           return (
-            <Card
+            <RegistrationRow
               key={reg.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => navigate(`/registration/${reg.id}`)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div
-                    className="pt-1"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={() => toggleSelect(reg.id)}
-                      aria-label={`Select ${reg.customer_name}`}
-                    />
-                  </div>
-                  <div className="flex items-start justify-between flex-1 min-w-0">
-                    <div className="min-w-0">
-                      <h4 className="font-medium text-foreground">{reg.customer_name}</h4>
-                      <div className="flex flex-col gap-1 mt-1 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Mail className="h-3.5 w-3.5" />
-                          {reg.customer_email}
-                        </span>
-                        {reg.customer_phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone className="h-3.5 w-3.5" />
-                            {reg.customer_phone}
-                          </span>
-                        )}
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-3.5 w-3.5" />
-                          {reg.property_address}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2">
-                      <Badge className={status.color}>{status.label}</Badge>
-                      {reg.settlement_date && (
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {format(new Date(reg.settlement_date), "MMM d, yyyy")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              registration={reg}
+              editMode={editMode}
+              isSelected={selectedIds.has(reg.id)}
+              handed={handed}
+              statusConfig={status}
+              onToggleSelect={toggleSelect}
+              onOpen={(rid) => navigate(`/registration/${rid}`)}
+              onEdit={(r) => setEditing(r as Registration)}
+              onUpdate={handleInlineUpdate}
+            />
           );
         })}
       </div>
@@ -416,8 +511,9 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
           onOpenChange={setAttachOpen}
           builderId={builderId}
           registrationCount={selectedCount}
-          loading={attaching}
+          loading={attaching || assigningBom}
           onConfirm={handleAttachItems}
+          onConfirmBom={handleAttachBom}
         />
       )}
 
@@ -428,6 +524,27 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
         loading={handing}
         onConfirm={handleHandover}
       />
+
+      {editing && (
+        <EditRegistrationDialog
+          open={!!editing}
+          onOpenChange={(open) => {
+            if (!open) setEditing(null);
+          }}
+          initial={toEditValues(editing)}
+          loading={savingEdit}
+          onConfirm={handleSaveEdit}
+        />
+      )}
     </div>
   );
 };
+
+const toEditValues = (reg: Registration): EditRegistrationValues => ({
+  firstName: reg.first_name,
+  lastName: reg.last_name,
+  email: reg.customer_email,
+  contact: reg.customer_phone ?? "",
+  unitNumber: reg.unit_number,
+  totalBuiltUpArea: reg.total_built_up_area != null ? String(reg.total_built_up_area) : "",
+});

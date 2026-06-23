@@ -100,7 +100,6 @@ export {
   useLazyGetVendorLinkQuery,
   useGetRegistrationItemsQuery,
   useLazyGetRegistrationItemsQuery,
-  useAddQueryCommentMutation,
   useGetEligibleOwnersQuery,
 } from './query';
 

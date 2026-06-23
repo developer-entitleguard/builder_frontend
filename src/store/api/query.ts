@@ -272,21 +272,6 @@ export const queryApi = api.injectEndpoints({
         params: { builderCustomerId },
       }),
     }),
-    addQueryComment: build.mutation<AddCommentResponse, AddCommentRequest>({
-      query: (data) => {
-        const formData = new FormData();
-        formData.append('comment', data.comment);
-        formData.append('commentedBy', data.commentedBy);
-        formData.append('id', data.id);
-        formData.append('queryId', data.queryId);
-        return {
-          url: '/api/querycomment',
-          method: 'POST',
-          body: formData,
-        };
-      },
-      invalidatesTags: ['Query'],
-    }),
   }),
 });
 
@@ -298,6 +283,5 @@ export const {
   useLazyGetVendorLinkQuery,
   useGetRegistrationItemsQuery,
   useLazyGetRegistrationItemsQuery,
-  useAddQueryCommentMutation,
   useGetEligibleOwnersQuery,
 } = queryApi;

@@ -439,7 +439,7 @@ const QueriesManagement = () => {
             <p className="text-muted-foreground">Loading queries...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
             {LANES.map((lane) => (
               <div
                 key={lane.key}

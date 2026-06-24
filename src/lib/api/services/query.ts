@@ -24,6 +24,8 @@ export interface QueryStatus {
 export interface QueryComment {
   id: string;
   commentedBy: string;
+  /** Resolved author name from the backend; falls back to commentedBy (id). */
+  commentedByName?: string;
   comment: string;
   createdAt: string;
   isActive: boolean;

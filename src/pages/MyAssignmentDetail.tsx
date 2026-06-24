@@ -611,7 +611,7 @@ const MyAssignmentDetail = () => {
                       .map((c) => (
                         <div key={c.id} className="p-3 rounded-md border bg-muted/50">
                           <div className="flex justify-between items-center mb-1">
-                            <span className="text-sm font-medium">{c.commentedBy}</span>
+                            <span className="text-sm font-medium">{c.commentedByName || c.commentedBy}</span>
                             <span className="text-xs text-muted-foreground">
                               {new Date(c.createdAt).toLocaleString()}
                             </span>

@@ -805,7 +805,7 @@ const QueryDetail = () => {
                         >
                           <div className="flex justify-between items-center mb-1">
                             <span className="text-sm font-medium">
-                              {c.commentedBy}
+                              {c.commentedByName || c.commentedBy}
                             </span>
                             <span className="text-xs text-muted-foreground">
                               {formatDateTime(c.createdAt)}

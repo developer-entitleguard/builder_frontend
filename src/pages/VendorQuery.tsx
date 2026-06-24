@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
   Loader2,
   Send,
@@ -15,6 +16,7 @@ import {
   FileText,
   X,
   ArrowLeft,
+  Clock,
 } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/config";
 import { viewPhotoUrl } from "@/lib/api/services/files";
@@ -86,6 +88,7 @@ interface VendorJob {
   scope?: string | null;
   status: string;
   scheduledStart?: string | null;
+  scheduledEnd?: string | null;
 }
 
 function jobStatusColor(status: string) {
@@ -133,6 +136,10 @@ const VendorQuery = () => {
   const [statuses, setStatuses] = useState<StatusOption[]>([]);
   const [jobs, setJobs] = useState<VendorJob[]>([]);
   const [updatingJob, setUpdatingJob] = useState<string | null>(null);
+  // Per-job schedule editor (datetime-local "yyyy-MM-ddTHH:mm").
+  const [schedStart, setSchedStart] = useState<Record<string, string>>({});
+  const [schedEnd, setSchedEnd] = useState<Record<string, string>>({});
+  const [savingSchedule, setSavingSchedule] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [comment, setComment] = useState("");
@@ -384,6 +391,56 @@ const VendorQuery = () => {
     }
   };
 
+  const handleJobSchedule = async (
+    jobId: string,
+    scheduledStart: string,
+    scheduledEnd: string
+  ) => {
+    if (!scheduledStart) {
+      toast({
+        title: "Pick a date and time",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSavingSchedule(jobId);
+    try {
+      const res = await fetch(
+        buildUrl(
+          `/unsecure/vendor/query/jobs/schedule?token=${encodeURIComponent(
+            token
+          )}&jobId=${encodeURIComponent(
+            jobId
+          )}&scheduledStart=${encodeURIComponent(scheduledStart)}${
+            scheduledEnd
+              ? `&scheduledEnd=${encodeURIComponent(scheduledEnd)}`
+              : ""
+          }`
+        ),
+        { method: "POST" }
+      );
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: "Success", description: "Time updated" });
+        await fetchJobs();
+      } else {
+        toast({
+          title: "Error",
+          description: data.message,
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingSchedule(null);
+    }
+  };
+
   // ── Loading / Error states ──
 
   if (loading) {
@@ -513,6 +570,12 @@ const VendorQuery = () => {
                   {jobs.map((job) => {
                     const jobDone =
                       job.status === "COMPLETED" || job.status === "CANCELLED";
+                    const startVal =
+                      schedStart[job.id] ??
+                      (job.scheduledStart ? job.scheduledStart.slice(0, 16) : "");
+                    const endVal =
+                      schedEnd[job.id] ??
+                      (job.scheduledEnd ? job.scheduledEnd.slice(0, 16) : "");
                     return (
                       <div
                         key={job.id}
@@ -578,6 +641,60 @@ const VendorQuery = () => {
                               )}
                               Mark job complete
                             </Button>
+                          </div>
+                        )}
+                        {!jobDone && (
+                          <div className="pt-2 border-t space-y-2">
+                            <Label className="text-xs">Set / change time</Label>
+                            <div className="flex flex-wrap items-end gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-[11px] text-muted-foreground">
+                                  Start
+                                </Label>
+                                <Input
+                                  type="datetime-local"
+                                  className="h-9 w-[210px]"
+                                  value={startVal}
+                                  onChange={(e) =>
+                                    setSchedStart((p) => ({
+                                      ...p,
+                                      [job.id]: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[11px] text-muted-foreground">
+                                  End (optional)
+                                </Label>
+                                <Input
+                                  type="datetime-local"
+                                  className="h-9 w-[210px]"
+                                  value={endVal}
+                                  onChange={(e) =>
+                                    setSchedEnd((p) => ({
+                                      ...p,
+                                      [job.id]: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={savingSchedule === job.id || !startVal}
+                                onClick={() =>
+                                  handleJobSchedule(job.id, startVal, endVal)
+                                }
+                              >
+                                {savingSchedule === job.id ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Clock className="h-4 w-4 mr-2" />
+                                )}
+                                Update time
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>

@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, Briefcase, LinkIcon } from "lucide-react";
+import { Loader2, Plus, Trash2, Briefcase, LinkIcon, MessageSquare } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
@@ -20,12 +20,21 @@ import {
   useCreateJobFromQueryMutation,
   useUpdateJobStatusMutation,
   useAssignJobVendorMutation,
+  useSendJobSmsMutation,
   useDeleteJobMutation,
   type BuilderJob,
   type JobStatus,
 } from "@/lib/api/services/jobs";
 import JobAssignVendorDialog from "@/components/queries/JobAssignVendorDialog";
 import VendorLinkModal from "@/components/VendorLinkModal";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const STATUSES: JobStatus[] = [
   "DRAFT",
@@ -55,6 +64,11 @@ function statusColor(status: string) {
 /** Off-platform vendor — reached via an emailed link (has a contact, no portal user). */
 function isExternalAssigned(job: BuilderJob) {
   return !job.assigneeUserId && !!(job.assigneeName || job.assigneeEmail);
+}
+
+/** Any vendor assigned (internal or external) — both can be reached via the link/SMS. */
+function hasAssignee(job: BuilderJob) {
+  return !!(job.assigneeUserId || job.assigneeName || job.assigneeEmail);
 }
 
 function assigneeLabel(job: BuilderJob) {
@@ -111,6 +125,33 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
   >(null);
   // After an external vendor is assigned, surface the shareable query link.
   const [linkModalOpen, setLinkModalOpen] = useState(false);
+  // Per-job "Send SMS" dialog: the job being texted + the typed-in number.
+  const [smsForJob, setSmsForJob] = useState<string | null>(null);
+  const [smsPhone, setSmsPhone] = useState("");
+  const [sendJobSms, { isLoading: sendingSms }] = useSendJobSmsMutation();
+
+  const handleSendSms = async () => {
+    if (!smsForJob || !builderId || !smsPhone.trim()) return;
+    try {
+      const res = await sendJobSms({
+        id: smsForJob,
+        builderId,
+        queryId,
+        phone: smsPhone.trim(),
+      }).unwrap();
+      toast({
+        title: res?.success ? "SMS sent" : "Couldn't send SMS",
+        description: res?.message,
+        variant: res?.success ? undefined : "destructive",
+      });
+      if (res?.success) {
+        setSmsForJob(null);
+        setSmsPhone("");
+      }
+    } catch {
+      toast({ title: "Couldn't send SMS", variant: "destructive" });
+    }
+  };
 
   const canAct = canManage && !!builderId;
 
@@ -350,7 +391,10 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                       {job.scheduledStart && (
                         <>
                           {" · "}
-                          {format(new Date(job.scheduledStart), "dd MMM yyyy")}
+                          {format(new Date(job.scheduledStart), "dd MMM yyyy, h:mm a")}
+                          {job.scheduledEnd && (
+                            <>{" – "}{format(new Date(job.scheduledEnd), "h:mm a")}</>
+                          )}
                         </>
                       )}
                     </p>
@@ -416,7 +460,7 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                       );
                     })()}
 
-                    {isExternalAssigned(job) && (
+                    {hasAssignee(job) && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -424,6 +468,20 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                       >
                         <LinkIcon className="mr-1 h-4 w-4" />
                         Get link
+                      </Button>
+                    )}
+
+                    {hasAssignee(job) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSmsPhone("");
+                          setSmsForJob(job.id);
+                        }}
+                      >
+                        <MessageSquare className="mr-1 h-4 w-4" />
+                        Send SMS
                       </Button>
                     )}
 
@@ -462,6 +520,37 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
         onClose={() => setLinkModalOpen(false)}
         queryId={queryId}
       />
+
+      <Dialog open={!!smsForJob} onOpenChange={(o) => !o && setSmsForJob(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Text the job link to the vendor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="job-sms-phone">Mobile number</Label>
+            <Input
+              id="job-sms-phone"
+              type="tel"
+              inputMode="tel"
+              placeholder="04XX XXX XXX"
+              value={smsPhone}
+              onChange={(e) => setSmsPhone(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              We'll text "a job has been assigned" with the secure link. Australian numbers.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSmsForJob(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendSms} disabled={sendingSms || !smsPhone.trim()}>
+              {sendingSms && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              Send SMS
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

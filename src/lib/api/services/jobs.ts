@@ -179,6 +179,20 @@ export const jobsApi = api.injectEndpoints({
       ],
     }),
 
+    // Text the assigned vendor the job/query link to a typed-in number (for
+    // vendors who don't check email). Works for internal and external vendors.
+    sendJobSms: build.mutation<
+      ApiResult,
+      { id: string; builderId: string; queryId: string; phone: string }
+    >({
+      query: ({ id, builderId, phone }) => ({
+        url: `/api/builder/job/${id}/send-sms`,
+        method: 'PUT',
+        params: { builderId },
+        body: { phone },
+      }),
+    }),
+
     deleteJob: build.mutation<
       void,
       { id: string; builderId: string; queryId: string }
@@ -253,6 +267,7 @@ export const {
   useUpdateJobStatusMutation,
   useAssignJobMutation,
   useAssignJobVendorMutation,
+  useSendJobSmsMutation,
   useDeleteJobMutation,
   useLinkJobRegistrationMutation,
   useGetMyJobsForQueryQuery,

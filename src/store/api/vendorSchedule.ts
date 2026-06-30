@@ -11,6 +11,10 @@ export interface VendorScheduleSlot {
   status: 'AVAILABLE' | 'BOOKED' | 'UNAVAILABLE';
   notes: string | null;
   queryId: string | null;
+  /** Denormalised context for BOOKED rows; null for blocks/available rows. */
+  queryTitle: string | null;
+  queryUnitNumber: string | null;
+  queryAddress: string | null;
 }
 
 export interface FreeWindow {

@@ -71,17 +71,43 @@ export interface CreateJobRequest {
  * window ({@code date}/{@code startTime}/{@code endTime}); external vendors
  * ignore it.
  */
+/** One reserved time block for an internal vendor. */
+export interface VendorBlockInput {
+  date: string;       // yyyy-MM-dd
+  startTime: string;  // HH:mm or HH:mm:ss
+  endTime: string;
+  notes?: string;
+}
+
 export interface AssignJobVendorRequest {
   id: string;
   builderId: string;
   queryId: string;
   vendorId: string;
-  /** yyyy-MM-dd — required for internal vendors. */
+  /**
+   * Multi-block path (internal vendors): one or more time blocks to reserve.
+   * Overlaps are allowed (double-booking) and blocks must be in the future.
+   */
+  blocks?: VendorBlockInput[];
+  /** Legacy single-block fields — still accepted for back-compat. */
   date?: string;
-  /** HH:mm or HH:mm:ss — required for internal vendors. */
   startTime?: string;
   endTime?: string;
   notes?: string;
+}
+
+/** A reserved time block as returned by GET /api/builder/job/{id}/blocks. */
+export interface VendorBlock {
+  id: string;
+  date: string;            // yyyy-MM-dd
+  startTime: string | null; // HH:mm:ss
+  endTime: string | null;
+  status: string;
+  notes: string | null;
+  queryId: string | null;
+  queryTitle: string | null;
+  queryUnitNumber: string | null;
+  queryAddress: string | null;
 }
 
 export interface ApiResult {
@@ -171,11 +197,45 @@ export const jobsApi = api.injectEndpoints({
         params: { builderId },
         body,
       }),
-      invalidatesTags: (result, error, { queryId }) => [
+      invalidatesTags: (result, error, { id, queryId, vendorId }) => [
         { type: 'Job', id: queryId },
+        { type: 'Job', id: `blocks-${id}` },
         'Query',
         'VendorAvailability',
         'VendorSchedule',
+        { type: 'VendorSchedule', id: vendorId },
+      ],
+    }),
+
+    // List the reserved time blocks for a job's source query (internal vendor).
+    getJobBlocks: build.query<
+      { success: boolean; message: string; data: VendorBlock[] },
+      { id: string; builderId: string }
+    >({
+      query: ({ id, builderId }) => ({
+        url: `/api/builder/job/${id}/blocks`,
+        method: 'GET',
+        params: { builderId },
+      }),
+      providesTags: (result, error, { id }) => [{ type: 'Job', id: `blocks-${id}` }],
+    }),
+
+    // Remove a single reserved time block from the internal vendor's calendar.
+    removeJobBlock: build.mutation<
+      ApiResult,
+      { id: string; builderId: string; slotId: string; queryId: string; vendorId: string }
+    >({
+      query: ({ id, builderId, slotId }) => ({
+        url: `/api/builder/job/${id}/block/${slotId}`,
+        method: 'DELETE',
+        params: { builderId },
+      }),
+      invalidatesTags: (result, error, { id, queryId, vendorId }) => [
+        { type: 'Job', id: `blocks-${id}` },
+        { type: 'Job', id: queryId },
+        'Query',
+        { type: 'VendorSchedule', id: vendorId },
+        'VendorAvailability',
       ],
     }),
 
@@ -267,6 +327,8 @@ export const {
   useUpdateJobStatusMutation,
   useAssignJobMutation,
   useAssignJobVendorMutation,
+  useGetJobBlocksQuery,
+  useRemoveJobBlockMutation,
   useSendJobSmsMutation,
   useDeleteJobMutation,
   useLinkJobRegistrationMutation,

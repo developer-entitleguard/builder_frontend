@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { addDays, format, parseISO } from "date-fns";
+import { addDays, format, parseISO, isBefore, startOfDay } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -13,14 +13,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  MapPin,
+  Plus,
+  X,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   useGetVendorScheduleQuery,
   type FreeWindow,
   type VendorDayAvailability,
+  type VendorScheduleSlot,
 } from "@/store/api/vendorSchedule";
-import { useAssignJobVendorMutation } from "@/lib/api/services/jobs";
+import {
+  useAssignJobVendorMutation,
+  useGetJobBlocksQuery,
+  useRemoveJobBlockMutation,
+  type VendorBlock,
+  type VendorBlockInput,
+} from "@/lib/api/services/jobs";
 
 interface JobAssignVendorDialogProps {
   open: boolean;
@@ -33,32 +47,45 @@ interface JobAssignVendorDialogProps {
   onAssigned?: () => void;
 }
 
+const DAYS_IN_VIEW = 7;
+
 const toHHmm = (raw: string | null | undefined): string => {
   if (!raw) return "";
   const [h, m] = raw.split(":");
   return `${h?.padStart(2, "0") ?? ""}:${m?.padStart(2, "0") ?? ""}`;
 };
 
-/** HH:mm string comparison is safe for zero-padded times. */
-const within = (inner: { start: string; end: string }, outer: FreeWindow) =>
-  toHHmm(outer.startTime) <= inner.start && inner.end <= toHHmm(outer.endTime);
-
 /** Default a 1-hour booking from a window start, clamped to the window end. */
 const defaultEnd = (start: string, windowEnd: string): string => {
   const [sh, sm] = start.split(":");
   const proposed = `${String(Number(sh) + 1).padStart(2, "0")}:${sm}`;
-  return proposed <= windowEnd ? proposed : windowEnd;
+  return windowEnd && proposed > windowEnd ? windowEnd : proposed;
 };
 
-const DAYS_IN_VIEW = 7;
+/** Half-open overlap test on zero-padded HH:mm strings. */
+const rangesOverlap = (
+  aStart: string,
+  aEnd: string,
+  bStart: string,
+  bEnd: string,
+) => aStart < bEnd && aEnd > bStart;
+
+/** A location label from a booking's denormalised query fields. */
+const locationLabel = (b: {
+  queryUnitNumber: string | null;
+  queryAddress: string | null;
+}): string => {
+  const unit = b.queryUnitNumber ? `Unit ${b.queryUnitNumber}` : "";
+  return [unit, b.queryAddress].filter(Boolean).join(", ");
+};
 
 /**
- * Schedule-aware assignment of an internal vendor to a job. Shows the vendor's
- * calendar a week at a time — free windows are clickable, booked/blocked slots
- * are shown so the scheduler can see what's taken. Picking a free window
- * pre-fills the booking, which can then be fine-tuned and confirmed. The chosen
- * time is validated against the vendor's free windows and booked on their
- * calendar.
+ * Schedule-aware allocation of an internal vendor to a job. Shows the vendor's
+ * calendar a week at a time — free windows are clickable and existing bookings
+ * are labelled with the task + address they're taken up by. The scheduler can
+ * stage multiple time blocks for this query, double-book over existing time (a
+ * block needn't use its full duration), and remove blocks already placed. Only
+ * future times can be booked.
  */
 const JobAssignVendorDialog = ({
   open,
@@ -72,11 +99,14 @@ const JobAssignVendorDialog = ({
 }: JobAssignVendorDialogProps) => {
   const { toast } = useToast();
   const today = format(new Date(), "yyyy-MM-dd");
+  const nowHHmm = format(new Date(), "HH:mm");
+
   const [weekStart, setWeekStart] = useState<string>(today);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [startTime, setStartTime] = useState<string>("");
   const [endTime, setEndTime] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+  const [staged, setStaged] = useState<VendorBlockInput[]>([]);
 
   const weekEnd = useMemo(
     () => format(addDays(parseISO(weekStart), DAYS_IN_VIEW - 1), "yyyy-MM-dd"),
@@ -91,6 +121,7 @@ const JobAssignVendorDialog = ({
       setStartTime("");
       setEndTime("");
       setNotes("");
+      setStaged([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -99,37 +130,129 @@ const JobAssignVendorDialog = ({
     { vendorId, from: weekStart, to: weekEnd },
     { skip: !vendorId || !open },
   );
-  const days: VendorDayAvailability[] = scheduleResp?.data ?? [];
+  const days: VendorDayAvailability[] = useMemo(
+    () => scheduleResp?.data ?? [],
+    [scheduleResp],
+  );
+
+  const { data: blocksResp } = useGetJobBlocksQuery(
+    { id: jobId, builderId },
+    { skip: !jobId || !builderId || !open },
+  );
+  const existingBlocks: VendorBlock[] = blocksResp?.data ?? [];
+
+  const [assignJobVendor, { isLoading: isAssigning }] =
+    useAssignJobVendorMutation();
+  const [removeJobBlock, { isLoading: isRemoving }] =
+    useRemoveJobBlockMutation();
 
   const selectedDay = useMemo(
     () => days.find((d) => d.date === selectedDate) ?? null,
     [days, selectedDate],
   );
 
-  const pickWindow = (date: string, w: FreeWindow) => {
-    const start = toHHmm(w.startTime);
-    const end = toHHmm(w.endTime);
-    setSelectedDate(date);
-    setStartTime(start);
-    setEndTime(defaultEnd(start, end));
+  const isPastDay = (date: string) =>
+    isBefore(startOfDay(parseISO(date)), startOfDay(parseISO(today)));
+
+  const timeInPast = (date: string, hhmm: string) =>
+    date < today || (date === today && hhmm <= nowHHmm);
+
+  // Occupied ranges (bookings + time-off blocks) for a given date, for the
+  // double-book warning. Overlapping is allowed — this only drives the hint.
+  const occupiedRanges = (date: string): Array<[string, string]> => {
+    const day = days.find((d) => d.date === date);
+    if (!day) return [];
+    return [...day.bookings, ...day.blocks]
+      .filter((s) => s.startTime && s.endTime)
+      .map((s) => [toHHmm(s.startTime), toHHmm(s.endTime)] as [string, string]);
   };
 
-  const windowValid = useMemo(() => {
-    if (!selectedDay || !startTime || !endTime) return false;
-    if (endTime <= startTime) return false;
-    return selectedDay.freeWindows.some((w) =>
-      within({ start: startTime, end: endTime }, w),
+  const draftOverlaps = useMemo(() => {
+    if (!selectedDate || !startTime || !endTime || endTime <= startTime)
+      return false;
+    return occupiedRanges(selectedDate).some(([bs, be]) =>
+      rangesOverlap(startTime, endTime, bs, be),
     );
-  }, [selectedDay, startTime, endTime]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, startTime, endTime, days]);
 
-  const [assignJobVendor, { isLoading: isAssigning }] =
-    useAssignJobVendorMutation();
+  const draftValid =
+    !!selectedDate &&
+    !!startTime &&
+    !!endTime &&
+    endTime > startTime &&
+    !timeInPast(selectedDate, startTime);
 
-  const handleAssign = async () => {
-    if (!windowValid) {
+  const pickWindow = (date: string, w: FreeWindow) => {
+    const ws = toHHmm(w.startTime);
+    const we = toHHmm(w.endTime);
+    // On today, never start a draft in the past.
+    const start = date === today && ws < nowHHmm ? nowHHmm : ws;
+    setSelectedDate(date);
+    setStartTime(start);
+    setEndTime(defaultEnd(start, we));
+  };
+
+  const addBlock = () => {
+    if (!draftValid) {
       toast({
-        title: "Chosen time is invalid",
-        description: "Pick a window inside one of the vendor's free slots.",
+        title: "Can't add this block",
+        description:
+          endTime <= startTime
+            ? "End time must be after the start time."
+            : "Pick a future date and time.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setStaged((prev) => [
+      ...prev,
+      {
+        date: selectedDate,
+        startTime: `${startTime}:00`,
+        endTime: `${endTime}:00`,
+      },
+    ]);
+    // Clear the draft time so the staged block is the source of truth.
+    setStartTime("");
+    setEndTime("");
+  };
+
+  const removeStaged = (idx: number) =>
+    setStaged((prev) => prev.filter((_, i) => i !== idx));
+
+  const handleRemoveExisting = async (slotId: string) => {
+    try {
+      const res = await removeJobBlock({
+        id: jobId,
+        builderId,
+        slotId,
+        queryId,
+        vendorId,
+      }).unwrap();
+      if (!res.success) {
+        toast({
+          title: "Couldn't remove block",
+          description: res.message,
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Block removed" });
+    } catch (e) {
+      toast({
+        title: "Couldn't remove block",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (staged.length === 0) {
+      toast({
+        title: "Add at least one time block",
+        description: "Pick a free window (or a custom time) and click Add.",
         variant: "destructive",
       });
       return;
@@ -140,9 +263,7 @@ const JobAssignVendorDialog = ({
         builderId,
         queryId,
         vendorId,
-        date: selectedDate,
-        startTime: `${startTime}:00`,
-        endTime: `${endTime}:00`,
+        blocks: staged,
         notes: notes || undefined,
       }).unwrap();
       if (!res.success) {
@@ -153,7 +274,7 @@ const JobAssignVendorDialog = ({
         });
         return;
       }
-      toast({ title: "Vendor assigned", description: res.message });
+      toast({ title: "Vendor scheduled", description: res.message });
       onAssigned?.();
       onOpenChange(false);
     } catch (e) {
@@ -165,14 +286,55 @@ const JobAssignVendorDialog = ({
     }
   };
 
+  const prevDisabled = weekStart === today;
+
+  const renderBooking = (b: VendorScheduleSlot) => {
+    const mine = b.queryId === queryId;
+    const loc = locationLabel(b);
+    return (
+      <div
+        key={b.id}
+        className={`rounded-md border px-2 py-1 text-[11px] ${
+          mine
+            ? "border-primary/40 bg-primary/5"
+            : "border-muted bg-muted/40 text-muted-foreground"
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-medium">
+            {toHHmm(b.startTime)}–{toHHmm(b.endTime)}
+          </span>
+          {mine && (
+            <Badge variant="default" className="h-4 px-1 text-[9px]">
+              This query
+            </Badge>
+          )}
+        </div>
+        {(b.queryTitle || loc) && (
+          <div className="mt-0.5 leading-tight">
+            {b.queryTitle && <div className="truncate">{b.queryTitle}</div>}
+            {loc && (
+              <div className="flex items-center gap-1 truncate opacity-80">
+                <MapPin className="h-3 w-3 shrink-0" />
+                {loc}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[640px]">
+      <DialogContent className="sm:max-w-[680px]">
         <DialogHeader>
           <DialogTitle>Schedule {vendorName}</DialogTitle>
           <DialogDescription>
-            Browse {vendorName}'s calendar and click a free window to book it.
-            Booked time is shown so you can avoid clashes.
+            Browse {vendorName}'s week, then reserve one or more time blocks for
+            this query. Existing bookings show what their time is taken up by.
+            You can double-book if a block won't need its full slot. Only future
+            times can be booked.
           </DialogDescription>
         </DialogHeader>
 
@@ -181,6 +343,7 @@ const JobAssignVendorDialog = ({
           <Button
             variant="outline"
             size="sm"
+            disabled={prevDisabled}
             onClick={() =>
               setWeekStart(
                 format(addDays(parseISO(weekStart), -DAYS_IN_VIEW), "yyyy-MM-dd"),
@@ -221,7 +384,7 @@ const JobAssignVendorDialog = ({
         </div>
 
         {/* Calendar */}
-        <div className="max-h-[320px] space-y-2 overflow-y-auto rounded-md border p-2">
+        <div className="max-h-[300px] space-y-2 overflow-y-auto rounded-md border p-2">
           {isFetching ? (
             <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -233,14 +396,16 @@ const JobAssignVendorDialog = ({
             </p>
           ) : (
             days.map((day) => {
+              const past = isPastDay(day.date);
               const isSelectedDay = day.date === selectedDate;
-              const nonWorking = !day.workingDay && day.freeWindows.length === 0;
+              const nonWorking =
+                !day.workingDay && day.freeWindows.length === 0;
               return (
                 <div
                   key={day.date}
                   className={`rounded-md border p-2 ${
                     isSelectedDay ? "border-primary bg-primary/5" : ""
-                  }`}
+                  } ${past ? "opacity-50" : ""}`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">
@@ -256,7 +421,9 @@ const JobAssignVendorDialog = ({
                       )}
                   </div>
 
-                  {nonWorking ? (
+                  {past ? (
+                    <p className="mt-1 text-xs text-muted-foreground">Past</p>
+                  ) : nonWorking ? (
                     <p className="mt-1 text-xs text-muted-foreground">
                       Non-working day
                     </p>
@@ -265,19 +432,16 @@ const JobAssignVendorDialog = ({
                       {day.freeWindows.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
                           {day.freeWindows.map((w, i) => {
-                            const ws = toHHmm(w.startTime);
                             const we = toHHmm(w.endTime);
-                            const active =
-                              isSelectedDay &&
-                              startTime >= ws &&
-                              endTime <= we &&
-                              endTime > startTime;
+                            // Hide windows entirely in the past on today.
+                            if (day.date === today && we <= nowHHmm) return null;
+                            const ws = toHHmm(w.startTime);
                             return (
                               <Button
                                 key={i}
                                 type="button"
                                 size="sm"
-                                variant={active ? "default" : "outline"}
+                                variant="outline"
                                 className="h-7 text-xs"
                                 onClick={() => pickWindow(day.date, w)}
                               >
@@ -288,21 +452,13 @@ const JobAssignVendorDialog = ({
                         </div>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Fully booked.
+                          No free windows.
                         </p>
                       )}
 
                       {day.bookings.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {day.bookings.map((b) => (
-                            <Badge
-                              key={b.id}
-                              variant="secondary"
-                              className="text-[10px] font-normal text-muted-foreground"
-                            >
-                              Booked {toHHmm(b.startTime)}–{toHHmm(b.endTime)}
-                            </Badge>
-                          ))}
+                        <div className="space-y-1">
+                          {day.bookings.map(renderBooking)}
                         </div>
                       )}
                     </div>
@@ -313,15 +469,15 @@ const JobAssignVendorDialog = ({
           )}
         </div>
 
-        {/* Selected slot — refine and confirm */}
+        {/* Draft block editor */}
         {selectedDay && (
-          <div className="space-y-3 rounded-md border p-3">
+          <div className="space-y-2 rounded-md border p-3">
             <p className="text-sm font-medium">
-              {format(parseISO(selectedDate), "EEE dd MMM yyyy")}
+              New block · {format(parseISO(selectedDate), "EEE dd MMM yyyy")}
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
               <div className="space-y-1">
-                <Label>Start</Label>
+                <Label className="text-xs">Start</Label>
                 <Input
                   type="time"
                   step={300}
@@ -330,7 +486,7 @@ const JobAssignVendorDialog = ({
                 />
               </div>
               <div className="space-y-1">
-                <Label>End</Label>
+                <Label className="text-xs">End</Label>
                 <Input
                   type="time"
                   step={300}
@@ -338,12 +494,72 @@ const JobAssignVendorDialog = ({
                   onChange={(e) => setEndTime(e.target.value)}
                 />
               </div>
+              <Button type="button" onClick={addBlock} disabled={!draftValid}>
+                <Plus className="mr-1 h-4 w-4" />
+                Add
+              </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {windowValid
-                ? `Will be booked as ${startTime}–${endTime}.`
-                : "Adjust the times to sit inside one of this day's free windows."}
-            </p>
+            {draftOverlaps && (
+              <Badge
+                variant="outline"
+                className="border-amber-400 text-[10px] text-amber-600"
+              >
+                Overlaps an existing booking — double-booked
+              </Badge>
+            )}
+            {!draftValid && startTime && endTime && (
+              <p className="text-xs text-destructive">
+                {endTime <= startTime
+                  ? "End must be after start."
+                  : "Time must be in the future."}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Blocks for this query — staged (pending) + already booked */}
+        {(staged.length > 0 || existingBlocks.length > 0) && (
+          <div className="space-y-2 rounded-md border p-3">
+            <p className="text-sm font-medium">Blocks for this query</p>
+            <div className="flex flex-wrap gap-1.5">
+              {existingBlocks.map((b) => (
+                <Badge
+                  key={b.id}
+                  variant="secondary"
+                  className="gap-1 py-1 text-[11px]"
+                >
+                  {format(parseISO(b.date), "EEE dd MMM")} {toHHmm(b.startTime)}–
+                  {toHHmm(b.endTime)}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveExisting(b.id)}
+                    disabled={isRemoving}
+                    className="ml-0.5 rounded-sm hover:text-destructive"
+                    aria-label="Remove block"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              {staged.map((b, i) => (
+                <Badge
+                  key={`staged-${i}`}
+                  variant="outline"
+                  className="gap-1 border-primary/50 py-1 text-[11px] text-primary"
+                >
+                  {format(parseISO(b.date), "EEE dd MMM")} {toHHmm(b.startTime)}–
+                  {toHHmm(b.endTime)} (new)
+                  <button
+                    type="button"
+                    onClick={() => removeStaged(i)}
+                    className="ml-0.5 rounded-sm hover:text-destructive"
+                    aria-label="Remove staged block"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
           </div>
         )}
 
@@ -353,16 +569,23 @@ const JobAssignVendorDialog = ({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Anything the vendor needs to know"
-            className="min-h-[60px]"
+            className="min-h-[56px]"
           />
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            Close
           </Button>
-          <Button onClick={handleAssign} disabled={isAssigning || !windowValid}>
-            {isAssigning ? "Assigning…" : "Confirm assignment"}
+          <Button
+            onClick={handleConfirm}
+            disabled={isAssigning || staged.length === 0}
+          >
+            {isAssigning
+              ? "Booking…"
+              : `Book ${staged.length || ""} block${
+                  staged.length === 1 ? "" : "s"
+                }`.trim()}
           </Button>
         </DialogFooter>
       </DialogContent>

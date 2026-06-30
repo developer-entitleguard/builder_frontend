@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, format, parseISO, isBefore, startOfDay } from "date-fns";
 import {
   Dialog,
@@ -32,6 +32,7 @@ import {
   useAssignJobVendorMutation,
   useGetJobBlocksQuery,
   useRemoveJobBlockMutation,
+  useUpdateJobBlockMutation,
   type VendorBlock,
   type VendorBlockInput,
 } from "@/lib/api/services/jobs";
@@ -51,6 +52,7 @@ const DAYS_IN_VIEW = 7;
 const HOUR_PX = 48; // pixel height of one hour row
 const GUTTER_PX = 56; // width of the left time gutter
 const SNAP_MIN = 30; // click snaps to the nearest 30 minutes
+const DRAG_SNAP_MIN = 15; // drag snaps to the nearest 15 minutes
 const DEFAULT_DURATION = 60; // a fresh block defaults to 1 hour
 
 const toHHmm = (raw: string | null | undefined): string => {
@@ -107,6 +109,7 @@ type EventKind = "booking" | "block" | "staged" | "draft";
 
 interface GridEvent {
   key: string;
+  date: string; // yyyy-MM-dd — the column this event belongs to
   start: number; // minutes since midnight
   end: number;
   kind: EventKind;
@@ -115,8 +118,31 @@ interface GridEvent {
   sub?: string;
   slotId?: string;
   stagedIdx?: number;
+  dragging?: boolean;
   lane: number;
   laneCount: number;
+}
+
+type DragMode = "move" | "resize-start" | "resize-end";
+
+interface DragTarget {
+  kind: EventKind;
+  mine?: boolean;
+  label: string;
+  sub?: string;
+  slotId?: string;
+  stagedIdx?: number;
+}
+
+interface DragState {
+  mode: DragMode;
+  target: DragTarget;
+  origStart: number;
+  origEnd: number;
+  origDate: string;
+  startX: number;
+  startY: number;
+  cols: Array<{ date: string; left: number; right: number }>;
 }
 
 /**
@@ -188,6 +214,11 @@ const JobAssignVendorDialog = ({
   const [endTime, setEndTime] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [staged, setStaged] = useState<VendorBlockInput[]>([]);
+  // Optimistic positions for rescheduled bookings, keyed by slot id, so a moved
+  // block lands immediately instead of snapping back until the refetch returns.
+  const [optimistic, setOptimistic] = useState<
+    Record<string, { date: string; start: number; end: number }>
+  >({});
 
   const weekEnd = useMemo(
     () => format(addDays(parseISO(weekStart), DAYS_IN_VIEW - 1), "yyyy-MM-dd"),
@@ -203,6 +234,7 @@ const JobAssignVendorDialog = ({
       setEndTime("");
       setNotes("");
       setStaged([]);
+      setOptimistic({});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -216,6 +248,43 @@ const JobAssignVendorDialog = ({
     [scheduleResp],
   );
 
+  const allBookings = useMemo(() => days.flatMap((d) => d.bookings), [days]);
+
+  // Apply any optimistic reschedule override so a moved block renders in place.
+  const effectiveBooking = (
+    b: VendorDayAvailability["bookings"][number],
+  ): { date: string; start: number; end: number } => {
+    const o = optimistic[b.id];
+    return o
+      ? o
+      : { date: b.date, start: hmToMin(b.startTime), end: hmToMin(b.endTime) };
+  };
+
+  // Drop an override once the refetched data matches it (the catch handler rolls
+  // it back on failure).
+  useEffect(() => {
+    setOptimistic((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      const next = { ...prev };
+      let changed = false;
+      allBookings.forEach((b) => {
+        const o = next[b.id];
+        if (
+          o &&
+          b.startTime &&
+          b.endTime &&
+          b.date === o.date &&
+          hmToMin(b.startTime) === o.start &&
+          hmToMin(b.endTime) === o.end
+        ) {
+          delete next[b.id];
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [allBookings]);
+
   const { data: blocksResp } = useGetJobBlocksQuery(
     { id: jobId, builderId },
     { skip: !jobId || !builderId || !open },
@@ -226,6 +295,20 @@ const JobAssignVendorDialog = ({
     useAssignJobVendorMutation();
   const [removeJobBlock, { isLoading: isRemoving }] =
     useRemoveJobBlockMutation();
+  const [updateJobBlock] = useUpdateJobBlockMutation();
+
+  // Drag-to-move/resize state. `dragRef` holds the live gesture (read during
+  // render to hide the original event); `preview` drives the on-grid ghost.
+  const gridBodyRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const previewRef = useRef<{ date: string; start: number; end: number } | null>(
+    null,
+  );
+  const [preview, setPreview] = useState<{
+    date: string;
+    start: number;
+    end: number;
+  } | null>(null);
 
   const isPastDay = (date: string) =>
     isBefore(startOfDay(parseISO(date)), startOfDay(parseISO(today)));
@@ -289,14 +372,21 @@ const JobAssignVendorDialog = ({
   }, [selectedDate, startTime, endTime, days]);
 
   const eventsForDay = (day: VendorDayAvailability): GridEvent[] => {
+    const dr = dragRef.current;
     const raw: Omit<GridEvent, "lane" | "laneCount">[] = [];
-    day.bookings.forEach((b) => {
+    allBookings.forEach((b) => {
       if (!b.startTime || !b.endTime) return;
+      const eff = effectiveBooking(b);
+      if (eff.date !== day.date) return;
       const mine = b.queryId === queryId;
+      // Hide the block being dragged — it's shown as the preview ghost instead.
+      if (dr && dr.target.kind === "booking" && mine && dr.target.slotId === b.id)
+        return;
       raw.push({
         key: `bk-${b.id}`,
-        start: hmToMin(b.startTime),
-        end: hmToMin(b.endTime),
+        date: day.date,
+        start: eff.start,
+        end: eff.end,
         kind: "booking",
         mine,
         label: b.queryTitle || (mine ? "This query" : "Booked"),
@@ -308,6 +398,7 @@ const JobAssignVendorDialog = ({
       if (!b.startTime || !b.endTime) return;
       raw.push({
         key: `bl-${b.id}`,
+        date: day.date,
         start: hmToMin(b.startTime),
         end: hmToMin(b.endTime),
         kind: "block",
@@ -316,8 +407,10 @@ const JobAssignVendorDialog = ({
     });
     staged.forEach((b, i) => {
       if (b.date !== day.date) return;
+      if (dr && dr.target.kind === "staged" && dr.target.stagedIdx === i) return;
       raw.push({
         key: `st-${i}`,
+        date: day.date,
         start: hmToMin(b.startTime),
         end: hmToMin(b.endTime),
         kind: "staged",
@@ -329,14 +422,31 @@ const JobAssignVendorDialog = ({
       selectedDate === day.date &&
       startTime &&
       endTime &&
-      endTime > startTime
+      endTime > startTime &&
+      !(dr && dr.target.kind === "draft")
     ) {
       raw.push({
         key: "draft",
+        date: day.date,
         start: hmToMin(startTime),
         end: hmToMin(endTime),
         kind: "draft",
         label: "New block",
+      });
+    }
+    if (dr && preview && preview.date === day.date) {
+      raw.push({
+        key: "preview",
+        date: day.date,
+        start: preview.start,
+        end: preview.end,
+        kind: dr.target.kind,
+        mine: dr.target.mine,
+        label: dr.target.label,
+        sub: dr.target.sub,
+        slotId: dr.target.slotId,
+        stagedIdx: dr.target.stagedIdx,
+        dragging: true,
       });
     }
     return layoutDay(raw);
@@ -373,6 +483,161 @@ const JobAssignVendorDialog = ({
     setSelectedDate(day.date);
     setStartTime(minToHHmm(minute));
     setEndTime(minToHHmm(end));
+  };
+
+  const commitDrag = (
+    d: DragState | null,
+    p: { date: string; start: number; end: number } | null,
+  ) => {
+    if (!d || !p) return;
+    // No-op if nothing moved (a plain press without a drag).
+    if (p.date === d.origDate && p.start === d.origStart && p.end === d.origEnd)
+      return;
+    if (p.date < today || (p.date === today && minToHHmm(p.start) <= nowHHmm)) {
+      toast({ title: "Can't schedule in the past", variant: "destructive" });
+      return;
+    }
+    const startStr = `${minToHHmm(p.start)}:00`;
+    const endStr = `${minToHHmm(p.end)}:00`;
+    if (d.target.kind === "staged" && d.target.stagedIdx != null) {
+      const idx = d.target.stagedIdx;
+      setStaged((prev) =>
+        prev.map((b, i) =>
+          i === idx ? { date: p.date, startTime: startStr, endTime: endStr } : b,
+        ),
+      );
+    } else if (d.target.kind === "draft") {
+      setSelectedDate(p.date);
+      setStartTime(minToHHmm(p.start));
+      setEndTime(minToHHmm(p.end));
+    } else if (d.target.kind === "booking" && d.target.slotId) {
+      const slotId = d.target.slotId;
+      // Show the new position immediately; the effect clears this once the
+      // refetch confirms it, and the handlers below roll it back on failure.
+      setOptimistic((prev) => ({
+        ...prev,
+        [slotId]: { date: p.date, start: p.start, end: p.end },
+      }));
+      const rollback = () =>
+        setOptimistic((prev) => {
+          const next = { ...prev };
+          delete next[slotId];
+          return next;
+        });
+      updateJobBlock({
+        id: jobId,
+        builderId,
+        slotId,
+        queryId,
+        vendorId,
+        date: p.date,
+        startTime: startStr,
+        endTime: endStr,
+      })
+        .unwrap()
+        .then((res) => {
+          if (!res.success) {
+            rollback();
+            toast({
+              title: "Couldn't move block",
+              description: res.message,
+              variant: "destructive",
+            });
+          }
+        })
+        .catch((err) => {
+          rollback();
+          toast({
+            title: "Couldn't move block",
+            description: err instanceof Error ? err.message : "Unknown error",
+            variant: "destructive",
+          });
+        });
+    }
+  };
+
+  const beginDrag = (
+    e: React.PointerEvent<HTMLDivElement>,
+    ev: GridEvent,
+    mode: DragMode,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const cols = gridBodyRef.current
+      ? Array.from(
+          gridBodyRef.current.querySelectorAll<HTMLElement>("[data-daycol]"),
+        ).map((el) => {
+          const r = el.getBoundingClientRect();
+          return { date: el.dataset.date ?? "", left: r.left, right: r.right };
+        })
+      : [];
+    dragRef.current = {
+      mode,
+      target: {
+        kind: ev.kind,
+        mine: ev.mine,
+        label: ev.label,
+        sub: ev.sub,
+        slotId: ev.slotId,
+        stagedIdx: ev.stagedIdx,
+      },
+      origStart: ev.start,
+      origEnd: ev.end,
+      origDate: ev.date,
+      startX: e.clientX,
+      startY: e.clientY,
+      cols,
+    };
+    previewRef.current = { date: ev.date, start: ev.start, end: ev.end };
+    setPreview(previewRef.current);
+
+    const onMove = (me: PointerEvent) => {
+      const cur = dragRef.current;
+      if (!cur) return;
+      const dyMin =
+        Math.round((((me.clientY - cur.startY) / HOUR_PX) * 60) / DRAG_SNAP_MIN) *
+        DRAG_SNAP_MIN;
+      let date = cur.origDate;
+      let start = cur.origStart;
+      let end = cur.origEnd;
+      if (cur.mode === "move") {
+        let shift = dyMin;
+        if (cur.origStart + shift < startMin) shift = startMin - cur.origStart;
+        if (cur.origEnd + shift > endMin) shift = endMin - cur.origEnd;
+        start = cur.origStart + shift;
+        end = cur.origEnd + shift;
+        const col = cur.cols.find(
+          (c) => me.clientX >= c.left && me.clientX < c.right,
+        );
+        if (col && col.date) date = col.date;
+      } else if (cur.mode === "resize-start") {
+        start = Math.min(
+          Math.max(cur.origStart + dyMin, startMin),
+          cur.origEnd - DRAG_SNAP_MIN,
+        );
+        end = cur.origEnd;
+      } else {
+        end = Math.max(
+          Math.min(cur.origEnd + dyMin, endMin),
+          cur.origStart + DRAG_SNAP_MIN,
+        );
+        start = cur.origStart;
+      }
+      previewRef.current = { date, start, end };
+      setPreview(previewRef.current);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      const d2 = dragRef.current;
+      const p2 = previewRef.current;
+      dragRef.current = null;
+      previewRef.current = null;
+      setPreview(null);
+      commitDrag(d2, p2);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   };
 
   const addBlock = () => {
@@ -481,9 +746,13 @@ const JobAssignVendorDialog = ({
     const top = ((ev.start - startMin) / 60) * HOUR_PX;
     const height = Math.max(((ev.end - ev.start) / 60) * HOUR_PX, 16);
     const widthPct = 100 / ev.laneCount;
+    // Editable = blocks the builder owns for this query (drag to move/resize).
+    const editable =
+      ev.kind === "staged" ||
+      ev.kind === "draft" ||
+      (ev.kind === "booking" && !!ev.mine);
     const removable =
-      (ev.kind === "booking" && ev.mine && ev.slotId) ||
-      ev.kind === "staged";
+      (ev.kind === "booking" && ev.mine && ev.slotId) || ev.kind === "staged";
     const colour =
       ev.kind === "booking"
         ? ev.mine
@@ -500,18 +769,40 @@ const JobAssignVendorDialog = ({
     return (
       <div
         key={ev.key}
-        className="pointer-events-none absolute overflow-hidden rounded-sm px-1 py-0.5"
+        onPointerDown={
+          editable ? (e) => beginDrag(e, ev, "move") : undefined
+        }
+        className={`absolute overflow-hidden rounded-sm px-1 py-0.5 ${
+          editable ? "cursor-move touch-none select-none" : "pointer-events-none"
+        } ${ev.dragging ? "z-30 opacity-90" : ""}`}
         style={{
           top,
           height,
           left: `calc(${ev.lane * widthPct}% + 1px)`,
           width: `calc(${widthPct}% - 2px)`,
+          pointerEvents: editable ? "auto" : "none",
         }}
       >
         <div
-          className={`relative h-full w-full overflow-hidden rounded-sm ${colour}`}
+          className={`relative h-full w-full overflow-hidden rounded-sm ${colour} ${
+            ev.dragging ? "ring-2 ring-primary" : ""
+          }`}
           style={hatch}
         >
+          {editable && (
+            <>
+              <div
+                onPointerDown={(e) => beginDrag(e, ev, "resize-start")}
+                className="pointer-events-auto absolute inset-x-0 top-0 z-10 h-2 cursor-ns-resize"
+                aria-hidden="true"
+              />
+              <div
+                onPointerDown={(e) => beginDrag(e, ev, "resize-end")}
+                className="pointer-events-auto absolute inset-x-0 bottom-0 z-10 h-2 cursor-ns-resize"
+                aria-hidden="true"
+              />
+            </>
+          )}
           <div className="px-1 py-0.5 text-[10px] leading-tight">
             <div className="truncate font-medium">
               {minToHHmm(ev.start)} {ev.label}
@@ -523,13 +814,14 @@ const JobAssignVendorDialog = ({
           {removable && (
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={() =>
                 ev.kind === "staged"
                   ? removeStaged(ev.stagedIdx!)
                   : handleRemoveExisting(ev.slotId!)
               }
               disabled={isRemoving}
-              className="pointer-events-auto absolute right-0.5 top-0.5 rounded-sm bg-black/10 p-0.5 hover:bg-black/20"
+              className="pointer-events-auto absolute right-0.5 top-0.5 z-20 rounded-sm bg-black/10 p-0.5 hover:bg-black/20"
               aria-label="Remove block"
             >
               <X className="h-3 w-3" />
@@ -547,7 +839,7 @@ const JobAssignVendorDialog = ({
           <DialogTitle>Schedule {vendorName}</DialogTitle>
           <DialogDescription>
             {view === "calendar"
-              ? `Click an empty slot to reserve time for this query. Existing bookings show what ${vendorName}'s time is taken up by — you can double-book by clicking beside one. Only future times can be booked.`
+              ? `Click an empty slot to reserve time — drag a block to move it, or drag its top/bottom edge to resize. Double-book by clicking beside an existing booking. Only future times can be booked.`
               : `Pick a free window (or set a custom time) to reserve time for this query. Existing bookings show what ${vendorName}'s time is taken up by. Only future times can be booked.`}
           </DialogDescription>
         </DialogHeader>
@@ -665,7 +957,7 @@ const JobAssignVendorDialog = ({
               </div>
 
               {/* Body: time gutter + day columns */}
-              <div className="flex">
+              <div className="flex" ref={gridBodyRef}>
                 <div style={{ width: GUTTER_PX }} className="shrink-0">
                   {hours.map((h) => (
                     <div
@@ -693,6 +985,8 @@ const JobAssignVendorDialog = ({
                   return (
                     <div
                       key={day.date}
+                      data-daycol
+                      data-date={day.date}
                       className="relative flex-1 border-l"
                       style={{ height: gridHeight }}
                     >

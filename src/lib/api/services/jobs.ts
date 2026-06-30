@@ -220,6 +220,35 @@ export const jobsApi = api.injectEndpoints({
       providesTags: (result, error, { id }) => [{ type: 'Job', id: `blocks-${id}` }],
     }),
 
+    // Move/resize a reserved time block (drag-to-reschedule on the calendar).
+    updateJobBlock: build.mutation<
+      ApiResult,
+      {
+        id: string;
+        builderId: string;
+        slotId: string;
+        queryId: string;
+        vendorId: string;
+        date: string;
+        startTime: string;
+        endTime: string;
+      }
+    >({
+      query: ({ id, builderId, slotId, date, startTime, endTime }) => ({
+        url: `/api/builder/job/${id}/block/${slotId}`,
+        method: 'PUT',
+        params: { builderId },
+        body: { date, startTime, endTime },
+      }),
+      invalidatesTags: (result, error, { id, queryId, vendorId }) => [
+        { type: 'Job', id: `blocks-${id}` },
+        { type: 'Job', id: queryId },
+        'Query',
+        { type: 'VendorSchedule', id: vendorId },
+        'VendorAvailability',
+      ],
+    }),
+
     // Remove a single reserved time block from the internal vendor's calendar.
     removeJobBlock: build.mutation<
       ApiResult,
@@ -328,6 +357,7 @@ export const {
   useAssignJobMutation,
   useAssignJobVendorMutation,
   useGetJobBlocksQuery,
+  useUpdateJobBlockMutation,
   useRemoveJobBlockMutation,
   useSendJobSmsMutation,
   useDeleteJobMutation,

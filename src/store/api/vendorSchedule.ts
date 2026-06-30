@@ -230,6 +230,23 @@ export const vendorScheduleApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Query', 'VendorAvailability', 'VendorSchedule'],
     }),
+
+    // Vendor self-service: the logged-in internal vendor moves/resizes one of
+    // their own booked jobs. Server enforces future-only + not-once-completed.
+    moveMyBookedSlot: build.mutation<
+      ApiResponseDto,
+      { slotId: string; vendorId: string; date: string; startTime: string; endTime: string }
+    >({
+      query: ({ slotId, date, startTime, endTime }) => ({
+        url: `/api/vendor/me/schedule/${slotId}`,
+        method: 'PUT',
+        body: { date, startTime, endTime },
+      }),
+      invalidatesTags: (_result, _error, arg) => [
+        { type: 'VendorSchedule', id: arg.vendorId },
+        'VendorAvailability',
+      ],
+    }),
   }),
 });
 
@@ -243,4 +260,5 @@ export const {
   useDeleteVendorSlotMutation,
   useGetVendorAvailabilityQuery,
   useAssignQueryToVendorMutation,
+  useMoveMyBookedSlotMutation,
 } = vendorScheduleApi;

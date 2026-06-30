@@ -37,6 +37,7 @@ import {
   useUpdateMyWorkingScheduleMutation,
   type VendorDayAvailability,
 } from "@/store/api/vendorSchedule";
+import VendorJobCalendar from "@/components/schedule/VendorJobCalendar";
 
 const ALL_WEEKDAYS: { iso: number; short: string; label: string }[] = [
   { iso: 1, short: "Mon", label: "Monday" },
@@ -276,6 +277,21 @@ const MySchedule = () => {
     <div>
       <Header />
       <div className="max-w-5xl mx-auto p-4 space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5" />
+              My jobs
+            </CardTitle>
+            <CardDescription>
+              Your scheduled jobs this week. Drag a job to reschedule it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VendorJobCalendar vendorId={profile.id} />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between flex-wrap gap-3">

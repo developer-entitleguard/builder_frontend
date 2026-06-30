@@ -11,7 +11,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, Briefcase, LinkIcon, MessageSquare } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Trash2,
+  Briefcase,
+  LinkIcon,
+  MessageSquare,
+  CalendarClock,
+} from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useGetBuilderVendorsQuery } from "@/lib/api/services/builderVendor";
@@ -69,6 +77,11 @@ function isExternalAssigned(job: BuilderJob) {
 /** Any vendor assigned (internal or external) — both can be reached via the link/SMS. */
 function hasAssignee(job: BuilderJob) {
   return !!(job.assigneeUserId || job.assigneeName || job.assigneeEmail);
+}
+
+/** Closed jobs can't be reassigned or rescheduled. */
+function isTerminal(status: string) {
+  return status === "COMPLETED" || status === "CANCELLED";
 }
 
 function assigneeLabel(job: BuilderJob) {
@@ -420,7 +433,7 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                       </SelectContent>
                     </Select>
 
-                    {(() => {
+                    {!isTerminal(job.status) && (() => {
                       const assignedVendorId = vendorIdForJob(job);
                       const selectedVendorId =
                         assignVendorByJob[job.id] ?? assignedVendorId ?? "";
@@ -457,6 +470,30 @@ const JobsPanel = ({ queryId, builderId, canManage }: JobsPanelProps) => {
                             Assign
                           </Button>
                         </>
+                      );
+                    })()}
+
+                    {/* Reschedule an internal vendor already on the job — opens the
+                        same calendar, where existing blocks can be moved/resized. */}
+                    {job.assigneeUserId && !isTerminal(job.status) && (() => {
+                      const vId = vendorIdForJob(job);
+                      const v = vId ? vendorById.get(vId) : undefined;
+                      if (!v) return null;
+                      return (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setScheduleFor({
+                              jobId: job.id,
+                              vendorId: v.id,
+                              vendorName: v.name,
+                            })
+                          }
+                        >
+                          <CalendarClock className="mr-1 h-4 w-4" />
+                          Reschedule
+                        </Button>
                       );
                     })()}
 

@@ -36,6 +36,21 @@ import {
   type VendorBlock,
   type VendorBlockInput,
 } from "@/lib/api/services/jobs";
+import {
+  DAYS_IN_VIEW,
+  HOUR_PX,
+  GUTTER_PX,
+  DRAG_SNAP_MIN,
+  toHHmm,
+  hmToMin,
+  minToHHmm,
+  hourLabel,
+  rangesOverlap,
+  defaultEnd,
+  locationLabel,
+  layoutDay,
+  type EventKind,
+} from "@/components/schedule/timeGrid";
 
 interface JobAssignVendorDialogProps {
   open: boolean;
@@ -48,64 +63,8 @@ interface JobAssignVendorDialogProps {
   onAssigned?: () => void;
 }
 
-const DAYS_IN_VIEW = 7;
-const HOUR_PX = 48; // pixel height of one hour row
-const GUTTER_PX = 56; // width of the left time gutter
 const SNAP_MIN = 30; // click snaps to the nearest 30 minutes
-const DRAG_SNAP_MIN = 15; // drag snaps to the nearest 15 minutes
 const DEFAULT_DURATION = 60; // a fresh block defaults to 1 hour
-
-const toHHmm = (raw: string | null | undefined): string => {
-  if (!raw) return "";
-  const [h, m] = raw.split(":");
-  return `${h?.padStart(2, "0") ?? ""}:${m?.padStart(2, "0") ?? ""}`;
-};
-
-/** "HH:mm[:ss]" → minutes since midnight. */
-const hmToMin = (raw: string | null | undefined): number => {
-  if (!raw) return 0;
-  const [h, m] = raw.split(":");
-  return Number(h) * 60 + Number(m);
-};
-
-/** minutes since midnight → "HH:mm" (zero-padded). */
-const minToHHmm = (min: number): string => {
-  const clamped = Math.max(0, Math.min(24 * 60, min));
-  const h = Math.floor(clamped / 60);
-  const m = clamped % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-};
-
-/** Default a 1-hour booking from a window start, clamped to the window end. */
-const defaultEnd = (start: string, windowEnd: string): string => {
-  const [sh, sm] = start.split(":");
-  const proposed = `${String(Number(sh) + 1).padStart(2, "0")}:${sm}`;
-  return windowEnd && proposed > windowEnd ? windowEnd : proposed;
-};
-
-const hourLabel = (h: number): string => {
-  const ampm = h < 12 || h === 24 ? "AM" : "PM";
-  const hr = h % 12 === 0 ? 12 : h % 12;
-  return `${hr} ${ampm}`;
-};
-
-/** Half-open overlap test on zero-padded HH:mm strings. */
-const rangesOverlap = (
-  aStart: string,
-  aEnd: string,
-  bStart: string,
-  bEnd: string,
-) => aStart < bEnd && aEnd > bStart;
-
-const locationLabel = (b: {
-  queryUnitNumber: string | null;
-  queryAddress: string | null;
-}): string => {
-  const unit = b.queryUnitNumber ? `Unit ${b.queryUnitNumber}` : "";
-  return [unit, b.queryAddress].filter(Boolean).join(", ");
-};
-
-type EventKind = "booking" | "block" | "staged" | "draft";
 
 interface GridEvent {
   key: string;
@@ -144,46 +103,6 @@ interface DragState {
   startY: number;
   cols: Array<{ date: string; left: number; right: number }>;
 }
-
-/**
- * Pack a day's events into side-by-side lanes so overlapping (double-booked)
- * blocks render next to each other, like Google Calendar. Events are grouped
- * into clusters of chained overlaps; within a cluster each event gets the first
- * lane free at its start, and every event in the cluster shares the cluster's
- * lane count for its width.
- */
-const layoutDay = (events: Omit<GridEvent, "lane" | "laneCount">[]): GridEvent[] => {
-  const sorted = [...events].sort((a, b) => a.start - b.start || a.end - b.end);
-  const out: GridEvent[] = [];
-  let cluster: Array<Omit<GridEvent, "lane" | "laneCount"> & { lane: number }> = [];
-  let clusterEnd = -1;
-
-  const flush = () => {
-    const laneEnds: number[] = [];
-    cluster.forEach((ev) => {
-      let lane = 0;
-      while (lane < laneEnds.length && laneEnds[lane] > ev.start) lane += 1;
-      ev.lane = lane;
-      laneEnds[lane] = ev.end;
-    });
-    const laneCount = laneEnds.length || 1;
-    cluster.forEach((ev) => out.push({ ...ev, laneCount }));
-    cluster = [];
-  };
-
-  sorted.forEach((ev) => {
-    if (cluster.length === 0 || ev.start < clusterEnd) {
-      cluster.push({ ...ev, lane: 0 });
-      clusterEnd = Math.max(clusterEnd, ev.end);
-    } else {
-      flush();
-      cluster.push({ ...ev, lane: 0 });
-      clusterEnd = ev.end;
-    }
-  });
-  flush();
-  return out;
-};
 
 /**
  * Schedule-aware allocation of an internal vendor to a job, on a Google-style

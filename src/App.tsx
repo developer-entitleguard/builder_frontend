@@ -42,6 +42,8 @@ import ApprovalResponse from "./pages/ApprovalResponse";
 import QueryDetail from "./pages/QueryDetail";
 import CreateQuery from "./pages/CreateQuery";
 import VendorQuery from "./pages/VendorQuery";
+import ComplianceUpload from "./pages/ComplianceUpload";
+import Signup from "./pages/Signup";
 import QueryRedirect from "./pages/QueryRedirect";
 import MySchedule from "./pages/MySchedule";
 import MyAssignments from "./pages/MyAssignments";
@@ -159,6 +161,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/signup" element={<Signup />} />
               <Route path="/auth/resetPassword" element={<ResetPassword />} />
               <Route path="/dashboard" element={
                 <ProtectedRoute>
@@ -388,6 +391,8 @@ const App = () => (
               {/* Public customer-facing quote view — token is the credential, no auth. */}
               <Route path="/q/:token" element={<PublicQuote />} />
               <Route path="/vendor/query" element={<VendorQuery />} />
+              {/* Public off-platform compliance-document upload — 30-day magic-link token, no auth. */}
+              <Route path="/compliance-upload" element={<ComplianceUpload />} />
               <Route path="/consent" element={<ConsentConfirmation />} />
               <Route path="/accept-invitation" element={<AcceptInvitation />} />
               <Route path="/approval-response" element={<ApprovalResponse />} />

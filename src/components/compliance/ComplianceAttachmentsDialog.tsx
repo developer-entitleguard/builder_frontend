@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, Upload, Link2, Trash2, FileText, ExternalLink } from "lucide-react";
+import { Loader2, Upload, Link2, Trash2, FileText, ExternalLink, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getApiBaseUrl } from "@/lib/config";
 import {
@@ -18,6 +18,8 @@ import {
   useUploadComplianceAttachmentMutation,
   useLinkComplianceAttachmentMutation,
   useDeleteComplianceAttachmentMutation,
+  useApproveComplianceAttachmentMutation,
+  useRejectComplianceAttachmentMutation,
 } from "@/store/api/complianceDocuments";
 
 interface ComplianceAttachmentsDialogProps {
@@ -46,6 +48,8 @@ export const ComplianceAttachmentsDialog = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [linkUrl, setLinkUrl] = useState("");
   const [notes, setNotes] = useState("");
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const { data, isLoading } = useGetComplianceAttachmentsQuery(
     { ownerType, ownerId, documentId },
@@ -54,6 +58,36 @@ export const ComplianceAttachmentsDialog = ({
   const [uploadAttachment, { isLoading: uploading }] = useUploadComplianceAttachmentMutation();
   const [linkAttachment, { isLoading: linking }] = useLinkComplianceAttachmentMutation();
   const [deleteAttachment] = useDeleteComplianceAttachmentMutation();
+  const [approveAttachment, { isLoading: approving }] = useApproveComplianceAttachmentMutation();
+  const [rejectAttachment, { isLoading: rejecting }] = useRejectComplianceAttachmentMutation();
+
+  // Approve/reject endpoints exist only for project-scope documents.
+  const canReview = ownerType === "PROJECT" && !readOnly;
+
+  const handleApprove = async (attachmentId: string) => {
+    try {
+      await approveAttachment({ projectId: ownerId, documentId, attachmentId }).unwrap();
+      toast({ title: "Attachment approved", description: "Document marked as received." });
+    } catch {
+      toast({ title: "Couldn't approve", variant: "destructive" });
+    }
+  };
+
+  const handleReject = async (attachmentId: string) => {
+    try {
+      await rejectAttachment({
+        projectId: ownerId,
+        documentId,
+        attachmentId,
+        reason: rejectReason.trim() || undefined,
+      }).unwrap();
+      setRejectingId(null);
+      setRejectReason("");
+      toast({ title: "Attachment rejected", description: "The assignee will be asked to redo it." });
+    } catch {
+      toast({ title: "Couldn't reject", variant: "destructive" });
+    }
+  };
 
   const attachments = data?.data ?? [];
   const busy = uploading || linking;
@@ -214,22 +248,103 @@ export const ComplianceAttachmentsDialog = ({
                             v{att.version}
                           </Badge>
                         </a>
+                        {att.uploadedBy && att.reviewStatus === "PENDING" && (
+                          <p className="mt-0.5 text-xs text-muted-foreground break-words">
+                            Submitted by {att.uploadedBy}
+                          </p>
+                        )}
                         {att.notes && (
                           <p className="mt-1 text-xs text-muted-foreground break-words">
                             {att.notes}
                           </p>
                         )}
+                        {/* Review state */}
+                        {att.reviewStatus === "PENDING" && (
+                          <Badge className="mt-1 bg-amber-100 text-amber-800 hover:bg-amber-100">
+                            Pending review
+                          </Badge>
+                        )}
+                        {att.reviewStatus === "APPROVED" && att.isCurrent && (
+                          <Badge className="mt-1 bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                            Approved
+                          </Badge>
+                        )}
+                        {att.reviewStatus === "REJECTED" && (
+                          <p className="mt-1 text-xs text-destructive break-words">
+                            Rejected{att.rejectionReason ? `: ${att.rejectionReason}` : ""}
+                          </p>
+                        )}
+                        {/* Inline reject reason */}
+                        {canReview && rejectingId === att.id && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <Input
+                              value={rejectReason}
+                              onChange={(e) => setRejectReason(e.target.value)}
+                              placeholder="Reason (optional)"
+                              className="h-8"
+                              autoFocus
+                              onKeyDown={(e) => e.key === "Enter" && handleReject(att.id)}
+                            />
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={rejecting}
+                              onClick={() => handleReject(att.id)}
+                            >
+                              {rejecting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setRejectingId(null);
+                                setRejectReason("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      {!readOnly && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 shrink-0"
-                          onClick={() => handleDelete(att.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      )}
+                      <div className="flex shrink-0 items-center gap-1">
+                        {/* Approve / reject for pending assignee submissions */}
+                        {canReview && att.reviewStatus === "PENDING" && rejectingId !== att.id && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title="Approve"
+                              disabled={approving}
+                              onClick={() => handleApprove(att.id)}
+                            >
+                              <Check className="h-4 w-4 text-emerald-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title="Reject"
+                              onClick={() => {
+                                setRejectingId(att.id);
+                                setRejectReason("");
+                              }}
+                            >
+                              <X className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </>
+                        )}
+                        {!readOnly && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleDelete(att.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
                     </li>
                   );
                 })}

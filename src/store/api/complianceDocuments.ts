@@ -23,6 +23,8 @@ export interface ComplianceDocumentApi {
   notes: string | null;
   orderIndex: number | null;
   isActive?: boolean;
+  /** Compliance Document Assignment: who this line is assigned to (org name / contact), or null. */
+  assigneeLabel?: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -49,7 +51,20 @@ export interface ComplianceAttachmentApi {
   version: number;
   isCurrent: boolean;
   uploadedBy: string | null;
+  /** Approve-on-upload review state: PENDING | APPROVED | REJECTED (null for legacy rows). */
+  reviewStatus: string | null;
+  rejectionReason: string | null;
+  reviewedAt: string | null;
   createdAt: string | null;
+}
+
+/** Result of resolving a typed email to an assignable EntitleGuard org. */
+export interface AssigneeLookupApi {
+  matched: boolean;
+  email: string | null;
+  orgType: string | null;
+  orgId: string | null;
+  orgName: string | null;
 }
 
 export interface RegistrationComplianceView {
@@ -637,6 +652,49 @@ export const complianceDocumentsApi = api.injectEndpoints({
       ],
     }),
 
+    // ----- Assignment by email (Compliance Document Assignment) -----
+
+    // GET /api/builder/compliance/org-lookup?email= — resolve a typed email to
+    // an assignable TRADE/MERCHANT org, or matched=false → off-platform.
+    lookupAssigneeOrg: build.query<ListResponse<AssigneeLookupApi>, string>({
+      query: (email) => ({
+        url: `/api/builder/compliance/org-lookup`,
+        method: "GET",
+        params: { email },
+      }),
+    }),
+
+    // POST .../attachments/:attachmentId/approve — accept an assignee submission → RECEIVED
+    approveComplianceAttachment: build.mutation<
+      ListResponse<ComplianceAttachmentApi>,
+      { projectId: string; documentId: string; attachmentId: string }
+    >({
+      query: ({ projectId, documentId, attachmentId }) => ({
+        url: `/api/builder/projects/${projectId}/compliance-documents/${documentId}/attachments/${attachmentId}/approve`,
+        method: "POST",
+      }),
+      invalidatesTags: (_r, _e, { projectId, documentId }) => [
+        { type: "ComplianceAttachments", id: documentId },
+        { type: "ComplianceDocuments" as const, id: `project-${projectId}` },
+      ],
+    }),
+
+    // POST .../attachments/:attachmentId/reject — reject with reason → REQUIRED
+    rejectComplianceAttachment: build.mutation<
+      ListResponse<ComplianceAttachmentApi>,
+      { projectId: string; documentId: string; attachmentId: string; reason?: string }
+    >({
+      query: ({ projectId, documentId, attachmentId, reason }) => ({
+        url: `/api/builder/projects/${projectId}/compliance-documents/${documentId}/attachments/${attachmentId}/reject`,
+        method: "POST",
+        body: { reason: reason ?? null },
+      }),
+      invalidatesTags: (_r, _e, { projectId, documentId }) => [
+        { type: "ComplianceAttachments", id: documentId },
+        { type: "ComplianceDocuments" as const, id: `project-${projectId}` },
+      ],
+    }),
+
     // ----- Handover gating -----
 
     // GET /api/builder/registrations/:registrationId/handover-readiness
@@ -737,5 +795,8 @@ export const {
   useListRegistrationOptionsQuery,
   useAssignProjectComplianceDocumentMutation,
   useAssignRegistrationComplianceDocumentMutation,
+  useLazyLookupAssigneeOrgQuery,
+  useApproveComplianceAttachmentMutation,
+  useRejectComplianceAttachmentMutation,
   useGetJobCategoriesQuery,
 } = complianceDocumentsApi;

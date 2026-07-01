@@ -116,6 +116,12 @@ export const ComplianceDocumentsTable = ({
                       {doc.description}
                     </div>
                   )}
+                  {doc.assigneeLabel && (
+                    <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                      <UserPlus className="h-3 w-3" />
+                      Assigned to {doc.assigneeLabel}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge className={mandatoryBadgeClass(doc.mandatory)}>

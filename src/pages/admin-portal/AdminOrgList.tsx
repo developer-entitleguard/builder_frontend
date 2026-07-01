@@ -10,6 +10,13 @@ import { useGetAdminOrgsQuery } from '@/store/api/admin';
 
 const ORG_TYPES = ['BUILDER', 'MERCHANT', 'TRADE', 'AUDITOR'] as const;
 
+const formatSignupDate = (value?: string | null): string => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
 const OrgTypeTable = ({ orgType }: { orgType: string }) => {
   const navigate = useNavigate();
   const { data: orgs, isLoading, isError } = useGetAdminOrgsQuery(orgType);
@@ -32,6 +39,7 @@ const OrgTypeTable = ({ orgType }: { orgType: string }) => {
               <TableHead>Name</TableHead>
               <TableHead>ABN</TableHead>
               <TableHead>Contact email</TableHead>
+              <TableHead>Signed up</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -45,6 +53,7 @@ const OrgTypeTable = ({ orgType }: { orgType: string }) => {
                 <TableCell className="font-medium">{org.name}</TableCell>
                 <TableCell>{org.abn || '—'}</TableCell>
                 <TableCell>{org.contactEmail || '—'}</TableCell>
+                <TableCell>{formatSignupDate(org.createdAt)}</TableCell>
                 <TableCell>
                   <Badge variant={org.isActive === false ? 'secondary' : 'default'}>
                     {org.isActive === false ? 'Inactive' : 'Active'}

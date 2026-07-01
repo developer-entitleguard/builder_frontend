@@ -48,13 +48,23 @@ const AdminOrgDetail = () => {
         <p className="text-sm text-destructive">Organization not found.</p>
       ) : (
         <>
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-3 mb-1">
             <h1 className="text-2xl font-bold">{org.name}</h1>
             <Badge variant="outline">{type}</Badge>
             <Badge variant={org.isActive === false ? 'secondary' : 'default'}>
               {org.isActive === false ? 'Inactive' : 'Active'}
             </Badge>
           </div>
+          {org.createdAt && (
+            <p className="text-sm text-muted-foreground mb-6">
+              Signed up{' '}
+              {new Date(org.createdAt).toLocaleDateString(undefined, {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </p>
+          )}
 
           <Tabs value={tab} onValueChange={setTab} className="space-y-6">
             <TabsList>

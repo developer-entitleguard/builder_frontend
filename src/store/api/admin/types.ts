@@ -12,6 +12,8 @@ export interface AdminOrg {
   licenceNumber?: string | null;
   services?: string[] | null;
   isActive?: boolean | null;
+  /** When the organisation signed up / was created (ISO string). */
+  createdAt?: string | null;
 }
 
 export interface AdminUser {

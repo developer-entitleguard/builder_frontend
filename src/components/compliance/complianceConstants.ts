@@ -11,6 +11,7 @@ export const MANDATORY_OPTIONS = [
 export const STATUS_OPTIONS = [
   "REQUIRED",
   "OPTIONAL",
+  "SUBMITTED",
   "RECEIVED",
   "NOT_APPLICABLE",
 ] as const;
@@ -34,6 +35,8 @@ export const statusLabel = (value: string | null | undefined): string => {
   switch ((value ?? "").toUpperCase()) {
     case "RECEIVED":
       return "Received";
+    case "SUBMITTED":
+      return "Awaiting review";
     case "NOT_APPLICABLE":
       return "Not applicable";
     case "REQUIRED":
@@ -49,6 +52,8 @@ export const statusBadgeClass = (value: string | null | undefined): string => {
   switch ((value ?? "").toUpperCase()) {
     case "RECEIVED":
       return "bg-green-100 text-green-700";
+    case "SUBMITTED":
+      return "bg-blue-100 text-blue-700";
     case "NOT_APPLICABLE":
       return "bg-gray-100 text-gray-600";
     case "REQUIRED":

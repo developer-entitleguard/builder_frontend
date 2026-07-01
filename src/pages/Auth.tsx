@@ -435,7 +435,18 @@ const Auth = () => {
           </Card>
 
           <p className="text-center text-sm text-muted-foreground mt-4">
-            Contact your organization administrator if you need access.
+            New business?{" "}
+            <Button
+              type="button"
+              variant="link"
+              className="p-0 h-auto text-sm"
+              onClick={() => navigate("/signup")}
+            >
+              Create an account
+            </Button>
+          </p>
+          <p className="text-center text-sm text-muted-foreground mt-1">
+            Or contact your organization administrator if you need access.
           </p>
         </div>
       </div>

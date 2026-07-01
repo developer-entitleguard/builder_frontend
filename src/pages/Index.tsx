@@ -14,7 +14,6 @@ import {
   Users,
   Shield,
   Clock,
-  Mail,
   FolderKanban,
   Sparkles,
   ChevronRight,
@@ -57,23 +56,6 @@ const Index = () => {
       </div>
     );
   }
-
-  const handleRequestAccess = () => {
-    const subject = encodeURIComponent("Builder Playground Access Request");
-    const body = encodeURIComponent(`Hi,
-
-I'd like to request access to Builder Playground.
-
-Name: 
-Company: 
-Role: 
-Location: 
-Project Types: 
-Estimated Annual Volume: 
-
-Thanks`);
-    window.location.href = `mailto:support@entitleguard.com?subject=${subject}&body=${body}`;
-  };
 
   const capabilities = [
     {
@@ -151,18 +133,18 @@ Thanks`);
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Button 
-                variant="ghost" 
-                onClick={handleRequestAccess}
+              <Button
+                variant="ghost"
+                onClick={() => navigate('/auth')}
                 className="text-white/90 hover:text-white hover:bg-white/10 bg-transparent"
               >
-                Request Access
+                Sign In
               </Button>
-              <Button 
-                onClick={() => navigate('/auth')}
+              <Button
+                onClick={() => navigate('/signup')}
                 className="bg-white text-primary hover:bg-white/90"
               >
-                Sign In
+                Sign Up
               </Button>
             </div>
           </div>
@@ -189,21 +171,20 @@ Thanks`);
               Manage projects, approvals, and AI-assisted pricing, then automatically hand over a digital home record to your customers.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button 
-                size="lg" 
-                onClick={() => navigate('/auth')}
+              <Button
+                size="lg"
+                onClick={() => navigate('/signup')}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground text-lg px-8 py-6"
               >
-                Create New Project
+                Sign Up — free for 3 months
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
-              <Button 
-                size="lg" 
-                onClick={handleRequestAccess}
+              <Button
+                size="lg"
+                onClick={() => navigate('/auth')}
                 className="border-2 border-white text-white bg-transparent hover:bg-white/10 text-lg px-8 py-6"
               >
-                <Mail className="mr-2 h-5 w-5" />
-                Request Access
+                Sign In
               </Button>
             </div>
           </div>
@@ -347,27 +328,32 @@ Thanks`);
         </div>
       </section>
 
-      {/* Access Section */}
+      {/* Sign Up Section */}
       <section className="py-24 bg-background">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-12 md:p-16 shadow-2xl">
-            <Mail className="h-12 w-12 text-primary mx-auto mb-6" />
+            <Sparkles className="h-12 w-12 text-primary mx-auto mb-6" />
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
               Ready to get started?
             </h2>
             <p className="text-lg text-slate-300 mb-8 max-w-xl mx-auto">
-              Request access to Builder Playground and we'll be in touch to set up your account and walk you through the platform.
+              Create your account in minutes — free for your first 3 months. After that, pricing depends on the capabilities you use.
             </p>
-            <Button 
-              size="lg" 
-              onClick={handleRequestAccess}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground text-lg px-10 py-6"
-            >
-              <Mail className="mr-2 h-5 w-5" />
-              Request Access
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button
+                size="lg"
+                onClick={() => navigate('/signup')}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground text-lg px-10 py-6"
+              >
+                Sign Up — free for 3 months
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </div>
             <p className="text-slate-400 text-sm mt-6">
-              We'll respond within 24 hours.
+              Already have an account?{' '}
+              <button onClick={() => navigate('/auth')} className="text-white underline hover:no-underline">
+                Sign in
+              </button>
             </p>
           </div>
         </div>
@@ -388,20 +374,20 @@ Thanks`);
             From the first activity to the final handover, give your customers an experience that matches the quality of your builds.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              size="lg" 
-              onClick={() => navigate('/auth')}
+            <Button
+              size="lg"
+              onClick={() => navigate('/signup')}
               className="bg-primary hover:bg-primary/90 text-primary-foreground text-lg px-8 py-6"
             >
-              Create New Project
+              Sign Up — free for 3 months
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
-            <Button 
-              size="lg" 
-              onClick={handleRequestAccess}
+            <Button
+              size="lg"
+              onClick={() => navigate('/auth')}
               className="border-2 border-white text-white bg-transparent hover:bg-white/10 text-lg px-8 py-6"
             >
-              Request Access
+              Sign In
             </Button>
           </div>
         </div>

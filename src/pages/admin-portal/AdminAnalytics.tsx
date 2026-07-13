@@ -1,6 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import AdminPortalShell from './AdminPortalShell';
-import { useAnalyticsSummaryQuery, useBuilderLeagueQuery, useAdoptionQuery, type AdoptionRow } from '@/store/api/admin';
+import { useAnalyticsSummaryQuery, useBuilderLeagueQuery, useAdoptionQuery, useUsageQuery, type AdoptionRow } from '@/store/api/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,7 @@ const AdminAnalytics = () => {
   const { data: summary, isLoading } = useAnalyticsSummaryQuery();
   const { data: league } = useBuilderLeagueQuery();
   const { data: adoption } = useAdoptionQuery();
+  const { data: usage } = useUsageQuery();
 
   const segmentChart = summary
     ? SEGMENTS.map((s) => ({
@@ -198,6 +199,38 @@ const AdminAnalytics = () => {
                 </Table>
               </CardContent>
             </Card>
+
+            {usage && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Usage (last 30 days)</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">{usage.note}</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 grid-cols-2 lg:grid-cols-3">
+                    <div>
+                      <div className="text-3xl font-bold">{usage.activeAccountsLast30d}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Active accounts</p>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold">{usage.eventsLast30d}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Audited events</p>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold">{usage.registrationsCreatedLast30d}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Registrations created</p>
+                    </div>
+                  </div>
+                  {usage.trackedActions.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      {usage.trackedActions.map((a) => (
+                        <Badge key={a} variant="secondary" className="text-xs">{a}</Badge>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </>
         )}
       </div>

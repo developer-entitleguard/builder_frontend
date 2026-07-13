@@ -116,3 +116,14 @@ export interface AdoptionRow {
 
 export const useAdoptionQuery = () =>
   useAdminQuery<AdoptionRow[]>('/api/admin/analytics/adoption');
+
+export interface UsageStats {
+  activeAccountsLast30d: number;
+  eventsLast30d: number;
+  registrationsCreatedLast30d: number;
+  trackedActions: string[];
+  note: string;
+}
+
+export const useUsageQuery = () =>
+  useAdminQuery<UsageStats>('/api/admin/analytics/usage');

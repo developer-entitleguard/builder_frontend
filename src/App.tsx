@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { OrganizationProvider } from "@/hooks/useOrganization";
 import OrganizationGate from "@/components/OrganizationGate";
 import RoleGate from "@/components/RoleGate";
+import ModuleGate from "@/components/ModuleGate";
 import { BUILDER_ROLES } from "@/lib/roles";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -230,51 +231,65 @@ const App = () => (
               {/* Sales module (SALES bolt-on) — customers, quotes, invoices, payments. */}
               <Route path="/customers" element={
                 <ProtectedRoute>
-                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
-                    <Customers />
-                  </RoleGate>
+                  <ModuleGate module="SALES">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                      <Customers />
+                    </RoleGate>
+                  </ModuleGate>
                 </ProtectedRoute>
               } />
               <Route path="/quotes" element={
                 <ProtectedRoute>
-                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
-                    <Quotes />
-                  </RoleGate>
+                  <ModuleGate module="SALES">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                      <Quotes />
+                    </RoleGate>
+                  </ModuleGate>
                 </ProtectedRoute>
               } />
               <Route path="/quotes/new" element={
                 <ProtectedRoute>
-                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
-                    <QuoteCreate />
-                  </RoleGate>
+                  <ModuleGate module="SALES">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                      <QuoteCreate />
+                    </RoleGate>
+                  </ModuleGate>
                 </ProtectedRoute>
               } />
               <Route path="/quotes/:id" element={
                 <ProtectedRoute>
-                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
-                    <QuoteDetail />
-                  </RoleGate>
+                  <ModuleGate module="SALES">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                      <QuoteDetail />
+                    </RoleGate>
+                  </ModuleGate>
                 </ProtectedRoute>
               } />
               <Route path="/invoices" element={
                 <ProtectedRoute>
-                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
-                    <Invoices />
-                  </RoleGate>
+                  <ModuleGate module="SALES">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                      <Invoices />
+                    </RoleGate>
+                  </ModuleGate>
                 </ProtectedRoute>
               } />
               <Route path="/invoices/:id" element={
                 <ProtectedRoute>
-                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
-                    <InvoiceDetail />
-                  </RoleGate>
+                  <ModuleGate module="SALES">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                      <InvoiceDetail />
+                    </RoleGate>
+                  </ModuleGate>
                 </ProtectedRoute>
               } />
               <Route path="/payments" element={
                 <ProtectedRoute>
-                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
-                    <Payments />
-                  </RoleGate>
+                  <ModuleGate module="SALES">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                      <Payments />
+                    </RoleGate>
+                  </ModuleGate>
                 </ProtectedRoute>
               } />
               <Route path="/projects" element={

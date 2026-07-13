@@ -74,6 +74,9 @@ export interface LinkedParty {
   inEntitleguard: boolean;
   buildersLinked: number;
   firstAdded: string | null;
+  // A builder's supplier is a merchant on EntitleGuard; a vendor is a trade.
+  // When a platform org matches (by email or ABN), its canonical name.
+  platformOrgName: string | null;
 }
 
 export const useCustomersRecordsQuery = (search: string) => {

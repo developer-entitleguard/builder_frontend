@@ -408,6 +408,7 @@ const AdminRecords = () => {
           <TabsContent value="suppliers">
             <LinkedPartyTable
               title="Suppliers"
+              counterpart="merchant"
               rows={suppliers ?? []}
               onDeactivate={onDeactivateSupplier}
               onDelete={onDeleteSupplier}
@@ -417,6 +418,7 @@ const AdminRecords = () => {
           <TabsContent value="vendors">
             <LinkedPartyTable
               title="Vendors"
+              counterpart="trade"
               rows={vendors ?? []}
               onDeactivate={onDeactivateVendor}
               onDelete={onDeleteVendor}
@@ -434,60 +436,78 @@ const label = (r: RegistrationRecord) =>
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
 
-/** Suppliers and Vendors share the same deduped-across-builders shape. */
+/**
+ * Suppliers and Vendors share the same deduped-across-builders shape. A builder's
+ * supplier is a merchant on EntitleGuard; a builder's vendor is a trade. When a
+ * platform org matches (by email or ABN), we show that org's account.
+ */
 const LinkedPartyTable = ({
-  title, rows, onDeactivate, onDelete,
+  title, counterpart, rows, onDeactivate, onDelete,
 }: {
   title: string;
+  counterpart: 'merchant' | 'trade';
   rows: LinkedParty[];
   onDeactivate: (p: LinkedParty) => void;
   onDelete: (p: LinkedParty) => void;
-}) => (
-  <Card>
-    <CardHeader>
-      <CardTitle>{title} across builders ({rows.length})</CardTitle>
-      <p className="text-sm text-muted-foreground mt-1">
-        Deduped by email. "In EntitleGuard" means a matching organisation account exists on the platform.
-        Actions apply to every matching record across all linked builders.
-      </p>
-    </CardHeader>
-    <CardContent>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>In EntitleGuard</TableHead>
-            <TableHead className="text-right">Builders linked</TableHead>
-            <TableHead>Added</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((p, i) => (
-            <TableRow key={`${p.email ?? p.name ?? i}`}>
-              <TableCell className="font-medium max-w-[200px] truncate">{p.name ?? '—'}</TableCell>
-              <TableCell className="text-muted-foreground max-w-[220px] truncate">{p.email ?? '—'}</TableCell>
-              <TableCell>
-                <Badge variant={p.inEntitleguard ? 'default' : 'secondary'}>
-                  {p.inEntitleguard ? 'On platform' : 'Not on platform'}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{p.buildersLinked}</TableCell>
-              <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(p.firstAdded)}</TableCell>
-              <TableCell className="text-right space-x-1 whitespace-nowrap">
-                <Button variant="ghost" size="sm" onClick={() => onDeactivate(p)}>Deactivate</Button>
-                <Button variant="ghost" size="sm" className="text-destructive" onClick={() => onDelete(p)}>Delete</Button>
-              </TableCell>
+}) => {
+  const cap = counterpart === 'merchant' ? 'Merchant' : 'Trade';
+  const onPlatform = rows.filter((p) => p.inEntitleguard).length;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title} across builders ({rows.length})</CardTitle>
+        <p className="text-sm text-muted-foreground mt-1">
+          A builder's {counterpart === 'merchant' ? 'supplier' : 'vendor'} is a{' '}
+          <span className="font-medium">{counterpart}</span> on EntitleGuard. Deduped by email;{' '}
+          {onPlatform} of {rows.length} match a {counterpart} account on the platform (by email or ABN).
+          Actions apply to every matching record across all linked builders.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>EntitleGuard {counterpart}</TableHead>
+              <TableHead className="text-right">Builders linked</TableHead>
+              <TableHead>Added</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          ))}
-          {rows.length === 0 && (
-            <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">None yet.</TableCell></TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </CardContent>
-  </Card>
-);
+          </TableHeader>
+          <TableBody>
+            {rows.map((p, i) => (
+              <TableRow key={`${p.email ?? p.name ?? i}`}>
+                <TableCell className="font-medium max-w-[200px] truncate">{p.name ?? '—'}</TableCell>
+                <TableCell className="text-muted-foreground max-w-[220px] truncate">{p.email ?? '—'}</TableCell>
+                <TableCell className="max-w-[220px]">
+                  {p.inEntitleguard ? (
+                    <div className="flex flex-col">
+                      <Badge variant="default" className="w-fit">{cap} account</Badge>
+                      {p.platformOrgName && (
+                        <span className="text-xs text-muted-foreground mt-1 truncate">{p.platformOrgName}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <Badge variant="secondary">Not a {counterpart}</Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{p.buildersLinked}</TableCell>
+                <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(p.firstAdded)}</TableCell>
+                <TableCell className="text-right space-x-1 whitespace-nowrap">
+                  <Button variant="ghost" size="sm" onClick={() => onDeactivate(p)}>Deactivate</Button>
+                  <Button variant="ghost" size="sm" className="text-destructive" onClick={() => onDelete(p)}>Delete</Button>
+                </TableCell>
+              </TableRow>
+            ))}
+            {rows.length === 0 && (
+              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">None yet.</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+};
 
 export default AdminRecords;

@@ -43,12 +43,12 @@ interface OrganizationContextType {
   setCurrentOrganization: (orgId: string) => void;
   isAdmin: boolean;
   isUser: boolean;
-  isSuperAdmin: boolean;
-  // Impersonation for superadmin
-  impersonatedOrganization: Organization | null;
-  setImpersonatedOrganization: (org: Organization | null) => void;
+  /**
+   * The organization whose data the app should show. Retained as an alias of
+   * currentOrganization since the superadmin impersonation feature was retired,
+   * so existing call sites that read "the active org" keep working.
+   */
   effectiveOrganization: Organization | null;
-  isImpersonating: boolean;
   // Legacy compatibility
   organization: Organization | null;
   userRole: string | null;
@@ -57,7 +57,6 @@ interface OrganizationContextType {
 }
 
 const SELECTED_ORG_KEY = 'selected_organization_id';
-const IMPERSONATED_ORG_KEY = 'impersonated_organization_id';
 
 /**
  * Same-tab event dispatched whenever `localStorage.userData` is written or
@@ -78,10 +77,7 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
   const [currentOrganization, setCurrentOrganizationState] = useState<Organization | null>(null);
   const [currentRole, setCurrentRole] = useState<'admin' | 'user' | 'superadmin' | null>(null);
   const [builderRole, setBuilderRole] = useState<BuilderRole | null>(null);
-  const [impersonatedOrganization, setImpersonatedOrgState] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const isSuperAdmin = currentRole === 'superadmin';
 
   const setCurrentOrganization = useCallback((orgId: string) => {
     const orgRole = organizations.find(o => o.organization.id === orgId);
@@ -92,23 +88,9 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
     }
   }, [organizations]);
 
-  const setImpersonatedOrganization = useCallback((org: Organization | null) => {
-    setImpersonatedOrgState(org);
-    if (org) {
-      localStorage.setItem(IMPERSONATED_ORG_KEY, org.id);
-    } else {
-      localStorage.removeItem(IMPERSONATED_ORG_KEY);
-    }
-  }, []);
-
-  // Effective organization is impersonated org for superadmins, otherwise current org
-  const effectiveOrganization = isSuperAdmin && impersonatedOrganization 
-    ? impersonatedOrganization 
-    : currentOrganization;
-
-  // When superadmin is impersonating, they act as admin of that organization
-  const isImpersonating = isSuperAdmin && impersonatedOrganization !== null;
-  const effectiveIsAdmin = isImpersonating || currentRole === 'admin';
+  // Alias retained after the superadmin impersonation feature was retired.
+  const effectiveOrganization = currentOrganization;
+  const effectiveIsAdmin = currentRole === 'admin';
 
   // Builder login: when no Supabase user but userData (JWT) in localStorage, use userInfo.builderOrganization
   const initFromBuilderAuth = useCallback(() => {
@@ -160,7 +142,6 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
       setCurrentOrganizationState(mapped);
       setCurrentRole(role);
       setBuilderRole(canonicalBuilderRole);
-      setImpersonatedOrgState(null);
       localStorage.setItem(SELECTED_ORG_KEY, mapped.id);
       return true;
     } catch {
@@ -178,7 +159,6 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
     setCurrentOrganizationState(null);
     setCurrentRole(null);
     setBuilderRole(null);
-    setImpersonatedOrgState(null);
     setLoading(false);
   }, []);
 
@@ -229,15 +209,8 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
   // Auto-select organization when organizations load
   useEffect(() => {
     if (loading) return;
-    
-    // Superadmins don't belong to organizations - they can only impersonate
-    if (currentRole === 'superadmin') {
-      // Superadmins don't have a current organization by default
-      // They must use impersonation to act on behalf of an organization
-      return;
-    }
-    
-    // For non-superadmin with no org access
+
+    // No org access
     if (organizations.length === 0) {
       setCurrentOrganizationState(null);
       return;
@@ -285,18 +258,7 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
         return;
       }
 
-      // Check if user is superadmin (superadmin role has NULL organization_id)
-      const superadminRole = userRoles.find(r => r.role === 'superadmin' && r.organization_id === null);
-      if (superadminRole) {
-        setCurrentRole('superadmin');
-        // Superadmins don't belong to organizations - they use impersonation
-        // No need to fetch organizations for superadmin
-        setOrganizations([]);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch organization details for each role (excluding superadmin roles without org)
+      // Fetch organization details for each role
       const orgIds = userRoles
         .filter(r => r.organization_id)
         .map(r => r.organization_id);
@@ -345,16 +307,12 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
     currentRole,
     builderRole,
     loading,
-    hasAccess: !!user || organizations.length > 0 || isSuperAdmin,
+    hasAccess: !!user || organizations.length > 0,
     hasMultipleOrgs: organizations.length > 1,
     setCurrentOrganization,
     isAdmin: effectiveIsAdmin,
     isUser: currentRole === 'user',
-    isSuperAdmin,
-    impersonatedOrganization,
-    setImpersonatedOrganization,
     effectiveOrganization,
-    isImpersonating,
     // Legacy compatibility
     organization: effectiveOrganization,
     userRole: currentRole,

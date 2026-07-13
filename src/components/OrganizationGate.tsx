@@ -1,5 +1,3 @@
-import { useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useAuth } from "@/hooks/useAuth";
 import OrganizationSelector from "@/components/OrganizationSelector";
@@ -22,46 +20,18 @@ interface OrganizationGateProps {
 }
 
 const OrganizationGate = ({ children }: OrganizationGateProps) => {
-  const navigate = useNavigate();
-  const location = useLocation();
   const { user, loading: authLoading } = useAuth();
-  const { 
-    loading, 
-    hasMultipleOrgs, 
+  const {
+    loading,
+    hasMultipleOrgs,
     currentOrganization,
-    isSuperAdmin,
-    effectiveOrganization
   } = useOrganization();
-
-  // Redirect superadmins to /superadmin if they're not impersonating and not already there
-  useEffect(() => {
-    if (!loading && isSuperAdmin && !effectiveOrganization && !location.pathname.startsWith('/superadmin')) {
-      navigate('/superadmin');
-    }
-  }, [loading, isSuperAdmin, effectiveOrganization, location.pathname, navigate]);
 
   // Wait for both auth and org to finish loading before making any access decisions
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
-  // Superadmins can always access /superadmin, even without impersonation
-  if (isSuperAdmin && location.pathname.startsWith('/superadmin')) {
-    return <>{children}</>;
-  }
-
-  // Superadmin without impersonation - redirect handled by useEffect
-  if (isSuperAdmin && !effectiveOrganization) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <Building2 className="h-8 w-8 text-primary mx-auto mb-4 animate-pulse" />
-          <p className="text-muted-foreground">Redirecting to Super Admin...</p>
-        </div>
       </div>
     );
   }

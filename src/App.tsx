@@ -19,7 +19,6 @@ import QueriesManagement from "./pages/QueriesManagement";
 import RegistrationDetail from "./pages/RegistrationDetail";
 import Admin from "./pages/Admin";
 import TermsVersions from "./pages/TermsVersions";
-import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 import ConsentConfirmation from "./pages/ConsentConfirmation";
 import Projects from "./pages/Projects";
@@ -219,11 +218,6 @@ const App = () => (
                   <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
                     <Admin />
                   </RoleGate>
-                </ProtectedRoute>
-              } />
-              <Route path="/superadmin" element={
-                <ProtectedRoute>
-                  <SuperAdmin />
                 </ProtectedRoute>
               } />
               <Route path="/registration/:id" element={

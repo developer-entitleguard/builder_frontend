@@ -53,13 +53,9 @@ const Header = () => {
   const { user, signOut } = useAuth();
   const {
     isAdmin,
-    isSuperAdmin,
     builderRole,
     currentOrganization,
     hasMultipleOrgs,
-    impersonatedOrganization,
-    isImpersonating,
-    setImpersonatedOrganization,
   } = useOrganization();
   const { hasModule } = useEntitlements();
   const location = useLocation();
@@ -76,7 +72,7 @@ const Header = () => {
   const canShowAdminTab = (isAdmin || isAdministrator(effectiveBuilderRole)) && hasModule("USERS");
   const isVendor = isInternalVendor(effectiveBuilderRole) || isExternalVendor(effectiveBuilderRole);
 
-  const showOrgNavItems = (!isSuperAdmin || isImpersonating) && !isVendor;
+  const showOrgNavItems = !isVendor;
   // Projects no longer have a single PROJECTS module — the tab shows when the org
   // holds any project-scoped sub-module (Activities / Approvals / Pricing /
   // Compliance docs). Individual tabs inside a project gate on their own module.
@@ -85,13 +81,13 @@ const Header = () => {
     hasModule("APPROVALS") ||
     hasModule("PRICING") ||
     hasModule("COMPLIANCE_DOCS");
-  const showProjectsTab = (canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null) && hasAnyProjectModule;
+  const showProjectsTab = (canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === null) && hasAnyProjectModule;
   // Bulk upload of past projects (CSV import / bulk onboarding) — its own bolt-on,
   // so it can be hidden independently of the project list.
-  const showBulkImportTab = (canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null) && hasModule("PROJECT_IMPORT");
+  const showBulkImportTab = (canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === null) && hasModule("PROJECT_IMPORT");
   const showQueriesTab = !isExternalVendor(effectiveBuilderRole) && hasModule("SUPPORT");
   // Sales section (SALES bolt-on) — customers, quotes, invoices, payments.
-  const showSalesTab = (canManageProjects(effectiveBuilderRole) || isImpersonating || effectiveBuilderRole === null) && hasModule("SALES");
+  const showSalesTab = (canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === null) && hasModule("SALES");
   const showItemsTab = effectiveBuilderRole === null || canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === "CUSTOMER_SUPPORT";
   const showRegistrationsTab =
     (effectiveBuilderRole === null
@@ -114,10 +110,6 @@ const Header = () => {
     pollingInterval: 60000,
   });
   const unreadCount = unreadData?.data ?? 0;
-
-  const handleStopImpersonation = () => {
-    setImpersonatedOrganization(null);
-  };
 
   const handleSignOut = () => {
     if (hasBuilderAuth()) {
@@ -192,9 +184,6 @@ const Header = () => {
   if (canShowAdminTab && showOrgNavItems) {
     mobileNavItems.push({ label: "Admin", to: "/admin" });
   }
-  if (isSuperAdmin) {
-    mobileNavItems.push({ label: "Super Admin", to: "/superadmin" });
-  }
 
   const isActiveNavItem = (item: NavItem) => {
     if (item.activePrefix) return location.pathname.startsWith(item.activePrefix);
@@ -203,19 +192,6 @@ const Header = () => {
 
   return (
     <header className="bg-card border-b border-border shadow-soft">
-      {impersonatedOrganization && (
-        <div className="bg-primary/10 border-b border-primary/20 px-4 py-1 text-center">
-          <span className="text-sm text-primary flex items-center justify-center gap-2">
-            Impersonating: <strong>{impersonatedOrganization.name}</strong>
-            <button
-              onClick={handleStopImpersonation}
-              className="underline ml-2 hover:text-primary/80"
-            >
-              Stop
-            </button>
-          </span>
-        </div>
-      )}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center space-x-3 min-w-0">
@@ -242,16 +218,10 @@ const Header = () => {
               <div className="hidden md:flex items-center space-x-4">
                 {hasMultipleOrgs && <OrganizationSelector />}
 
-                {currentOrganization && !hasMultipleOrgs && !isSuperAdmin && (
+                {currentOrganization && !hasMultipleOrgs && (
                   <div className="flex items-center text-sm text-muted-foreground">
                     {currentOrganization.name}
                   </div>
-                )}
-
-                {isSuperAdmin && (
-                  <Badge variant="outline" className="text-primary border-primary">
-                    Super Admin
-                  </Badge>
                 )}
 
                 <Button
@@ -441,15 +411,6 @@ const Header = () => {
                       <Link to="/admin">Admin</Link>
                     </Button>
                   )}
-                  {isSuperAdmin && (
-                    <Button
-                      variant={location.pathname === '/superadmin' ? "default" : "ghost"}
-                      size="sm"
-                      asChild
-                    >
-                      <Link to="/superadmin">Super Admin</Link>
-                    </Button>
-                  )}
                 </nav>
 
                 {showNotifications && (
@@ -492,15 +453,10 @@ const Header = () => {
                     <SheetHeader>
                       <SheetTitle>Menu</SheetTitle>
                     </SheetHeader>
-                    {currentOrganization && !isSuperAdmin && (
+                    {currentOrganization && (
                       <div className="text-sm text-muted-foreground py-2 border-b">
                         <span className="truncate">{currentOrganization.name}</span>
                       </div>
-                    )}
-                    {isSuperAdmin && (
-                      <Badge variant="outline" className="self-start text-primary border-primary">
-                        Super Admin
-                      </Badge>
                     )}
                     <nav className="flex-1 flex flex-col gap-1 py-2 overflow-y-auto">
                       {mobileNavItems.map((item) => {

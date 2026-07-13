@@ -98,6 +98,30 @@ const AdminAnalytics = () => {
 
             <Card>
               <CardHeader>
+                <CardTitle>End customers (mobile app)</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Homeowners who signed up in the mobile app, and what they've added.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                  {[
+                    { label: 'Customers', value: summary.endCustomers.total },
+                    { label: 'Registered', value: summary.endCustomers.registered },
+                    { label: 'Orders uploaded', value: summary.endCustomers.ordersUploaded },
+                    { label: 'Properties added', value: summary.endCustomers.propertiesAdded },
+                  ].map((c) => (
+                    <div key={c.label}>
+                      <div className="text-3xl font-bold">{c.value}</div>
+                      <p className="text-xs text-muted-foreground mt-1">{c.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <CardTitle>Accounts by segment</CardTitle>
               </CardHeader>
               <CardContent>

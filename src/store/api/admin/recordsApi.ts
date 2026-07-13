@@ -37,7 +37,56 @@ export interface AnalyticsSummary {
   entitlementsIssued: number;
   queriesRaised: number;
   queriesResolved: number;
+  endCustomers: {
+    total: number;
+    registered: number;
+    ordersUploaded: number;
+    propertiesAdded: number;
+  };
 }
+
+export interface CustomerRecord {
+  id: string;
+  name: string | null;
+  email: string | null;
+  contact: string | null;
+  propertiesAdded: number;
+  ordersUploaded: number;
+  isRegistered: boolean | null;
+  isActive: boolean | null;
+  createdAt: string | null;
+}
+
+export interface BuilderRecord {
+  id: string;
+  name: string | null;
+  properties: number;
+  registrations: number;
+  handedOver: number;
+  supportTickets: number;
+  isActive: boolean | null;
+}
+
+export interface LinkedParty {
+  name: string | null;
+  email: string | null;
+  inEntitleguard: boolean;
+  buildersLinked: number;
+}
+
+export const useCustomersRecordsQuery = (search: string) => {
+  const qs = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : '';
+  return useAdminQuery<CustomerRecord[]>(`/api/admin/records/customers${qs}`);
+};
+
+export const useBuildersRecordsQuery = () =>
+  useAdminQuery<BuilderRecord[]>('/api/admin/records/builders');
+
+export const useSuppliersRecordsQuery = () =>
+  useAdminQuery<LinkedParty[]>('/api/admin/records/suppliers');
+
+export const useVendorsRecordsQuery = () =>
+  useAdminQuery<LinkedParty[]>('/api/admin/records/vendors');
 
 export interface BuilderLeagueRow {
   builderId: string;

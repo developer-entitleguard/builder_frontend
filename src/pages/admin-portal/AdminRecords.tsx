@@ -6,8 +6,13 @@ import {
   useHardDeleteRegistrationMutation,
   useAnonymiseRegistrationMutation,
   useBulkSoftDeleteMutation,
+  useCustomersRecordsQuery,
+  useBuildersRecordsQuery,
+  useSuppliersRecordsQuery,
+  useVendorsRecordsQuery,
   fetchDependencies,
   type RegistrationRecord,
+  type LinkedParty,
 } from '@/store/api/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,6 +22,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
 const AdminRecords = () => {
@@ -30,6 +36,11 @@ const AdminRecords = () => {
   const [hardDelete] = useHardDeleteRegistrationMutation();
   const [anonymise] = useAnonymiseRegistrationMutation();
   const [bulkSoftDelete] = useBulkSoftDeleteMutation();
+
+  const { data: customers } = useCustomersRecordsQuery(search);
+  const { data: builders } = useBuildersRecordsQuery();
+  const { data: suppliers } = useSuppliersRecordsQuery();
+  const { data: vendors } = useVendorsRecordsQuery();
 
   const rows = records ?? [];
 
@@ -112,93 +123,185 @@ const AdminRecords = () => {
           </p>
         </div>
 
-        <Card>
-          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <CardTitle>Registrations ({rows.length})</CardTitle>
-            <div className="flex flex-wrap items-center gap-3">
-              <Input
-                placeholder="Search name, email, address…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-56"
-              />
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Checkbox
-                  checked={includeInactive}
-                  onCheckedChange={(v) => setIncludeInactive(v === true)}
-                />
-                Include inactive
-              </label>
-              {selected.size > 0 && (
-                <Button variant="destructive" size="sm" onClick={onBulkSoftDelete}>
-                  Deactivate {selected.size} selected
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <p className="text-muted-foreground py-6 text-center">Loading records…</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-8"></TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Builder</TableHead>
-                    <TableHead className="text-right">Items</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((r) => (
-                    <TableRow key={r.id} className={!r.isActive ? 'opacity-60' : undefined}>
-                      <TableCell>
-                        <Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggle(r.id)} />
-                      </TableCell>
-                      <TableCell className="font-medium">{label(r)}</TableCell>
-                      <TableCell className="text-muted-foreground">{r.email}</TableCell>
-                      <TableCell>{r.builderOrgName}</TableCell>
-                      <TableCell className="text-right tabular-nums">{r.installedItems}</TableCell>
-                      <TableCell>
-                        <Badge variant={r.isActive ? 'default' : 'secondary'}>
-                          {r.isActive ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right space-x-1 whitespace-nowrap">
-                        {r.isActive && (
-                          <Button variant="ghost" size="sm" onClick={() => onSoftDelete(r)}>
-                            Deactivate
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="sm" onClick={() => onAnonymise(r)}>
-                          Anonymise
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive"
-                          onClick={() => onHardDelete(r)}
-                        >
-                          Delete
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {rows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
-                        No registrations found.
-                      </TableCell>
-                    </TableRow>
+        <Tabs defaultValue="registrations">
+          <TabsList className="flex-wrap h-auto">
+            <TabsTrigger value="registrations">Registrations</TabsTrigger>
+            <TabsTrigger value="customers">Customers</TabsTrigger>
+            <TabsTrigger value="builders">Builders</TabsTrigger>
+            <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
+            <TabsTrigger value="vendors">Vendors</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="registrations">
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <CardTitle>Registrations ({rows.length})</CardTitle>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Input
+                    placeholder="Search name, email, address…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-56"
+                  />
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Checkbox
+                      checked={includeInactive}
+                      onCheckedChange={(v) => setIncludeInactive(v === true)}
+                    />
+                    Include inactive
+                  </label>
+                  {selected.size > 0 && (
+                    <Button variant="destructive" size="sm" onClick={onBulkSoftDelete}>
+                      Deactivate {selected.size} selected
+                    </Button>
                   )}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <p className="text-muted-foreground py-6 text-center">Loading records…</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-8"></TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Address</TableHead>
+                        <TableHead>Builder</TableHead>
+                        <TableHead className="text-right">Items</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((r) => (
+                        <TableRow key={r.id} className={!r.isActive ? 'opacity-60' : undefined}>
+                          <TableCell>
+                            <Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggle(r.id)} />
+                          </TableCell>
+                          <TableCell className="font-medium">{label(r)}</TableCell>
+                          <TableCell className="text-muted-foreground">{r.email}</TableCell>
+                          <TableCell className="text-muted-foreground max-w-[220px] truncate">{r.address}</TableCell>
+                          <TableCell>{r.builderOrgName}</TableCell>
+                          <TableCell className="text-right tabular-nums">{r.installedItems}</TableCell>
+                          <TableCell>
+                            <Badge variant={r.isActive ? 'default' : 'secondary'}>
+                              {r.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right space-x-1 whitespace-nowrap">
+                            {r.isActive && (
+                              <Button variant="ghost" size="sm" onClick={() => onSoftDelete(r)}>
+                                Deactivate
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="sm" onClick={() => onAnonymise(r)}>
+                              Anonymise
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive"
+                              onClick={() => onHardDelete(r)}
+                            >
+                              Delete
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {rows.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center text-muted-foreground py-6">
+                            No registrations found.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="customers">
+            <Card>
+              <CardHeader><CardTitle>Customers ({(customers ?? []).length})</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Registered</TableHead>
+                      <TableHead className="text-right">Properties</TableHead>
+                      <TableHead className="text-right">Orders</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(customers ?? []).map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-medium">{c.name ?? '—'}</TableCell>
+                        <TableCell className="text-muted-foreground">{c.email}</TableCell>
+                        <TableCell>
+                          <Badge variant={c.isRegistered ? 'default' : 'secondary'}>
+                            {c.isRegistered ? 'Yes' : 'No'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{c.propertiesAdded}</TableCell>
+                        <TableCell className="text-right tabular-nums">{c.ordersUploaded}</TableCell>
+                      </TableRow>
+                    ))}
+                    {(customers ?? []).length === 0 && (
+                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No customers yet.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="builders">
+            <Card>
+              <CardHeader><CardTitle>Builders ({(builders ?? []).length})</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Builder</TableHead>
+                      <TableHead className="text-right">Properties</TableHead>
+                      <TableHead className="text-right">Registrations</TableHead>
+                      <TableHead className="text-right">Handed over</TableHead>
+                      <TableHead className="text-right">Support tickets</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(builders ?? []).map((b) => (
+                      <TableRow key={b.id} className={!b.isActive ? 'opacity-60' : undefined}>
+                        <TableCell className="font-medium">{b.name ?? '—'}</TableCell>
+                        <TableCell className="text-right tabular-nums">{b.properties}</TableCell>
+                        <TableCell className="text-right tabular-nums">{b.registrations}</TableCell>
+                        <TableCell className="text-right tabular-nums">{b.handedOver}</TableCell>
+                        <TableCell className="text-right tabular-nums">{b.supportTickets}</TableCell>
+                      </TableRow>
+                    ))}
+                    {(builders ?? []).length === 0 && (
+                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No builders yet.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="suppliers">
+            <LinkedPartyTable title="Suppliers" rows={suppliers ?? []} />
+          </TabsContent>
+
+          <TabsContent value="vendors">
+            <LinkedPartyTable title="Vendors" rows={vendors ?? []} />
+          </TabsContent>
+        </Tabs>
       </div>
     </AdminPortalShell>
   );
@@ -206,5 +309,46 @@ const AdminRecords = () => {
 
 const label = (r: RegistrationRecord) =>
   [r.firstName, r.lastName].filter(Boolean).join(' ') || r.email || r.id.slice(0, 8);
+
+/** Suppliers and Vendors share the same deduped-across-builders shape. */
+const LinkedPartyTable = ({ title, rows }: { title: string; rows: LinkedParty[] }) => (
+  <Card>
+    <CardHeader>
+      <CardTitle>{title} across builders ({rows.length})</CardTitle>
+      <p className="text-sm text-muted-foreground mt-1">
+        Deduped by email. "In EntitleGuard" means a matching organisation account exists on the platform.
+      </p>
+    </CardHeader>
+    <CardContent>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>In EntitleGuard</TableHead>
+            <TableHead className="text-right">Builders linked</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((p, i) => (
+            <TableRow key={`${p.email ?? p.name ?? i}`}>
+              <TableCell className="font-medium">{p.name ?? '—'}</TableCell>
+              <TableCell className="text-muted-foreground">{p.email ?? '—'}</TableCell>
+              <TableCell>
+                <Badge variant={p.inEntitleguard ? 'default' : 'secondary'}>
+                  {p.inEntitleguard ? 'On platform' : 'Not on platform'}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right tabular-nums">{p.buildersLinked}</TableCell>
+            </TableRow>
+          ))}
+          {rows.length === 0 && (
+            <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">None yet.</TableCell></TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </CardContent>
+  </Card>
+);
 
 export default AdminRecords;

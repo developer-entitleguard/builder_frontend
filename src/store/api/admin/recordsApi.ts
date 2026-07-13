@@ -102,3 +102,17 @@ export const useAnalyticsSummaryQuery = () =>
 
 export const useBuilderLeagueQuery = () =>
   useAdminQuery<BuilderLeagueRow[]>('/api/admin/analytics/builder-league');
+
+export interface AdoptionRow {
+  builderId: string;
+  builderName: string;
+  hasUsers: boolean;
+  hasVendors: boolean;
+  hasSuppliers: boolean;
+  hasProject: boolean;
+  hasHandover: boolean;
+  stuckSinceSignup: boolean;
+}
+
+export const useAdoptionQuery = () =>
+  useAdminQuery<AdoptionRow[]>('/api/admin/analytics/adoption');

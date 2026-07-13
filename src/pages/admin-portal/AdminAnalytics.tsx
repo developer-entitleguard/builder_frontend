@@ -1,10 +1,29 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import AdminPortalShell from './AdminPortalShell';
-import { useAnalyticsSummaryQuery, useBuilderLeagueQuery } from '@/store/api/admin';
+import { useAnalyticsSummaryQuery, useBuilderLeagueQuery, useAdoptionQuery, type AdoptionRow } from '@/store/api/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+
+const flag = (v: boolean) =>
+  v ? <span className="text-primary font-semibold">✓</span> : <span className="text-muted-foreground">—</span>;
+
+const downloadAdoptionCsv = (rows: AdoptionRow[]) => {
+  const header = ['Builder', 'Users', 'Vendors', 'Suppliers', 'Project', 'Handover', 'Stuck'];
+  const body = rows.map((r) => [
+    r.builderName, r.hasUsers, r.hasVendors, r.hasSuppliers, r.hasProject, r.hasHandover, r.stuckSinceSignup,
+  ].join(','));
+  const csv = [header.join(','), ...body].join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'builder-adoption.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+};
 
 const SEGMENTS = [
   { key: 'builders', label: 'Builders' },
@@ -16,6 +35,7 @@ const SEGMENTS = [
 const AdminAnalytics = () => {
   const { data: summary, isLoading } = useAnalyticsSummaryQuery();
   const { data: league } = useBuilderLeagueQuery();
+  const { data: adoption } = useAdoptionQuery();
 
   const segmentChart = summary
     ? SEGMENTS.map((s) => ({
@@ -119,6 +139,57 @@ const AdminAnalytics = () => {
                     {(league ?? []).length === 0 && (
                       <TableRow>
                         <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
+                          No builders yet.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Onboarding adoption</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">Who has finished setup and who is stuck.</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => downloadAdoptionCsv(adoption ?? [])}>
+                  Export CSV
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Builder</TableHead>
+                      <TableHead className="text-center">Users</TableHead>
+                      <TableHead className="text-center">Vendors</TableHead>
+                      <TableHead className="text-center">Suppliers</TableHead>
+                      <TableHead className="text-center">Project</TableHead>
+                      <TableHead className="text-center">Handover</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(adoption ?? []).map((r) => (
+                      <TableRow key={r.builderId}>
+                        <TableCell className="font-medium">{r.builderName}</TableCell>
+                        <TableCell className="text-center">{flag(r.hasUsers)}</TableCell>
+                        <TableCell className="text-center">{flag(r.hasVendors)}</TableCell>
+                        <TableCell className="text-center">{flag(r.hasSuppliers)}</TableCell>
+                        <TableCell className="text-center">{flag(r.hasProject)}</TableCell>
+                        <TableCell className="text-center">{flag(r.hasHandover)}</TableCell>
+                        <TableCell className="text-right">
+                          {r.stuckSinceSignup
+                            ? <Badge variant="destructive">Stuck</Badge>
+                            : <Badge variant="secondary">Active</Badge>}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(adoption ?? []).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
                           No builders yet.
                         </TableCell>
                       </TableRow>

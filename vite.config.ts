@@ -156,7 +156,6 @@ export default defineConfig(({ mode }) => ({
             "lucide-react",
             "date-fns",
           ],
-          "supabase-vendor": ["@supabase/supabase-js"],
         },
       },
     },

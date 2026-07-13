@@ -37,7 +37,6 @@ import ProjectDetail from "./pages/ProjectDetail";
 import ProjectReport from "./pages/ProjectReport";
 import OrgReport from "./pages/OrgReport";
 import ApprovalDetail from "./pages/ApprovalDetail";
-import ApprovalResponse from "./pages/ApprovalResponse";
 import QueryDetail from "./pages/QueryDetail";
 import CreateQuery from "./pages/CreateQuery";
 import VendorQuery from "./pages/VendorQuery";
@@ -410,7 +409,6 @@ const App = () => (
               {/* Public off-platform compliance-document upload — 30-day magic-link token, no auth. */}
               <Route path="/compliance-upload" element={<ComplianceUpload />} />
               <Route path="/consent" element={<ConsentConfirmation />} />
-              <Route path="/approval-response" element={<ApprovalResponse />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

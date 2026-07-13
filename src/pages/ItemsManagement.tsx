@@ -31,8 +31,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Upload, FileText, X } from "lucide-react";
-import InfoCircleOutlined from "@ant-design/icons/es/icons/InfoCircleOutlined";
-import { Tooltip } from "antd";
+import InfoHint from "@/components/ui/InfoHint";
 import Header from "@/components/Header";
 import { BOMUpload } from "@/components/BOMUpload";
 
@@ -63,26 +62,6 @@ interface BillOfMaterials {
   name: string;
   project_name: string | null;
 }
-
-const InfoHint = ({ text, maxChars = 25 }: { text: string; maxChars?: number }) => (
-  <div className="mt-2 flex items-center gap-2 rounded-md bg-blue-50 px-2.5 py-1.5 text-xs text-blue-700">
-    {(() => {
-      const shortText = text.length > maxChars ? `${text.slice(0, maxChars)}...` : text;
-      return (
-        <>
-          <Tooltip title={text}>
-            <InfoCircleOutlined className="shrink-0 text-sm" />
-          </Tooltip>
-          <Tooltip title={text}>
-            <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap">
-              {shortText}
-            </span>
-          </Tooltip>
-        </>
-      );
-    })()}
-  </div>
-);
 
 const FALLBACK_CATEGORIES = [
   "Kitchen", "Bathroom", "Appliances", "Electrical", "Plumbing",

@@ -590,6 +590,12 @@ const ProjectCreate = () => {
     timeline: 'Timeline & Confirm'
   };
 
+  const stepHints = {
+    basics: 'Name the build and its address — e.g. "42 Rose St, Bathurst". This is what homeowners and your team will see.',
+    type: 'Pick the property type and NCC class so activities and compliance are scoped correctly.',
+    timeline: 'Set the key dates. Warranty periods are calculated from the settlement date you enter here.'
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -618,7 +624,8 @@ const ProjectCreate = () => {
           <CardContent>
             {renderStepIndicator()}
             
-            <h2 className="text-xl font-semibold mb-6">{stepTitles[currentStep]}</h2>
+            <h2 className="text-xl font-semibold mb-1">{stepTitles[currentStep]}</h2>
+            <p className="text-sm text-muted-foreground mb-6">{stepHints[currentStep]}</p>
             
             {currentStep === 'basics' && renderBasicsStep()}
             {currentStep === 'type' && renderTypeStep()}

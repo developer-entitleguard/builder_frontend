@@ -1,0 +1,104 @@
+import { adminFetch, useAdminMutation, useAdminQuery } from './adminClient';
+
+export interface RegistrationRecord {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  contact: string | null;
+  address: string | null;
+  builderOrgId: string | null;
+  builderOrgName: string | null;
+  statusName: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  installedItems: number;
+}
+
+export interface DependencyReport {
+  installedItems: number;
+  jobs: number;
+  complianceDocs: number;
+  canHardDelete: boolean;
+  blockers: string[];
+}
+
+export interface SegmentStat {
+  total: number;
+  active: number;
+}
+
+export interface AnalyticsSummary {
+  builders: SegmentStat;
+  merchants: SegmentStat;
+  trades: SegmentStat;
+  consumers: SegmentStat;
+  homesHandedOver: number;
+  entitlementsIssued: number;
+  queriesRaised: number;
+  queriesResolved: number;
+}
+
+export interface BuilderLeagueRow {
+  builderId: string;
+  builderName: string;
+  homeownersSeeded: number;
+  homesHandedOver: number;
+  queriesPerHome: number;
+}
+
+const recordsPath = (search: string, includeInactive: boolean) => {
+  const params = new URLSearchParams();
+  if (search.trim()) params.set('search', search.trim());
+  if (includeInactive) params.set('includeInactive', 'true');
+  const qs = params.toString();
+  return `/api/admin/records/registrations${qs ? `?${qs}` : ''}`;
+};
+
+export const useGetRegistrationsQuery = (search: string, includeInactive: boolean) =>
+  useAdminQuery<RegistrationRecord[]>(recordsPath(search, includeInactive));
+
+export const fetchDependencies = (id: string) =>
+  adminFetch<DependencyReport>(`/api/admin/records/registrations/${id}/dependencies`);
+
+export const useSoftDeleteRegistrationMutation = () =>
+  useAdminMutation<{ id: string; reason: string }, { success: boolean; message: string }>(
+    ({ id, reason }) =>
+      adminFetch(`/api/admin/records/registrations/${id}/soft-delete`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+  );
+
+export const useHardDeleteRegistrationMutation = () =>
+  useAdminMutation<{ id: string; reason: string }, { success: boolean; message: string }>(
+    ({ id, reason }) =>
+      adminFetch(`/api/admin/records/registrations/${id}/hard-delete`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+  );
+
+export const useAnonymiseRegistrationMutation = () =>
+  useAdminMutation<{ id: string; reason: string }, { success: boolean; message: string }>(
+    ({ id, reason }) =>
+      adminFetch(`/api/admin/records/registrations/${id}/anonymise`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+  );
+
+export const useBulkSoftDeleteMutation = () =>
+  useAdminMutation<{ ids: string[]; reason: string }, { requested: number; deleted: number; skipped: number }>(
+    ({ ids, reason }) =>
+      adminFetch(`/api/admin/records/registrations/bulk-soft-delete`, {
+        method: 'POST',
+        body: JSON.stringify({ ids, reason }),
+      }),
+  );
+
+export const useAnalyticsSummaryQuery = () =>
+  useAdminQuery<AnalyticsSummary>('/api/admin/analytics/summary');
+
+export const useBuilderLeagueQuery = () =>
+  useAdminQuery<BuilderLeagueRow[]>('/api/admin/analytics/builder-league');

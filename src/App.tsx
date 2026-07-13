@@ -56,6 +56,8 @@ import AdminOrgList from "./pages/admin-portal/AdminOrgList";
 import AdminOrgCreate from "./pages/admin-portal/AdminOrgCreate";
 import AdminOrgDetail from "./pages/admin-portal/AdminOrgDetail";
 import AdminAdmins from "./pages/admin-portal/AdminAdmins";
+import AdminRecords from "./pages/admin-portal/AdminRecords";
+import AdminAnalytics from "./pages/admin-portal/AdminAnalytics";
 import { useValidateTokenQuery } from "@/store/api";
 
 const queryClient = new QueryClient();
@@ -381,6 +383,12 @@ const App = () => (
               } />
               <Route path="/platform-admin/admins" element={
                 <AdminProtectedRoute><AdminAdmins /></AdminProtectedRoute>
+              } />
+              <Route path="/platform-admin/analytics" element={
+                <AdminProtectedRoute><AdminAnalytics /></AdminProtectedRoute>
+              } />
+              <Route path="/platform-admin/records" element={
+                <AdminProtectedRoute><AdminRecords /></AdminProtectedRoute>
               } />
               {/* Public customer-facing quote view — token is the credential, no auth. */}
               <Route path="/q/:token" element={<PublicQuote />} />

@@ -6,4 +6,5 @@ export * from './orgsApi';
 export * from './usersApi';
 export * from './entitlementsApi';
 export * from './adminsApi';
+export * from './recordsApi';
 export * from './types';

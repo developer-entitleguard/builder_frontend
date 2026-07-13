@@ -76,61 +76,17 @@ const ReviewApprovalForm = ({
   const apiData = customerDetailsResponse?.data;
   const totalItemsFromApi = apiData?.totalItems ?? null;
   const totalDocumentsFromApi = apiData?.totalDocuments ?? null;
-  const apiConsentReceived = Boolean((apiData as unknown as { customer?: { consentReceived?: boolean } })?.customer?.consentReceived);
-  const apiConsentMethod = (apiData as unknown as { customer?: { consentMethod?: unknown } })?.customer?.consentMethod;
 
   const [createBuilderCustomer] = useCreateBuilderCustomerMutation();
   const [sendingEntitlement, setSendingEntitlement] = useState(false);
   const [approved, setApproved] = useState(false);
-  const [consentConfirmed, setConsentConfirmed] = useState(false);
-  const [consentLocked, setConsentLocked] = useState(false);
   const [selectedItems, setSelectedItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sendConsentMail, { isLoading: requestingConsent }] = useSendConsentMailMutation();
-  const [consentDialogOpen, setConsentDialogOpen] = useState(false);
-  const [consentUrl, setConsentUrl] = useState<string | null>(null);
 
   const { data: builderStatuses } = useGetStatusesByTypeQuery(
     { type: "BUILDER" },
     { skip: !builderId }
   );
-
-  const checkExistingConsent = useCallback(async () => {
-    if (!registrationId) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('homeowner_registrations')
-        .select('consent_received, consent_method')
-        .eq('id', registrationId)
-        .single();
-
-      if (error) throw error;
-
-      if (data?.consent_received) {
-        setConsentConfirmed(true);
-        // Lock the checkbox if consent was received via customer link
-        if (data.consent_method === 'customer_link') {
-          setConsentLocked(true);
-        }
-      }
-    } catch (error: unknown) {
-      console.error('Error checking consent:', error);
-    }
-  }, [registrationId]);
-
-  // Prefer backend API consent state when available (builder flow),
-  // and keep Supabase lookup as fallback for older flows.
-  useEffect(() => {
-    if (!apiData) return;
-    if (apiConsentReceived) {
-      setConsentConfirmed(true);
-      // If consent already exists, do not allow unchecking.
-      setConsentLocked(true);
-    }
-    // If API explicitly says false, don't auto-clear anything here;
-    // user may confirm via checkbox or Supabase may already have it.
-  }, [apiData, apiConsentReceived, apiConsentMethod]);
 
   const fetchSelectedItems = useCallback(async (itemIds: string[]) => {
     if (!Array.isArray(itemIds) || itemIds.length === 0) {
@@ -221,59 +177,7 @@ const ReviewApprovalForm = ({
       console.log('ReviewApprovalForm - no items found in formData');
       setLoading(false);
     }
-
-    // Check if consent was already received via customer link
-    if (registrationId) {
-      checkExistingConsent();
-    }
-  }, [formData, registrationId, checkExistingConsent, fetchSelectedItems]);
-
-  const handleConsentChange = async (checked: boolean) => {
-    if (readOnly) return;
-    if (consentLocked) return;
-    
-    setConsentConfirmed(checked);
-    
-    if (checked && registrationId) {
-      // Update database with builder-confirmed consent
-      try {
-        await supabase
-          .from('homeowner_registrations')
-          .update({
-            consent_received: true,
-            consent_received_at: new Date().toISOString(),
-            consent_method: 'builder_confirmed',
-          })
-          .eq('id', registrationId);
-      } catch (error: unknown) {
-        console.error('Error saving consent:', error);
-      }
-    }
-  };
-
-  const handleRequestConsent = async () => {
-    if (readOnly) return;
-    if (!registrationId) {
-      toast({
-        title: "Error",
-        description: "Registration ID not found. Please save the registration first.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    await sendConsentMail({ id: registrationId });
-  };
-
-  const copyConsentUrl = () => {
-    if (consentUrl) {
-      navigator.clipboard.writeText(consentUrl);
-      toast({
-        title: "Link copied",
-        description: "Consent link copied to clipboard. Share it with the customer.",
-      });
-    }
-  };
+  }, [formData, registrationId, fetchSelectedItems]);
 
   const handleSendToHomeowner = async () => {
     if (readOnly) {
@@ -428,7 +332,7 @@ const ReviewApprovalForm = ({
     );
   }
 
-  const canSubmit = readOnly ? true : approved && consentConfirmed;
+  const canSubmit = readOnly ? true : approved;
 
   return (
     <div className="space-y-6">
@@ -583,74 +487,7 @@ const ReviewApprovalForm = ({
         </CardContent>
       </Card> */}
 
-      {/* Consent Confirmation */}
-      <Card className="border-primary/50">
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <MessageSquare className="w-5 h-5" />
-            <span>Customer Consent</span>
-          </CardTitle>
-          <CardDescription>
-            Confirm that you have the customer's permission to send them the warranty documentation digitally
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start space-x-3">
-            <Checkbox 
-              id="consent" 
-              checked={consentConfirmed}
-              onCheckedChange={handleConsentChange}
-              disabled={consentLocked || readOnly}
-            />
-            <div className="space-y-1 flex-1">
-              <div className="flex items-center gap-2">
-                <label htmlFor="consent" className={`font-medium ${consentLocked || readOnly ? 'cursor-default' : 'cursor-pointer'}`}>
-                  I confirm that I have the customer's permission to send them this documentation package via email
-                </label>
-                {consentLocked && (
-                  <Badge variant="outline" className="text-green-600 border-green-600">
-                    <Lock className="w-3 h-3 mr-1" />
-                    Verified by Customer
-                  </Badge>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {consentLocked 
-                  ? "The customer has verified their consent via the consent link."
-                  : "By checking this box, you acknowledge that you have obtained verbal or written consent from the homeowner."}
-              </p>
-            </div>
-          </div>
-
-          {!consentConfirmed && !consentLocked && !readOnly && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
-              <p className="text-sm text-amber-800 mb-3">
-                <strong>Don't have consent yet?</strong> Send a consent request to the customer. They will receive a link to provide their consent digitally.
-              </p>
-              <Button
-                variant="outline"
-                onClick={handleRequestConsent}
-                disabled={requestingConsent}
-                className="border-amber-300 hover:bg-amber-100"
-              >
-                {requestingConsent ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Preparing...
-                  </>
-                ) : (
-                  <>
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    Get Customer Consent
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Approval */}
+      {/* Builder confirmation */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-start space-x-3">
@@ -662,10 +499,10 @@ const ReviewApprovalForm = ({
             />
             <div className="space-y-1">
               <label htmlFor="approve" className={`font-medium ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}>
-                I approve this warranty documentation package
+                I confirm this handover pack is complete and correct.
               </label>
               <p className="text-sm text-muted-foreground">
-                By checking this box, you confirm that all information is accurate and complete.
+                By checking this box, you confirm the details and documents are accurate before handover.
               </p>
             </div>
           </div>
@@ -681,39 +518,10 @@ const ReviewApprovalForm = ({
           disabled={readOnly ? false : (!canSubmit || sendingEntitlement)}
           className="min-w-[160px]"
         >
-          {readOnly
-            ? "Next"
-            : sendingEntitlement
-              ? "Sending..."
-              : !consentConfirmed
-                ? "Get Customer Consent"
-                : "Send to Homeowner"}
+          {readOnly ? "Next" : sendingEntitlement ? "Sending..." : "Send to Homeowner"}
         </Button>
       </div>
 
-      {/* Consent URL Dialog */}
-      <AlertDialog open={consentDialogOpen} onOpenChange={setConsentDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Consent Link Generated</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-4">
-              <p>
-                A consent request email has been sent to the customer. You can also share this link directly if needed:
-              </p>
-              <div className="bg-muted p-3 rounded-lg break-all text-sm font-mono">
-                {consentUrl}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Close</AlertDialogCancel>
-            <AlertDialogAction onClick={copyConsentUrl}>
-              <Copy className="w-4 h-4 mr-2" />
-              Copy Link
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };

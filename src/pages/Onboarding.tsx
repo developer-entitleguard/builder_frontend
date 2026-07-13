@@ -645,8 +645,8 @@ const Onboarding = () => {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold text-foreground">Buyer Onboarding Form</h1>
-                <p className="text-muted-foreground mt-1">Create comprehensive documentation packages for your homebuyers</p>
+                <h1 className="text-3xl font-bold text-foreground">Property Registration</h1>
+                <p className="text-muted-foreground mt-1">Register a homeowner and hand over their warranty pack.</p>
               </div>
               <div className="flex items-center space-x-4">
                 <Button variant="outline" onClick={handleSaveAndExit}>

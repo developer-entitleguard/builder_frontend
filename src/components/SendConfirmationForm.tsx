@@ -67,20 +67,20 @@ const SendConfirmationForm = ({ onNext, registrationId }: SendConfirmationFormPr
     switch (status) {
       case 'sending':
         return {
-          title: "Sending Documentation Package...",
-          description: "Preparing and sending warranty documentation to homeowner",
+          title: "Sending handover pack...",
+          description: "Preparing and sending the warranty pack to the homeowner",
           icon: <Mail className="w-8 h-8 text-blue-600 animate-pulse" />
         };
       case 'sent':
         return {
-          title: "Documentation Package Sent",
-          description: "Email sent successfully to homeowner",
+          title: "Handover pack sent",
+          description: "Email sent successfully to the homeowner",
           icon: <CheckCircle className="w-8 h-8 text-green-600" />
         };
       case 'delivered':
         return {
-          title: "Package Delivered & Confirmed",
-          description: "Homeowner has received and acknowledged the documentation",
+          title: "Handover pack delivered",
+          description: "The warranty pack has been delivered to the homeowner",
           icon: <CheckCircle className="w-8 h-8 text-green-600" />
         };
     }
@@ -91,8 +91,8 @@ const SendConfirmationForm = ({ onNext, registrationId }: SendConfirmationFormPr
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-foreground">Documentation Sent</h2>
-        <p className="text-muted-foreground">Warranty package delivered to homeowner</p>
+        <h2 className="text-2xl font-bold text-foreground">Handover pack sent</h2>
+        <p className="text-muted-foreground">Warranty pack delivered to the homeowner</p>
       </div>
 
       {/* Status Card */}
@@ -106,7 +106,7 @@ const SendConfirmationForm = ({ onNext, registrationId }: SendConfirmationFormPr
             </div>
             {status === 'delivered' && (
               <Badge className="bg-green-100 text-green-800">
-                Confirmed
+                Delivered
               </Badge>
             )}
           </div>
@@ -117,7 +117,7 @@ const SendConfirmationForm = ({ onNext, registrationId }: SendConfirmationFormPr
       <Card>
         <CardHeader>
           <CardTitle>Delivery Details</CardTitle>
-          <CardDescription>Package sent to homeowner</CardDescription>
+          <CardDescription>Handover pack sent to the homeowner</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {loadingDetails ? (
@@ -148,12 +148,12 @@ const SendConfirmationForm = ({ onNext, registrationId }: SendConfirmationFormPr
       {/* Package Summary - from getCustomerDetails API */}
       <Card>
         <CardHeader>
-          <CardTitle>Package Contents</CardTitle>
-          <CardDescription>Documentation included in this delivery</CardDescription>
+          <CardTitle>What's included</CardTitle>
+          <CardDescription>Items and documents in this handover pack</CardDescription>
         </CardHeader>
         <CardContent>
           {loadingDetails ? (
-            <p className="text-muted-foreground text-center py-4">Loading package details...</p>
+            <p className="text-muted-foreground text-center py-4">Loading handover pack…</p>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
               <div className="p-4 border rounded-lg">
@@ -202,18 +202,10 @@ const SendConfirmationForm = ({ onNext, registrationId }: SendConfirmationFormPr
         </Card>
       )} */}
 
-      <div className="flex justify-between items-center pt-6 border-t">
-        <Button
-          variant="outline"
-          onClick={() => navigate("/onboarding")}
-          className="flex items-center space-x-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Create New Package</span>
-        </Button>
+      <div className="flex justify-end items-center pt-6 border-t">
         {status === 'delivered' && (
           <Badge className="bg-green-100 text-green-800 px-4 py-2">
-            ✓ Documentation Package Delivered Successfully
+            ✓ Handover pack delivered successfully
           </Badge>
         )}
       </div>

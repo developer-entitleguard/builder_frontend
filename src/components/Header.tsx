@@ -30,7 +30,7 @@ import {
   readBuilderRoleFromStorage,
 } from "@/lib/roles";
 import { useUnreadNotificationCountQuery } from "@/lib/api/services/notifications";
-import { Menu, ChevronDown, Bell } from "lucide-react";
+import { Menu, ChevronDown, Bell, HelpCircle } from "lucide-react";
 
 const hasBuilderAuth = (): boolean => {
   try {
@@ -411,6 +411,22 @@ const Header = () => {
                       <Link to="/admin">Admin</Link>
                     </Button>
                   )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="gap-1">
+                        <HelpCircle className="h-4 w-4" />
+                        Help
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                        <Link to="/dashboard">Getting started</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <a href="mailto:support@entitleguard.com">Contact support</a>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </nav>
 
                 {showNotifications && (

@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plus, RotateCcw, Sparkles, Upload, Home } from "lucide-react";
+import { Loader2, Plus, RotateCcw, Sparkles, Upload, Home, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   useGetProjectComplianceDocumentsQuery,
@@ -21,6 +21,7 @@ import {
   useDeleteProjectComplianceDocumentMutation,
   useResetProjectComplianceDocumentsMutation,
   useAssignProjectComplianceDocumentMutation,
+  useAssignProjectRegistrationDocTypeMutation,
   useGetProjectRegistrationDocTypesQuery,
   type ComplianceAssignBody,
   type ComplianceDocumentApi,
@@ -57,6 +58,11 @@ export const ProjectComplianceSection = ({
   const { data: perUnitResponse } = useGetProjectRegistrationDocTypesQuery(projectId);
   const perUnitDocs = perUnitResponse?.data ?? [];
   const [perUnitDoc, setPerUnitDoc] = useState<{ documentName: string; category: string | null } | null>(null);
+  const [assigningPerUnit, setAssigningPerUnit] = useState<{
+    documentName: string;
+    category: string | null;
+    unitsTotal: number;
+  } | null>(null);
 
   const [generate, { isLoading: generating }] = useGenerateProjectComplianceDocumentsMutation();
   const [createDoc, { isLoading: creating }] = useCreateProjectComplianceDocumentMutation();
@@ -64,6 +70,8 @@ export const ProjectComplianceSection = ({
   const [deleteDoc] = useDeleteProjectComplianceDocumentMutation();
   const [resetDocs, { isLoading: resetting }] = useResetProjectComplianceDocumentsMutation();
   const [assignDoc, { isLoading: assigning }] = useAssignProjectComplianceDocumentMutation();
+  const [assignPerUnitDoc, { isLoading: assigningPerUnitDoc }] =
+    useAssignProjectRegistrationDocTypeMutation();
 
   const [generateOpen, setGenerateOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -133,6 +141,27 @@ export const ProjectComplianceSection = ({
           "The trade/auditor was invited. Their certificate will close this line automatically.",
       });
       setAssigningDoc(null);
+    } catch {
+      toast({ title: "Couldn't assign document", variant: "destructive" });
+    }
+  };
+
+  const handleAssignPerUnit = async (body: ComplianceAssignBody) => {
+    if (!assigningPerUnit) return;
+    try {
+      const res = await assignPerUnitDoc({
+        projectId,
+        documentName: assigningPerUnit.documentName,
+        category: assigningPerUnit.category,
+        body,
+      }).unwrap();
+      toast({
+        title: "Assigned to all units",
+        description:
+          res?.message ??
+          "The trade/vendor was invited to upload one document per unit. Their certificates will close each line automatically.",
+      });
+      setAssigningPerUnit(null);
     } catch {
       toast({ title: "Couldn't assign document", variant: "destructive" });
     }
@@ -261,6 +290,21 @@ export const ProjectComplianceSection = ({
                       <Button
                         variant="outline"
                         size="sm"
+                        title="Assign to a trade/vendor for every unit"
+                        onClick={() =>
+                          setAssigningPerUnit({
+                            documentName: d.documentName,
+                            category: d.category,
+                            unitsTotal: d.unitsTotal,
+                          })
+                        }
+                      >
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        Assign
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => setPerUnitDoc({ documentName: d.documentName, category: d.category })}
                       >
                         <Upload className="h-4 w-4 mr-2" />
@@ -291,6 +335,22 @@ export const ProjectComplianceSection = ({
         document={assigningDoc}
         isSaving={assigning}
         onAssign={handleAssign}
+      />
+
+      <AssignComplianceDialog
+        open={!!assigningPerUnit}
+        onOpenChange={(next) => !next && setAssigningPerUnit(null)}
+        document={null}
+        documentLabel={assigningPerUnit?.documentName}
+        helperNote={
+          assigningPerUnit
+            ? `This is a per-unit document. It will be assigned across all ${assigningPerUnit.unitsTotal} unit${
+                assigningPerUnit.unitsTotal === 1 ? "" : "s"
+              } — the trade/vendor uploads one document for each.`
+            : undefined
+        }
+        isSaving={assigningPerUnitDoc}
+        onAssign={handleAssignPerUnit}
       />
 
       <GenerateComplianceDialog

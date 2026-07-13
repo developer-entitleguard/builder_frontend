@@ -24,6 +24,13 @@ interface AssignComplianceDialogProps {
   document: ComplianceDocumentApi | null;
   isSaving: boolean;
   onAssign: (body: ComplianceAssignBody) => Promise<void>;
+  /**
+   * Per-unit assignment: when there is no single `document` (assigning a per-unit
+   * TYPE across all units), pass the type name here plus a note explaining the
+   * fan-out so the copy reads correctly.
+   */
+  documentLabel?: string;
+  helperNote?: string;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -43,7 +50,10 @@ export const AssignComplianceDialog = ({
   document,
   isSaving,
   onAssign,
+  documentLabel,
+  helperNote,
 }: AssignComplianceDialogProps) => {
+  const docLabel = document?.documentName ?? documentLabel;
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [match, setMatch] = useState<AssigneeLookupApi | null>(null);
@@ -100,11 +110,16 @@ export const AssignComplianceDialog = ({
         <DialogHeader>
           <DialogTitle>Assign compliance document</DialogTitle>
           <DialogDescription>
-            {document
-              ? `Assign "${document.documentName}" to whoever will provide it. Enter their email — if they're on EntitleGuard we route it to their organisation, otherwise they get a link to upload.`
+            {docLabel
+              ? `Assign "${docLabel}" to whoever will provide it. Enter their email — if they're on EntitleGuard we route it to their organisation, otherwise they get a link to upload.`
               : "Assign this compliance document to whoever will provide it."}
           </DialogDescription>
         </DialogHeader>
+        {helperNote && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            {helperNote}
+          </div>
+        )}
         <div className="space-y-4 py-2">
           <div>
             <Label htmlFor="assignee-email" className="text-xs text-muted-foreground">

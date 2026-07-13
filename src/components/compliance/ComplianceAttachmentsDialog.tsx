@@ -61,12 +61,12 @@ export const ComplianceAttachmentsDialog = ({
   const [approveAttachment, { isLoading: approving }] = useApproveComplianceAttachmentMutation();
   const [rejectAttachment, { isLoading: rejecting }] = useRejectComplianceAttachmentMutation();
 
-  // Approve/reject endpoints exist only for project-scope documents.
-  const canReview = ownerType === "PROJECT" && !readOnly;
+  // Approve/reject is supported for both project-scope and per-unit documents.
+  const canReview = !readOnly;
 
   const handleApprove = async (attachmentId: string) => {
     try {
-      await approveAttachment({ projectId: ownerId, documentId, attachmentId }).unwrap();
+      await approveAttachment({ ownerType, ownerId, documentId, attachmentId }).unwrap();
       toast({ title: "Attachment approved", description: "Document marked as received." });
     } catch {
       toast({ title: "Couldn't approve", variant: "destructive" });
@@ -76,7 +76,8 @@ export const ComplianceAttachmentsDialog = ({
   const handleReject = async (attachmentId: string) => {
     try {
       await rejectAttachment({
-        projectId: ownerId,
+        ownerType,
+        ownerId,
         documentId,
         attachmentId,
         reason: rejectReason.trim() || undefined,

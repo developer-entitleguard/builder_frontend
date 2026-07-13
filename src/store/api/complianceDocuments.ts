@@ -395,6 +395,28 @@ export const complianceDocumentsApi = api.injectEndpoints({
       ],
     }),
 
+    // POST /api/builder/projects/:projectId/compliance-documents/registration-types/assign
+    // Assign a per-unit document TYPE to a vendor for every unit at once.
+    assignProjectRegistrationDocType: build.mutation<
+      ListResponse<unknown>,
+      {
+        projectId: string;
+        documentName: string;
+        category?: string | null;
+        body: ComplianceAssignBody;
+      }
+    >({
+      query: ({ projectId, documentName, category, body }) => ({
+        url: `/api/builder/projects/${projectId}/compliance-documents/registration-types/assign`,
+        method: "POST",
+        body: { ...body, documentName, category: category ?? null },
+      }),
+      invalidatesTags: (_r, _e, { projectId }) => [
+        { type: "ComplianceDocuments", id: `registration-types-${projectId}` },
+        { type: "ComplianceDocuments", id: `project-completeness-${projectId}` },
+      ],
+    }),
+
     // POST /api/builder/registrations/:registrationId/compliance-documents/:id/assign
     assignRegistrationComplianceDocument: build.mutation<
       ListResponse<unknown>,
@@ -665,34 +687,67 @@ export const complianceDocumentsApi = api.injectEndpoints({
     }),
 
     // POST .../attachments/:attachmentId/approve — accept an assignee submission → RECEIVED
+    // Approve an assignee-delivered attachment → the owning line flips to RECEIVED.
+    // Owner-aware: works for project-scope and per-unit (registration) documents.
     approveComplianceAttachment: build.mutation<
       ListResponse<ComplianceAttachmentApi>,
-      { projectId: string; documentId: string; attachmentId: string }
+      {
+        ownerType: "PROJECT" | "REGISTRATION";
+        ownerId: string;
+        documentId: string;
+        attachmentId: string;
+      }
     >({
-      query: ({ projectId, documentId, attachmentId }) => ({
-        url: `/api/builder/projects/${projectId}/compliance-documents/${documentId}/attachments/${attachmentId}/approve`,
+      query: ({ ownerType, ownerId, documentId, attachmentId }) => ({
+        url:
+          ownerType === "PROJECT"
+            ? `/api/builder/projects/${ownerId}/compliance-documents/${documentId}/attachments/${attachmentId}/approve`
+            : `/api/builder/registrations/${ownerId}/compliance-documents/${documentId}/attachments/${attachmentId}/approve`,
         method: "POST",
       }),
-      invalidatesTags: (_r, _e, { projectId, documentId }) => [
-        { type: "ComplianceAttachments", id: documentId },
-        { type: "ComplianceDocuments" as const, id: `project-${projectId}` },
-      ],
+      invalidatesTags: (_r, _e, { ownerType, ownerId, documentId }) =>
+        ownerType === "PROJECT"
+          ? [
+              { type: "ComplianceAttachments", id: documentId },
+              { type: "ComplianceDocuments" as const, id: `project-${ownerId}` },
+            ]
+          : [
+              { type: "ComplianceAttachments", id: documentId },
+              { type: "ComplianceDocuments" as const, id: `registration-${ownerId}` },
+              { type: "HandoverReadiness" as const, id: ownerId },
+            ],
     }),
 
     // POST .../attachments/:attachmentId/reject — reject with reason → REQUIRED
     rejectComplianceAttachment: build.mutation<
       ListResponse<ComplianceAttachmentApi>,
-      { projectId: string; documentId: string; attachmentId: string; reason?: string }
+      {
+        ownerType: "PROJECT" | "REGISTRATION";
+        ownerId: string;
+        documentId: string;
+        attachmentId: string;
+        reason?: string;
+      }
     >({
-      query: ({ projectId, documentId, attachmentId, reason }) => ({
-        url: `/api/builder/projects/${projectId}/compliance-documents/${documentId}/attachments/${attachmentId}/reject`,
+      query: ({ ownerType, ownerId, documentId, attachmentId, reason }) => ({
+        url:
+          ownerType === "PROJECT"
+            ? `/api/builder/projects/${ownerId}/compliance-documents/${documentId}/attachments/${attachmentId}/reject`
+            : `/api/builder/registrations/${ownerId}/compliance-documents/${documentId}/attachments/${attachmentId}/reject`,
         method: "POST",
         body: { reason: reason ?? null },
       }),
-      invalidatesTags: (_r, _e, { projectId, documentId }) => [
-        { type: "ComplianceAttachments", id: documentId },
-        { type: "ComplianceDocuments" as const, id: `project-${projectId}` },
-      ],
+      invalidatesTags: (_r, _e, { ownerType, ownerId, documentId }) =>
+        ownerType === "PROJECT"
+          ? [
+              { type: "ComplianceAttachments", id: documentId },
+              { type: "ComplianceDocuments" as const, id: `project-${ownerId}` },
+            ]
+          : [
+              { type: "ComplianceAttachments", id: documentId },
+              { type: "ComplianceDocuments" as const, id: `registration-${ownerId}` },
+              { type: "HandoverReadiness" as const, id: ownerId },
+            ],
     }),
 
     // ----- Handover gating -----
@@ -794,6 +849,7 @@ export const {
   useGetRegistrationTradeCertificatesQuery,
   useListRegistrationOptionsQuery,
   useAssignProjectComplianceDocumentMutation,
+  useAssignProjectRegistrationDocTypeMutation,
   useAssignRegistrationComplianceDocumentMutation,
   useLazyLookupAssigneeOrgQuery,
   useApproveComplianceAttachmentMutation,

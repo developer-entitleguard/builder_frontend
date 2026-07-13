@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { USER_DATA_EVENT } from '@/hooks/useOrganization';
 import { useSignInMutation, useSendVerifyMailMutation } from '@/store/api';
 import { Button } from '@/components/ui/button';
@@ -38,45 +37,19 @@ const forgotPasswordSchema = z.object({
   email: z.string().trim().email('Please enter a valid email address'),
 });
 
-const resetPasswordSchema = z.object({
-  password: z.string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number'),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
-});
-
 const Auth = () => {
-  const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [showResetPassword, setShowResetPassword] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
-  const [resetPasswordData, setResetPasswordData] = useState({
-    password: '',
-    confirmPassword: ''
-  });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  const { updatePassword } = useAuth();
   const [signInMutation, { isLoading: isSigningIn }] = useSignInMutation();
   const [sendVerifyMailMutation, { isLoading: isSendingResetLink }] = useSendVerifyMailMutation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [searchParams] = useSearchParams();
 
   const [signInData, setSignInData] = useState({
     email: '',
     password: ''
   });
-
-  useEffect(() => {
-    // Check if this is a password reset redirect
-    if (searchParams.get('reset') === 'true') {
-      setShowResetPassword(true);
-    }
-  }, [searchParams]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,58 +163,6 @@ const Auth = () => {
     }
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setValidationErrors({});
-
-    // Validate input
-    const result = resetPasswordSchema.safeParse(resetPasswordData);
-    if (!result.success) {
-      const errors: Record<string, string> = {};
-      result.error.errors.forEach((err) => {
-        if (err.path[0]) {
-          errors[err.path[0] as string] = err.message;
-        }
-      });
-      setValidationErrors(errors);
-      toast({
-        title: "Validation Error",
-        description: result.error.errors[0]?.message || "Please check your input",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      const { error } = await updatePassword(result.data.password);
-      
-      if (error) {
-        toast({
-          title: "Error updating password",
-          description: error.message,
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Password updated",
-          description: "Your password has been updated successfully."
-        });
-        setShowResetPassword(false);
-        setResetPasswordData({ password: '', confirmPassword: '' });
-        navigate('/dashboard');
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -329,52 +250,6 @@ const Auth = () => {
                       onClick={() => setShowForgotPassword(false)}
                     >
                       Back to Sign In
-                    </Button>
-                  </form>
-                </div>
-              ) : showResetPassword ? (
-                <div className="space-y-4">
-                  <div className="text-center">
-                    <h3 className="text-lg font-semibold">Set New Password</h3>
-                    <p className="text-muted-foreground text-sm">
-                      Enter your new password below.
-                    </p>
-                  </div>
-                  <form onSubmit={handleResetPassword} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="new-password">New Password</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="new-password"
-                          type="password"
-                          placeholder="Enter new password"
-                          className="pl-10"
-                          value={resetPasswordData.password}
-                          onChange={(e) => setResetPasswordData(prev => ({ ...prev, password: e.target.value }))}
-                          required
-                          minLength={6}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="confirm-password">Confirm Password</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="confirm-password"
-                          type="password"
-                          placeholder="Confirm new password"
-                          className="pl-10"
-                          value={resetPasswordData.confirmPassword}
-                          onChange={(e) => setResetPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                          required
-                          minLength={6}
-                        />
-                      </div>
-                    </div>
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                      {isLoading ? "Updating..." : "Update Password"}
                     </Button>
                   </form>
                 </div>

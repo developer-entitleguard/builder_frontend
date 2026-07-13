@@ -16,6 +16,16 @@ export const getApiBaseUrl = (): string => {
   return 'https://builders.entitleguard.com';
 };
 
+/**
+ * Google reCAPTCHA v3 site key (public). Baked in at build time from
+ * VITE_RECAPTCHA_SITE_KEY. Empty/unset disables the captcha gate (the backend
+ * mirrors this with recaptcha.enabled=false).
+ */
+export const getRecaptchaSiteKey = (): string | null => {
+  const key = (import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined)?.trim();
+  return key ? key : null;
+};
+
 export const getApiBaseUrlWithPrefix = (): string => {
   if (import.meta.env.DEV) {
     return '/api';

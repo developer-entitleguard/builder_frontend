@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Check } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/config";
+import { executeRecaptcha } from "@/lib/recaptcha";
 
 /** Mirror of the backend PasswordPolicy so users get instant feedback. */
 const PW_RULES: { label: string; test: (p: string) => boolean }[] = [
@@ -88,6 +89,7 @@ const Signup = () => {
 
     setSubmitting(true);
     try {
+      const recaptchaToken = await executeRecaptcha("signup");
       const res = await fetch(`${apiBaseUrl}/unsecure/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -104,6 +106,7 @@ const Signup = () => {
           acceptedTerms: acceptTerms,
           termsVersionId,
           contactConsent,
+          recaptchaToken,
         }),
       });
       const body = await res.json();

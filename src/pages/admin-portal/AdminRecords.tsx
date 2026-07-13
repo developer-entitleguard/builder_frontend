@@ -200,7 +200,7 @@ const AdminRecords = () => {
 
   return (
     <AdminPortalShell>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Records</h1>
           <p className="text-muted-foreground">
@@ -265,9 +265,9 @@ const AdminRecords = () => {
                           <TableCell>
                             <Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggle(r.id)} />
                           </TableCell>
-                          <TableCell className="font-medium">{label(r)}</TableCell>
-                          <TableCell className="text-muted-foreground">{r.email}</TableCell>
-                          <TableCell className="text-muted-foreground max-w-[220px] truncate">{r.address}</TableCell>
+                          <TableCell className="font-medium max-w-[160px] truncate">{label(r)}</TableCell>
+                          <TableCell className="text-muted-foreground max-w-[200px] truncate">{r.email}</TableCell>
+                          <TableCell className="text-muted-foreground max-w-[200px] truncate">{r.address}</TableCell>
                           <TableCell>{r.builderOrgName}</TableCell>
                           <TableCell className="text-right tabular-nums">{r.installedItems}</TableCell>
                           <TableCell>
@@ -328,8 +328,8 @@ const AdminRecords = () => {
                   <TableBody>
                     {(customers ?? []).map((c) => (
                       <TableRow key={c.id} className={c.isActive === false ? 'opacity-60' : undefined}>
-                        <TableCell className="font-medium">{c.name ?? '—'}</TableCell>
-                        <TableCell className="text-muted-foreground">{c.email}</TableCell>
+                        <TableCell className="font-medium max-w-[180px] truncate">{c.name ?? '—'}</TableCell>
+                        <TableCell className="text-muted-foreground max-w-[200px] truncate">{c.email}</TableCell>
                         <TableCell>
                           <Badge variant={c.isRegistered ? 'default' : 'secondary'}>
                             {c.isRegistered ? 'Yes' : 'No'}
@@ -378,7 +378,7 @@ const AdminRecords = () => {
                   <TableBody>
                     {(builders ?? []).map((b) => (
                       <TableRow key={b.id} className={!b.isActive ? 'opacity-60' : undefined}>
-                        <TableCell className="font-medium">{b.name ?? '—'}</TableCell>
+                        <TableCell className="font-medium max-w-[220px] truncate">{b.name ?? '—'}</TableCell>
                         <TableCell className="text-right tabular-nums">{b.properties}</TableCell>
                         <TableCell className="text-right tabular-nums">{b.registrations}</TableCell>
                         <TableCell className="text-right tabular-nums">{b.handedOver}</TableCell>
@@ -466,8 +466,8 @@ const LinkedPartyTable = ({
         <TableBody>
           {rows.map((p, i) => (
             <TableRow key={`${p.email ?? p.name ?? i}`}>
-              <TableCell className="font-medium">{p.name ?? '—'}</TableCell>
-              <TableCell className="text-muted-foreground">{p.email ?? '—'}</TableCell>
+              <TableCell className="font-medium max-w-[200px] truncate">{p.name ?? '—'}</TableCell>
+              <TableCell className="text-muted-foreground max-w-[220px] truncate">{p.email ?? '—'}</TableCell>
               <TableCell>
                 <Badge variant={p.inEntitleguard ? 'default' : 'secondary'}>
                   {p.inEntitleguard ? 'On platform' : 'Not on platform'}

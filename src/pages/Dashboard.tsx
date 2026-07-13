@@ -9,6 +9,7 @@ import {
   useGetLatestTermsQuery,
 } from "@/store/api";
 import Header from "@/components/Header";
+import GettingStartedChecklist from "@/components/dashboards/GettingStartedChecklist";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -120,6 +121,10 @@ const Dashboard = () => {
           <p className="text-muted-foreground mt-1">
             Overview of your builder organisation.
           </p>
+        </div>
+
+        <div className="mb-8">
+          <GettingStartedChecklist />
         </div>
 
         {/* Stats Cards */}

@@ -3,12 +3,11 @@ import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, XCircle, Loader2, Home, Mail } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { getApiBaseUrl } from "@/lib/config";
 
 const ConsentConfirmation = () => {
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'success' | 'already_consented' | 'error'>('loading');
-  const [registration, setRegistration] = useState<{ customer_name: string; property_address: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const token = searchParams.get('token');
@@ -24,25 +23,29 @@ const ConsentConfirmation = () => {
 
   const confirmConsent = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('consent-management', {
-        body: {
-          action: 'confirm_consent',
-          token,
-        },
-      });
+      const res = await fetch(
+        `${getApiBaseUrl()}/api/consent/approve?token=${encodeURIComponent(token ?? '')}`
+      );
+      const data = await res.json();
 
-      if (error) throw error;
+      if (data?.success === false) {
+        throw new Error(data?.message || 'Invalid consent link.');
+      }
 
-      if (data.message === 'Consent already recorded') {
+      const message = typeof data?.message === 'string' ? data.message : '';
+      if (message.toLowerCase().includes('already')) {
         setStatus('already_consented');
       } else {
         setStatus('success');
       }
-      setRegistration(data.registration);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error confirming consent:', err);
       setStatus('error');
-      setError(err.message || 'Failed to confirm consent. Please try again or contact your builder.');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to confirm consent. Please try again or contact your builder.'
+      );
     }
   };
 
@@ -74,15 +77,9 @@ const ConsentConfirmation = () => {
               <div>
                 <h3 className="text-lg font-semibold text-foreground">Consent Confirmed!</h3>
                 <p className="text-muted-foreground mt-2">
-                  Thank you{registration?.customer_name ? `, ${registration.customer_name}` : ''}! You have successfully provided consent to receive your warranty documentation digitally.
+                  Thank you! You have successfully provided consent to receive your warranty documentation digitally.
                 </p>
               </div>
-              {registration?.property_address && (
-                <div className="bg-muted p-4 rounded-lg">
-                  <p className="text-sm text-muted-foreground">Property</p>
-                  <p className="font-medium">{registration.property_address}</p>
-                </div>
-              )}
               <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
                 <div className="flex items-center gap-2 text-blue-800">
                   <Mail className="h-5 w-5" />
@@ -106,12 +103,6 @@ const ConsentConfirmation = () => {
                   You have already provided consent to receive your warranty documentation digitally.
                 </p>
               </div>
-              {registration?.property_address && (
-                <div className="bg-muted p-4 rounded-lg">
-                  <p className="text-sm text-muted-foreground">Property</p>
-                  <p className="font-medium">{registration.property_address}</p>
-                </div>
-              )}
             </div>
           )}
 

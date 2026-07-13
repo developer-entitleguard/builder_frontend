@@ -451,16 +451,18 @@ const LinkedPartyTable = ({
   onDelete: (p: LinkedParty) => void;
 }) => {
   const cap = counterpart === 'merchant' ? 'Merchant' : 'Trade';
+  const noun = counterpart === 'merchant' ? 'supplier' : 'vendor';
   const onPlatform = rows.filter((p) => p.inEntitleguard).length;
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title} across builders ({rows.length})</CardTitle>
         <p className="text-sm text-muted-foreground mt-1">
-          A builder's {counterpart === 'merchant' ? 'supplier' : 'vendor'} is a{' '}
-          <span className="font-medium">{counterpart}</span> on EntitleGuard. Deduped by email;{' '}
-          {onPlatform} of {rows.length} match a {counterpart} account on the platform (by email or ABN).
-          Actions apply to every matching record across all linked builders.
+          A builder's {noun} is a <span className="font-medium">{counterpart} business</span> — the{' '}
+          {counterpart} is the same business type on EntitleGuard. Deduped by email;{' '}
+          {onPlatform} of {rows.length} have an EntitleGuard {counterpart} account (matched by email or ABN);
+          the rest are off-platform {counterpart} businesses. Actions apply to every matching record
+          across all linked builders.
         </p>
       </CardHeader>
       <CardContent>
@@ -489,7 +491,7 @@ const LinkedPartyTable = ({
                       )}
                     </div>
                   ) : (
-                    <Badge variant="secondary">Not a {counterpart}</Badge>
+                    <Badge variant="secondary">Off-platform {counterpart}</Badge>
                   )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{p.buildersLinked}</TableCell>

@@ -12,6 +12,8 @@ import {
   useUpdatePricingCostItemMutation,
   useCreateProjectPricingMutation,
   useGenerateProjectPricingMutation,
+  useUpdateProjectPricingMutation,
+  useDeletePricingCostItemMutation,
 } from "@/store/api/pricing";
 import type {
   BuilderPricingEntry,
@@ -189,6 +191,8 @@ export const useProjectPricing = (projectId: string | undefined) => {
   const [updatePricingCostItem] = useUpdatePricingCostItemMutation();
   const [createProjectPricing] = useCreateProjectPricingMutation();
   const [generateProjectPricing] = useGenerateProjectPricingMutation();
+  const [updateProjectPricing] = useUpdateProjectPricingMutation();
+  const [deletePricingCostItem] = useDeletePricingCostItemMutation();
 
   const sleep = (ms: number) =>
     new Promise<void>((resolve) => {
@@ -594,6 +598,25 @@ export const useProjectPricing = (projectId: string | undefined) => {
   };
 
   const deleteCostItem = async (itemId: string): Promise<boolean> => {
+    if (isBuilder) {
+      if (!pricing) return false;
+      // Builder API path: DELETE /api/builder/pricing/:pricingId/cost-items/:id
+      try {
+        await deletePricingCostItem({ pricingId: pricing.id, id: itemId }).unwrap();
+        setCostItems(prev => prev.filter(item => item.id !== itemId));
+        await recalculateTotals();
+        return true;
+      } catch (error: unknown) {
+        toast({
+          title: "Error deleting cost item",
+          description: getErrorMessage(error, "Failed to delete cost item"),
+          variant: "destructive"
+        });
+        return false;
+      }
+    }
+
+    // Legacy Supabase path
     try {
       const { error } = await (supabase as typeof supabase)
         .from('project_cost_items')
@@ -601,10 +624,10 @@ export const useProjectPricing = (projectId: string | undefined) => {
         .eq('id', itemId);
 
       if (error) throw error;
-      
+
       setCostItems(prev => prev.filter(item => item.id !== itemId));
       await recalculateTotals();
-      
+
       return true;
     } catch (error: unknown) {
       toast({
@@ -698,7 +721,41 @@ export const useProjectPricing = (projectId: string | undefined) => {
       : pricing.margin_amount;
     
     const finalPrice = costPlusBuffer + marginAmt;
-    
+
+    if (isBuilder) {
+      // Builder API path: PUT /api/builder/projects/:projectId/pricing/:id
+      try {
+        await updateProjectPricing({
+          projectId,
+          id: pricing.id,
+          body: {
+            baseEstimatedCost: pricing.base_estimated_cost,
+            totalEstimatedCost: totalCost,
+            bufferPercentage: pricing.buffer_percentage,
+            bufferAmount: bufferAmt,
+            marginPercentage: pricing.margin_percentage,
+            marginAmount: marginAmt,
+            finalPrice,
+          },
+        }).unwrap();
+        setPricing(prev => prev ? {
+          ...prev,
+          total_estimated_cost: totalCost,
+          buffer_amount: bufferAmt,
+          margin_amount: marginAmt,
+          final_price: finalPrice
+        } : null);
+      } catch (error: unknown) {
+        toast({
+          title: "Error updating totals",
+          description: getErrorMessage(error, "Failed to update pricing totals"),
+          variant: "destructive"
+        });
+      }
+      return;
+    }
+
+    // Legacy Supabase path
     const { error } = await (supabase as typeof supabase)
       .from('project_pricing')
       .update({
@@ -745,18 +802,36 @@ export const useProjectPricing = (projectId: string | undefined) => {
       
       const finalPrice = costPlusBuffer + marginAmt;
 
-      const { error } = await (supabase as typeof supabase)
-        .from('project_pricing')
-        .update({
-          ...updates,
-          buffer_amount: bufferAmt,
-          margin_amount: marginAmt,
-          final_price: finalPrice
-        })
-        .eq('id', pricing.id);
+      if (isBuilder) {
+        // Builder API path: PUT /api/builder/projects/:projectId/pricing/:id
+        await updateProjectPricing({
+          projectId,
+          id: pricing.id,
+          body: {
+            baseEstimatedCost: pricing.base_estimated_cost,
+            totalEstimatedCost: totalCost,
+            bufferPercentage: updates.buffer_percentage ?? newPricing.buffer_percentage,
+            bufferAmount: bufferAmt,
+            marginPercentage: updates.margin_percentage ?? newPricing.margin_percentage,
+            marginAmount: marginAmt,
+            finalPrice,
+          },
+        }).unwrap();
+      } else {
+        // Legacy Supabase path
+        const { error } = await (supabase as typeof supabase)
+          .from('project_pricing')
+          .update({
+            ...updates,
+            buffer_amount: bufferAmt,
+            margin_amount: marginAmt,
+            final_price: finalPrice
+          })
+          .eq('id', pricing.id);
 
-      if (error) throw error;
-      
+        if (error) throw error;
+      }
+
       setPricing(prev => prev ? {
         ...prev,
         ...updates,
@@ -764,7 +839,7 @@ export const useProjectPricing = (projectId: string | undefined) => {
         margin_amount: marginAmt,
         final_price: finalPrice
       } : null);
-      
+
       return true;
     } catch (error: unknown) {
       toast({

@@ -204,6 +204,21 @@ export const pricingApi = api.injectEndpoints({
         { type: "ProjectPricing", id },
       ],
     }),
+
+    // DELETE /api/builder/pricing/:pricingId/cost-items/:id
+    deletePricingCostItem: build.mutation<
+      BuilderPricingCostItemResponse,
+      { pricingId: string; id: string }
+    >({
+      query: ({ pricingId, id }) => ({
+        url: `/api/builder/pricing/${pricingId}/cost-items/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, { pricingId, id }) => [
+        { type: "ProjectPricing", id: `cost-items-${pricingId}` },
+        { type: "ProjectPricing", id: `cost-item-${id}` },
+      ],
+    }),
   }),
 });
 
@@ -218,4 +233,5 @@ export const {
   useCreateProjectPricingMutation,
   useGenerateProjectPricingMutation,
   useUpdateProjectPricingMutation,
+  useDeletePricingCostItemMutation,
 } = pricingApi;

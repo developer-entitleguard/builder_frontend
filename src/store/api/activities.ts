@@ -297,6 +297,7 @@ export const {
   useGetActivitiesByProjectQuery,
   useGetActivityByIdQuery,
   useGetActivityUpdatesQuery,
+  useLazyGetActivityUpdatesQuery,
   usePostActivityUpdateMutation,
   useCreateActivityMutation,
   useGenerateActivitiesMutation,

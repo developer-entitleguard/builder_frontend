@@ -489,19 +489,9 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, readOnly, onS
         });
         return;
       }
-    } else {
-      try {
-        const { error } = await supabase.storage.from('item-documents').remove([documentPath]);
-        if (error) throw error;
-      } catch (error: unknown) {
-        toast({
-          title: "Remove failed",
-          description: error instanceof Error ? error.message : "Remove failed",
-          variant: "destructive",
-        });
-        return;
-      }
     }
+    // No backend fileId means the document isn't persisted server-side; nothing
+    // to delete remotely, so fall through to removing it from local state.
 
     setSelectedItems((prev) =>
       prev.map((item) => {

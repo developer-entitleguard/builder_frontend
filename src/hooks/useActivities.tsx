@@ -8,6 +8,8 @@ import {
   useCreateActivityMutation,
   useDeleteActivityMutation,
   useUpdateActivityMutation,
+  useLazyGetActivityUpdatesQuery,
+  usePostActivityUpdateMutation,
   type BuilderActivityApi,
 } from "@/store/api/activities";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
@@ -134,6 +136,8 @@ export const useActivities = (projectId: string | undefined) => {
   const [createActivityMutation] = useCreateActivityMutation();
   const [deleteActivityMutation] = useDeleteActivityMutation();
   const [updateActivityMutation] = useUpdateActivityMutation();
+  const [triggerActivityUpdates] = useLazyGetActivityUpdatesQuery();
+  const [postActivityUpdateMutation] = usePostActivityUpdateMutation();
 
   // Map builder API activities into local Activity shape
   useEffect(() => {
@@ -511,15 +515,18 @@ export const useActivities = (projectId: string | undefined) => {
 
   // Activity Updates
   const fetchUpdates = async (activityId: string): Promise<ActivityUpdate[]> => {
+    // Builder API path: GET /api/builder/activity/:activityId/activity_updates
     try {
-      const { data, error } = await (supabase as typeof supabase)
-        .from('activity_updates')
-        .select('*')
-        .eq('activity_id', activityId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return (data as ActivityUpdate[]) || [];
+      const res = await triggerActivityUpdates({ activityId }).unwrap();
+      const list = Array.isArray(res?.data) ? res.data : [];
+      return list.map((u) => ({
+        id: typeof u.id === "string" ? u.id : "",
+        activity_id: typeof u.activityId === "string" ? u.activityId : activityId,
+        builder_id: typeof u.builderId === "string" ? u.builderId : "",
+        content: typeof u.content === "string" ? u.content : "",
+        attachments: Array.isArray(u.attachments) ? u.attachments : [],
+        created_at: typeof u.createdAt === "string" ? u.createdAt : "",
+      }));
     } catch (error: unknown) {
       toast({
         title: "Error fetching updates",
@@ -531,20 +538,9 @@ export const useActivities = (projectId: string | undefined) => {
   };
 
   const postUpdate = async (activityId: string, content: string): Promise<boolean> => {
-    if (!user || !organization) return false;
-    
+    // Builder API path: POST /api/builder/activity/:activityId/activity_updates
     try {
-      const { error } = await (supabase as typeof supabase)
-        .from('activity_updates')
-        .insert({
-          activity_id: activityId,
-          builder_id: user.id,
-          organization_id: organization.id,
-          content
-        });
-
-      if (error) throw error;
-      
+      await postActivityUpdateMutation({ activityId, body: { content } }).unwrap();
       toast({
         title: "Update posted",
         description: "Your update has been added."

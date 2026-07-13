@@ -61,6 +61,7 @@ export const itemsApi = api.injectEndpoints({
           formData.append('price', data.price != null ? String(data.price) : '');
           if (data.documentationUrl) formData.append('documentationUrl', data.documentationUrl);
           if (data.purchaser) formData.append('purchaser', data.purchaser);
+          if (data.supplierId) formData.append('supplierId', data.supplierId);
           if (data.warranty != null) {
             formData.append('warranty', String(data.warranty));
           }
@@ -153,6 +154,7 @@ export const itemsApi = api.injectEndpoints({
           if (data.price != null) formData.append('price', String(data.price));
           if (data.documentationUrl) formData.append('documentationUrl', data.documentationUrl);
           if (data.purchaser) formData.append('purchaser', data.purchaser);
+          if (data.supplierId) formData.append('supplierId', data.supplierId);
           if (data.warranty != null) {
             formData.append('warranty', String(data.warranty));
           }

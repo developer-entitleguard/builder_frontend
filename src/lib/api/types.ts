@@ -146,6 +146,7 @@ export interface BuilderItem extends BaseEntity {
   documentationUrl: string | null;
   status: string;
   purchaser: string | null;
+  supplierId?: string | null;
   description?: string;
   price?: number;
   note?: string | null;
@@ -163,6 +164,7 @@ export interface CreateBuilderItemRequest {
   model?: string;
   documentationUrl?: string;
   purchaser?: string;
+  supplierId?: string;
   builderOrganizationId?: string;
   billMaterialId?: string;
   status?: string;
@@ -186,6 +188,7 @@ export interface UpdateBuilderItemRequest {
   note?: string | null;
   documentationUrl?: string;
   purchaser?: string;
+  supplierId?: string;
   warranty?: number | null;
 }
 

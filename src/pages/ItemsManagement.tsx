@@ -8,6 +8,7 @@ import {
   useCreateItemMutation,
   useUpdateItemMutation,
   useDeleteItemMutation,
+  useGetBuilderSuppliersQuery,
 } from "@/store/api";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -135,6 +136,7 @@ const ItemsManagement = () => {
     documentation_url: "",
     notes: "",
     purchaser: "",
+    supplierId: "",
     warranty_years: "",
     manual_url: ""
   });
@@ -144,6 +146,8 @@ const ItemsManagement = () => {
   const { data: categoriesResponse } = useGetCategorysQuery();
   const [createItem, { isLoading: isCreating }] = useCreateItemMutation();
   const [updateItem, { isLoading: isUpdating }] = useUpdateItemMutation();
+  const { data: suppliersPage } = useGetBuilderSuppliersQuery({ page: 0, size: 200 });
+  const suppliers = (suppliersPage as { content?: Array<{ id: string; name: string }> } | undefined)?.content ?? [];
   const [deleteItem] = useDeleteItemMutation();
 
   const categories = useMemo(() => {
@@ -242,6 +246,7 @@ const ItemsManagement = () => {
         documentation_url: item.documentationUrl ?? null,
         notes: item.note ?? null,
         purchaser: item.purchaser ?? null,
+        supplierId: item.supplierId ?? null,
         bom_id: selectedBomId || null,
         warranty_years:
           item.warranty != null && item.warranty !== ""
@@ -329,6 +334,7 @@ const ItemsManagement = () => {
         price: formData.price ? parseFloat(formData.price) : null,
         documentationUrl: formData.documentation_url || undefined,
         purchaser: formData.purchaser || undefined,
+        supplierId: formData.supplierId || undefined,
         warranty: warrantyYears,
         builderOrganizationId,
         ...(selectedBomId ? { billMaterialId: selectedBomId } : {}),
@@ -369,6 +375,7 @@ const ItemsManagement = () => {
       documentation_url: item.documentation_url || "",
       notes: item.notes || "",
       purchaser: item.purchaser || "",
+      supplierId: (item as { supplierId?: string | null }).supplierId || "",
       warranty_years: item.warranty_years?.toString() || "",
       manual_url: item.manual_url || ""
     });
@@ -502,6 +509,24 @@ const ItemsManagement = () => {
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     rows={2}
                   />
+                </div>
+                <div>
+                  <Label htmlFor="supplier">Supplier</Label>
+                  <Select
+                    value={formData.supplierId || "none"}
+                    onValueChange={(v) => setFormData({ ...formData, supplierId: v === "none" ? "" : v })}
+                  >
+                    <SelectTrigger id="supplier">
+                      <SelectValue placeholder="Select a supplier (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No supplier</SelectItem>
+                      {suppliers.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <InfoHint text="The business that supplies this item's materials. Captures provenance for warranty attribution." />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>

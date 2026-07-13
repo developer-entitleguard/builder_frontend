@@ -162,19 +162,17 @@ export const ComplianceDocumentsTable = ({
                     >
                       <Paperclip className="h-4 w-4" />
                     </Button>
-                    {!rowReadOnly &&
-                      onAssign &&
-                      (doc.status ?? "").toUpperCase() !== "RECEIVED" && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          title="Assign to trade / auditor"
-                          onClick={() => onAssign(doc)}
-                        >
-                          <UserPlus className="h-4 w-4" />
-                        </Button>
-                      )}
+                    {!rowReadOnly && onAssign && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="Assign to someone to provide"
+                        onClick={() => onAssign(doc)}
+                      >
+                        <UserPlus className="h-4 w-4" />
+                      </Button>
+                    )}
                     {!rowReadOnly && onEdit && (
                       <Button
                         variant="ghost"

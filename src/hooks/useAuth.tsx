@@ -1,6 +1,11 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+
+// Minimal local shapes (Supabase removed). The session is always null now — the
+// real auth is the backend builder JWT in localStorage.userData — so these only
+// exist to keep the provider's types compiling.
+interface User { id: string; email?: string | null }
+interface Session { user: User | null }
 
 interface AuthContextType {
   user: User | null;

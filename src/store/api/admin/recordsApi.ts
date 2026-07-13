@@ -65,6 +65,7 @@ export interface BuilderRecord {
   handedOver: number;
   supportTickets: number;
   isActive: boolean | null;
+  createdAt: string | null;
 }
 
 export interface LinkedParty {
@@ -72,6 +73,7 @@ export interface LinkedParty {
   email: string | null;
   inEntitleguard: boolean;
   buildersLinked: number;
+  firstAdded: string | null;
 }
 
 export const useCustomersRecordsQuery = (search: string) => {
@@ -145,6 +147,41 @@ export const useBulkSoftDeleteMutation = () =>
         body: JSON.stringify({ ids, reason }),
       }),
   );
+
+// ---- Deactivate / delete the four top-level record types -----------------
+
+type ActionResult = { success: boolean; message: string };
+
+const useIdAction = (path: (id: string) => string) =>
+  useAdminMutation<{ id: string; reason: string }, ActionResult>(({ id, reason }) =>
+    adminFetch(path(id), { method: 'POST', body: JSON.stringify({ reason }) }),
+  );
+
+const useKeyAction = (path: string) =>
+  useAdminMutation<{ email: string | null; name: string | null; reason: string }, ActionResult>(
+    ({ email, name, reason }) =>
+      adminFetch(path, { method: 'POST', body: JSON.stringify({ email, name, reason }) }),
+  );
+
+export const useDeactivateCustomerMutation = () =>
+  useIdAction((id) => `/api/admin/records/customers/${id}/deactivate`);
+export const useDeleteCustomerMutation = () =>
+  useIdAction((id) => `/api/admin/records/customers/${id}/delete`);
+
+export const useDeactivateBuilderMutation = () =>
+  useIdAction((id) => `/api/admin/records/builders/${id}/deactivate`);
+export const useDeleteBuilderMutation = () =>
+  useIdAction((id) => `/api/admin/records/builders/${id}/delete`);
+
+export const useDeactivateSupplierMutation = () =>
+  useKeyAction('/api/admin/records/suppliers/deactivate');
+export const useDeleteSupplierMutation = () =>
+  useKeyAction('/api/admin/records/suppliers/delete');
+
+export const useDeactivateVendorMutation = () =>
+  useKeyAction('/api/admin/records/vendors/deactivate');
+export const useDeleteVendorMutation = () =>
+  useKeyAction('/api/admin/records/vendors/delete');
 
 export const useAnalyticsSummaryQuery = () =>
   useAdminQuery<AnalyticsSummary>('/api/admin/analytics/summary');

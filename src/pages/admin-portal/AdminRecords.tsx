@@ -10,9 +10,19 @@ import {
   useBuildersRecordsQuery,
   useSuppliersRecordsQuery,
   useVendorsRecordsQuery,
+  useDeactivateCustomerMutation,
+  useDeleteCustomerMutation,
+  useDeactivateBuilderMutation,
+  useDeleteBuilderMutation,
+  useDeactivateSupplierMutation,
+  useDeleteSupplierMutation,
+  useDeactivateVendorMutation,
+  useDeleteVendorMutation,
   fetchDependencies,
   type RegistrationRecord,
   type LinkedParty,
+  type CustomerRecord,
+  type BuilderRecord,
 } from '@/store/api/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -37,10 +47,19 @@ const AdminRecords = () => {
   const [anonymise] = useAnonymiseRegistrationMutation();
   const [bulkSoftDelete] = useBulkSoftDeleteMutation();
 
-  const { data: customers } = useCustomersRecordsQuery(search);
-  const { data: builders } = useBuildersRecordsQuery();
-  const { data: suppliers } = useSuppliersRecordsQuery();
-  const { data: vendors } = useVendorsRecordsQuery();
+  const { data: customers, refetch: refetchCustomers } = useCustomersRecordsQuery(search);
+  const { data: builders, refetch: refetchBuilders } = useBuildersRecordsQuery();
+  const { data: suppliers, refetch: refetchSuppliers } = useSuppliersRecordsQuery();
+  const { data: vendors, refetch: refetchVendors } = useVendorsRecordsQuery();
+
+  const [deactivateCustomer] = useDeactivateCustomerMutation();
+  const [deleteCustomer] = useDeleteCustomerMutation();
+  const [deactivateBuilder] = useDeactivateBuilderMutation();
+  const [deleteBuilder] = useDeleteBuilderMutation();
+  const [deactivateSupplier] = useDeactivateSupplierMutation();
+  const [deleteSupplier] = useDeleteSupplierMutation();
+  const [deactivateVendor] = useDeactivateVendorMutation();
+  const [deleteVendor] = useDeleteVendorMutation();
 
   const rows = records ?? [];
 
@@ -54,17 +73,83 @@ const AdminRecords = () => {
   const askReason = (action: string, name: string) =>
     window.prompt(`Reason for ${action} "${name}" (recorded in the audit log):`, '');
 
-  const run = async (fn: () => Promise<{ message: string }>, ok: string) => {
+  const run = async (
+    fn: () => Promise<{ message: string }>,
+    ok: string,
+    after: () => void = refetch,
+  ) => {
     try {
       const res = await fn();
       toast({ title: ok, description: res.message });
-      refetch();
+      after();
     } catch (e: unknown) {
       const msg = e && typeof e === 'object' && 'data' in e
         ? (e as { data?: { message?: string } }).data?.message
         : e instanceof Error ? e.message : 'Action failed';
       toast({ title: 'Action failed', description: String(msg), variant: 'destructive' });
     }
+  };
+
+  // ---- Customers ----
+  const onDeactivateCustomer = (c: CustomerRecord) => {
+    const reason = askReason('deactivating', c.name ?? c.email ?? c.id);
+    if (reason == null) return;
+    run(() => deactivateCustomer({ id: c.id, reason }).unwrap(), 'Customer deactivated', refetchCustomers);
+  };
+  const onDeleteCustomer = (c: CustomerRecord) => {
+    const who = c.name ?? c.email ?? c.id;
+    if (!window.confirm(
+      `Permanently delete customer "${who}" and ALL related records ` +
+      `(properties, orders, entitlements, queries, insurance)? This cannot be undone.`)) return;
+    const reason = askReason('permanently deleting', who);
+    if (reason == null) return;
+    run(() => deleteCustomer({ id: c.id, reason }).unwrap(), 'Customer deleted', refetchCustomers);
+  };
+
+  // ---- Builders ----
+  const onDeactivateBuilder = (b: BuilderRecord) => {
+    const reason = askReason('deactivating', b.name ?? b.id);
+    if (reason == null) return;
+    run(() => deactivateBuilder({ id: b.id, reason }).unwrap(), 'Builder deactivated', refetchBuilders);
+  };
+  const onDeleteBuilder = (b: BuilderRecord) => {
+    const who = b.name ?? b.id;
+    if (!window.confirm(
+      `Permanently delete builder "${who}" and EVERYTHING it owns ` +
+      `(registrations, projects, items, vendors, staff logins, queries)? This cannot be undone.`)) return;
+    const reason = askReason('permanently deleting', who);
+    if (reason == null) return;
+    run(() => deleteBuilder({ id: b.id, reason }).unwrap(), 'Builder deleted', refetchBuilders);
+  };
+
+  // ---- Suppliers / Vendors (deduped across builders by email/name) ----
+  const onDeactivateSupplier = (p: LinkedParty) => {
+    const reason = askReason('deactivating', p.name ?? p.email ?? 'supplier');
+    if (reason == null) return;
+    run(() => deactivateSupplier({ email: p.email, name: p.name, reason }).unwrap(),
+      'Supplier deactivated', refetchSuppliers);
+  };
+  const onDeleteSupplier = (p: LinkedParty) => {
+    const who = p.name ?? p.email ?? 'this supplier';
+    if (!window.confirm(`Permanently delete supplier "${who}" across all ${p.buildersLinked} linked builder(s)? This cannot be undone.`)) return;
+    const reason = askReason('permanently deleting', who);
+    if (reason == null) return;
+    run(() => deleteSupplier({ email: p.email, name: p.name, reason }).unwrap(),
+      'Supplier deleted', refetchSuppliers);
+  };
+  const onDeactivateVendor = (p: LinkedParty) => {
+    const reason = askReason('deactivating', p.name ?? p.email ?? 'vendor');
+    if (reason == null) return;
+    run(() => deactivateVendor({ email: p.email, name: p.name, reason }).unwrap(),
+      'Vendor deactivated', refetchVendors);
+  };
+  const onDeleteVendor = (p: LinkedParty) => {
+    const who = p.name ?? p.email ?? 'this vendor';
+    if (!window.confirm(`Permanently delete vendor "${who}" across all ${p.buildersLinked} linked builder(s), including their schedules? This cannot be undone.`)) return;
+    const reason = askReason('permanently deleting', who);
+    if (reason == null) return;
+    run(() => deleteVendor({ email: p.email, name: p.name, reason }).unwrap(),
+      'Vendor deleted', refetchVendors);
   };
 
   const onSoftDelete = (r: RegistrationRecord) => {
@@ -236,11 +321,13 @@ const AdminRecords = () => {
                       <TableHead>Registered</TableHead>
                       <TableHead className="text-right">Properties</TableHead>
                       <TableHead className="text-right">Orders</TableHead>
+                      <TableHead>Added</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(customers ?? []).map((c) => (
-                      <TableRow key={c.id}>
+                      <TableRow key={c.id} className={c.isActive === false ? 'opacity-60' : undefined}>
                         <TableCell className="font-medium">{c.name ?? '—'}</TableCell>
                         <TableCell className="text-muted-foreground">{c.email}</TableCell>
                         <TableCell>
@@ -250,10 +337,21 @@ const AdminRecords = () => {
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{c.propertiesAdded}</TableCell>
                         <TableCell className="text-right tabular-nums">{c.ordersUploaded}</TableCell>
+                        <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(c.createdAt)}</TableCell>
+                        <TableCell className="text-right space-x-1 whitespace-nowrap">
+                          {c.isActive !== false && (
+                            <Button variant="ghost" size="sm" onClick={() => onDeactivateCustomer(c)}>
+                              Deactivate
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => onDeleteCustomer(c)}>
+                            Delete
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                     {(customers ?? []).length === 0 && (
-                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No customers yet.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">No customers yet.</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -273,6 +371,8 @@ const AdminRecords = () => {
                       <TableHead className="text-right">Registrations</TableHead>
                       <TableHead className="text-right">Handed over</TableHead>
                       <TableHead className="text-right">Support tickets</TableHead>
+                      <TableHead>Added</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -283,10 +383,21 @@ const AdminRecords = () => {
                         <TableCell className="text-right tabular-nums">{b.registrations}</TableCell>
                         <TableCell className="text-right tabular-nums">{b.handedOver}</TableCell>
                         <TableCell className="text-right tabular-nums">{b.supportTickets}</TableCell>
+                        <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(b.createdAt)}</TableCell>
+                        <TableCell className="text-right space-x-1 whitespace-nowrap">
+                          {b.isActive !== false && (
+                            <Button variant="ghost" size="sm" onClick={() => onDeactivateBuilder(b)}>
+                              Deactivate
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => onDeleteBuilder(b)}>
+                            Delete
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                     {(builders ?? []).length === 0 && (
-                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No builders yet.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">No builders yet.</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -295,11 +406,21 @@ const AdminRecords = () => {
           </TabsContent>
 
           <TabsContent value="suppliers">
-            <LinkedPartyTable title="Suppliers" rows={suppliers ?? []} />
+            <LinkedPartyTable
+              title="Suppliers"
+              rows={suppliers ?? []}
+              onDeactivate={onDeactivateSupplier}
+              onDelete={onDeleteSupplier}
+            />
           </TabsContent>
 
           <TabsContent value="vendors">
-            <LinkedPartyTable title="Vendors" rows={vendors ?? []} />
+            <LinkedPartyTable
+              title="Vendors"
+              rows={vendors ?? []}
+              onDeactivate={onDeactivateVendor}
+              onDelete={onDeleteVendor}
+            />
           </TabsContent>
         </Tabs>
       </div>
@@ -310,13 +431,24 @@ const AdminRecords = () => {
 const label = (r: RegistrationRecord) =>
   [r.firstName, r.lastName].filter(Boolean).join(' ') || r.email || r.id.slice(0, 8);
 
+const fmtDate = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+
 /** Suppliers and Vendors share the same deduped-across-builders shape. */
-const LinkedPartyTable = ({ title, rows }: { title: string; rows: LinkedParty[] }) => (
+const LinkedPartyTable = ({
+  title, rows, onDeactivate, onDelete,
+}: {
+  title: string;
+  rows: LinkedParty[];
+  onDeactivate: (p: LinkedParty) => void;
+  onDelete: (p: LinkedParty) => void;
+}) => (
   <Card>
     <CardHeader>
       <CardTitle>{title} across builders ({rows.length})</CardTitle>
       <p className="text-sm text-muted-foreground mt-1">
         Deduped by email. "In EntitleGuard" means a matching organisation account exists on the platform.
+        Actions apply to every matching record across all linked builders.
       </p>
     </CardHeader>
     <CardContent>
@@ -327,6 +459,8 @@ const LinkedPartyTable = ({ title, rows }: { title: string; rows: LinkedParty[] 
             <TableHead>Email</TableHead>
             <TableHead>In EntitleGuard</TableHead>
             <TableHead className="text-right">Builders linked</TableHead>
+            <TableHead>Added</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -340,10 +474,15 @@ const LinkedPartyTable = ({ title, rows }: { title: string; rows: LinkedParty[] 
                 </Badge>
               </TableCell>
               <TableCell className="text-right tabular-nums">{p.buildersLinked}</TableCell>
+              <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(p.firstAdded)}</TableCell>
+              <TableCell className="text-right space-x-1 whitespace-nowrap">
+                <Button variant="ghost" size="sm" onClick={() => onDeactivate(p)}>Deactivate</Button>
+                <Button variant="ghost" size="sm" className="text-destructive" onClick={() => onDelete(p)}>Delete</Button>
+              </TableCell>
             </TableRow>
           ))}
           {rows.length === 0 && (
-            <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">None yet.</TableCell></TableRow>
+            <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">None yet.</TableCell></TableRow>
           )}
         </TableBody>
       </Table>

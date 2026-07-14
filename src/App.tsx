@@ -24,6 +24,8 @@ import NotFound from "./pages/NotFound";
 import ConsentConfirmation from "./pages/ConsentConfirmation";
 import Projects from "./pages/Projects";
 import ProjectCreate from "./pages/ProjectCreate";
+import ProjectSetupGuide from "./pages/ProjectSetupGuide";
+import HelpCenter from "./pages/HelpCenter";
 import Customers from "./pages/Customers";
 import Quotes from "./pages/Quotes";
 import QuoteCreate from "./pages/QuoteCreate";
@@ -168,6 +170,12 @@ const App = () => (
                   <Dashboard />
                 </ProtectedRoute>
               } />
+              {/* Role- & module-aware help center. */}
+              <Route path="/help" element={
+                <ProtectedRoute>
+                  <HelpCenter />
+                </ProtectedRoute>
+              } />
               <Route path="/registrations" element={
                 <ProtectedRoute>
                   <RoleGate roles={[
@@ -229,7 +237,7 @@ const App = () => (
               {/* Sales module (SALES bolt-on) — customers, quotes, invoices, payments. */}
               <Route path="/customers" element={
                 <ProtectedRoute>
-                  <ModuleGate module="SALES">
+                  <ModuleGate module="SALES" featureName="Sales">
                     <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
                       <Customers />
                     </RoleGate>
@@ -238,7 +246,7 @@ const App = () => (
               } />
               <Route path="/quotes" element={
                 <ProtectedRoute>
-                  <ModuleGate module="SALES">
+                  <ModuleGate module="SALES" featureName="Sales">
                     <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
                       <Quotes />
                     </RoleGate>
@@ -247,7 +255,7 @@ const App = () => (
               } />
               <Route path="/quotes/new" element={
                 <ProtectedRoute>
-                  <ModuleGate module="SALES">
+                  <ModuleGate module="SALES" featureName="Sales">
                     <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
                       <QuoteCreate />
                     </RoleGate>
@@ -256,7 +264,7 @@ const App = () => (
               } />
               <Route path="/quotes/:id" element={
                 <ProtectedRoute>
-                  <ModuleGate module="SALES">
+                  <ModuleGate module="SALES" featureName="Sales">
                     <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
                       <QuoteDetail />
                     </RoleGate>
@@ -265,7 +273,7 @@ const App = () => (
               } />
               <Route path="/invoices" element={
                 <ProtectedRoute>
-                  <ModuleGate module="SALES">
+                  <ModuleGate module="SALES" featureName="Sales">
                     <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
                       <Invoices />
                     </RoleGate>
@@ -274,7 +282,7 @@ const App = () => (
               } />
               <Route path="/invoices/:id" element={
                 <ProtectedRoute>
-                  <ModuleGate module="SALES">
+                  <ModuleGate module="SALES" featureName="Sales">
                     <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
                       <InvoiceDetail />
                     </RoleGate>
@@ -283,7 +291,7 @@ const App = () => (
               } />
               <Route path="/payments" element={
                 <ProtectedRoute>
-                  <ModuleGate module="SALES">
+                  <ModuleGate module="SALES" featureName="Sales">
                     <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
                       <Payments />
                     </RoleGate>
@@ -298,6 +306,14 @@ const App = () => (
               <Route path="/projects/new" element={
                 <ProtectedRoute>
                   <ProjectCreate />
+                </ProtectedRoute>
+              } />
+              {/* Guided project setup hub — threads create → registrations → BOM → compliance. */}
+              <Route path="/projects/setup" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER]}>
+                    <ProjectSetupGuide />
+                  </RoleGate>
                 </ProtectedRoute>
               } />
               {/* Bulk onboarding — gated to ADMINISTRATOR / PROJECT_MANAGER. */}

@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import {
   Users,
   Plus,
@@ -12,7 +13,6 @@ import {
   Package,
   Send,
   KeyRound,
-  Pencil,
 } from "lucide-react";
 import { LinkRegistrationDialog } from "./LinkRegistrationDialog";
 import { HandoverDateDialog } from "./HandoverDateDialog";
@@ -80,6 +80,9 @@ const getBuilderId = (): string | null => {
 export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { hasModule } = useEntitlements();
+  // No project-management modules ⇒ no pre-handover "sent" stage; hand over directly.
+  const canSendEntitlement = hasModule("ACTIVITIES") || hasModule("APPROVALS");
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -398,11 +401,11 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
         <div className="flex justify-center gap-3">
           <Button variant="outline" onClick={() => setLinkDialogOpen(true)}>
             <LinkIcon className="h-4 w-4 mr-2" />
-            Link Existing
+            Link existing
           </Button>
           <Button onClick={handleCreateRegistration}>
             <Plus className="h-4 w-4 mr-2" />
-            Create Registration
+            Create registration
           </Button>
         </div>
 
@@ -418,50 +421,34 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
 
   const selectedCount = selectedIds.size;
   const allSelected = registrations.length > 0 && selectedCount === registrations.length;
+  const handedCount = registrations.filter(
+    (r) =>
+      r.status === "handed" ||
+      r.status === "handed_over" ||
+      (r.status_name ?? "").toUpperCase() === "HANDED",
+  ).length;
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-1.5">
-          <Pencil className="h-4 w-4 text-muted-foreground" />
-          <Label htmlFor="edit-registrations" className="text-sm font-medium cursor-pointer">
-            Edit on page
-          </Label>
-          <Switch
-            id="edit-registrations"
-            checked={editMode}
-            onCheckedChange={toggleEditMode}
-          />
-        </div>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={() => setLinkDialogOpen(true)}>
-            <LinkIcon className="h-4 w-4 mr-2" />
-            Link Existing
-          </Button>
-          <Button onClick={handleCreateRegistration}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Registration
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-3 mb-4 p-3 rounded-lg border bg-muted/40">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} aria-label="Select all" />
-          <span className="text-sm font-medium">
-            {selectedCount > 0 ? `${selectedCount} selected` : `Select all (${registrations.length})`}
-          </span>
-        </label>
-        {selectedCount > 0 && (
+      {selectedCount > 0 ? (
+        // Contextual selection bar — replaces the toolbar while rows are selected,
+        // so bulk actions never stack as a separate row.
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3 rounded-lg border border-primary/40 bg-primary/[0.06] px-4 py-2.5">
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} aria-label="Select all" />
+            <span className="text-sm font-semibold text-primary">{selectedCount} selected</span>
+          </label>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={() => setAttachOpen(true)} disabled={attaching || assigningBom}>
               <Package className="h-4 w-4 mr-2" />
-              Attach Items
+              Attach items
             </Button>
-            <Button size="sm" variant="outline" onClick={handleSendEntitlement} disabled={sending}>
-              <Send className="h-4 w-4 mr-2" />
-              {sending ? "Sending…" : "Send Entitlement"}
-            </Button>
+            {canSendEntitlement && (
+              <Button size="sm" variant="outline" onClick={handleSendEntitlement} disabled={sending}>
+                <Send className="h-4 w-4 mr-2" />
+                {sending ? "Sending…" : "Send entitlement"}
+              </Button>
+            )}
             <Button size="sm" onClick={() => setHandoverOpen(true)} disabled={handing}>
               <KeyRound className="h-4 w-4 mr-2" />
               Handover
@@ -470,8 +457,47 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
               Clear
             </Button>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        // Default toolbar: title + count on the left, actions on the right.
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-base font-semibold">Registrations</h3>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {registrations.length} registration{registrations.length === 1 ? "" : "s"}
+              {handedCount > 0 ? ` · ${handedCount} handed over` : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div
+              className="flex items-center gap-2 rounded-lg px-2 py-1"
+              title="Edit names, emails and details directly in the list"
+            >
+              <Switch id="quick-edit" checked={editMode} onCheckedChange={toggleEditMode} />
+              <Label htmlFor="quick-edit" className="text-sm text-muted-foreground cursor-pointer">
+                Quick edit
+              </Label>
+            </div>
+            <div className="h-5 w-px bg-border" />
+            <Button variant="outline" onClick={() => setLinkDialogOpen(true)}>
+              <LinkIcon className="h-4 w-4 mr-2" />
+              Link existing
+            </Button>
+            <Button onClick={handleCreateRegistration}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create registration
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Lightweight select-all header — only when nothing is selected yet. */}
+      {selectedCount === 0 && registrations.length > 0 && (
+        <label className="flex items-center gap-2.5 px-1 pb-2 cursor-pointer text-xs font-medium text-muted-foreground">
+          <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} aria-label="Select all" />
+          Select all
+        </label>
+      )}
 
       <div className="space-y-3">
         {registrations.map((reg) => {

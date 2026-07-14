@@ -246,20 +246,20 @@ const ReviewApprovalForm = ({
       }).unwrap();
 
       toast({
-        title: "Sent to homeowner",
-        description: "The homeowner has been marked as SENT and the details have been saved.",
+        title: "Details confirmed",
+        description: "Choose the handover date to complete the handover.",
       });
 
       onNext();
     } catch (error: unknown) {
       const description =
         error && typeof error === "object" && "data" in error
-          ? String((error as { data?: unknown }).data ?? "Failed to send to homeowner")
+          ? String((error as { data?: unknown }).data ?? "Failed to save details")
           : error instanceof Error
             ? error.message
-            : "Failed to send to homeowner";
+            : "Failed to save details";
       toast({
-        title: "Error sending to homeowner",
+        title: "Error saving details",
         description,
         variant: "destructive",
       });
@@ -310,7 +310,7 @@ const ReviewApprovalForm = ({
     const items = totalItemsFromApi ?? selectedItems.length;
     const docs = totalDocumentsFromApi ?? getTotalDocuments();
     return (
-      <>{items} item{items !== 1 ? 's' : ''} • {docs} document{docs !== 1 ? 's' : ''} • Ready to send</>
+      <>{items} item{items !== 1 ? 's' : ''} • {docs} document{docs !== 1 ? 's' : ''} • Ready to hand over</>
     );
   };
 
@@ -338,7 +338,7 @@ const ReviewApprovalForm = ({
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground">Review & Approve</h2>
-        <p className="text-muted-foreground">Review all details before sending to homeowner</p>
+        <p className="text-muted-foreground">Review all details before handing over to the homeowner</p>
       </div>
 
       {/* Customer Information */}
@@ -518,7 +518,7 @@ const ReviewApprovalForm = ({
           disabled={readOnly ? false : (!canSubmit || sendingEntitlement)}
           className="min-w-[160px]"
         >
-          {readOnly ? "Next" : sendingEntitlement ? "Sending..." : "Send to Homeowner"}
+          {readOnly ? "Next" : sendingEntitlement ? "Working..." : "Hand Over to Homeowner"}
         </Button>
       </div>
 

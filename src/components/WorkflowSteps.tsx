@@ -2,11 +2,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  User, 
-  Home, 
-  Upload, 
-  Eye, 
-  Send, 
+  User,
+  Home,
+  Upload,
+  Eye,
+  KeyRound,
   CheckCircle,
   Clock,
   ArrowRight
@@ -54,11 +54,11 @@ const WorkflowSteps = ({ currentStep, onStepClick }: WorkflowStepsProps) => {
     },
     {
       id: 'send',
-      title: 'Send to Homeowner',
-      description: 'Deliver complete documentation package',
-      icon: <Send className="h-5 w-5" />,
+      title: 'Hand Over to Homeowner',
+      description: 'Hand over the complete warranty & compliance pack',
+      icon: <KeyRound className="h-5 w-5" />,
       status: currentStep === 'send' ? 'current' : 'pending',
-      action: 'Send Package'
+      action: 'Hand Over'
     }
   ];
 

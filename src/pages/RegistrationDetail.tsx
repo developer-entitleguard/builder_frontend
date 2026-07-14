@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
+import { useEntitlements } from '@/hooks/useEntitlements';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useCreateBuilderCustomerMutation, useGetCustomerDetailsQuery, useDeleteBuilderCustomerMutation, useGetStatusesByTypeQuery, useCreateCustomerEntitlementMutation, useGetBuilderCustomerTermsQuery, useUpdateBuilderCustomerTermsMutation, useUpdateCustomerDetailsMutation } from '@/store/api';
@@ -109,7 +110,11 @@ const RegistrationDetail = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { organization } = useOrganization();
+  const { hasModule } = useEntitlements();
   const { toast } = useToast();
+  // Without the project-management modules there is no pre-handover "sent" stage
+  // to expose to the homeowner, so skip Send Entitlement and hand over directly.
+  const canSendEntitlement = hasModule("ACTIVITIES") || hasModule("APPROVALS");
   const [registration, setRegistration] = useState<RegistrationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -610,13 +615,13 @@ const RegistrationDetail = () => {
                   <Edit className="h-4 w-4 mr-2" />
                   {isHandedStatus ? 'View Details' : 'Continue Editing'}
                 </Button>
-                {registration.status !== 'sent' && (
+                {canSendEntitlement && registration.status !== 'sent' && (
                   <Button onClick={handleSendEntitlement}>
                     <Send className="h-4 w-4 mr-2" />
                     Send Entitlement
                   </Button>
                 )}
-                {registration.status === 'sent' && (
+                {(registration.status === 'sent' || !canSendEntitlement) && (
                   <Button variant="secondary" onClick={() => setHandoverDialogOpen(true)}>
                     <KeyRound className="h-4 w-4 mr-2" />
                     Mark Handed Over

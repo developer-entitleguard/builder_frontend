@@ -4,6 +4,7 @@ import { readBuilderRoleFromStorage, BUILDER_ROLES } from "@/lib/roles";
 import CustomerSupportDashboard from "@/components/dashboards/CustomerSupportDashboard";
 import InternalVendorDashboard from "@/components/dashboards/InternalVendorDashboard";
 import ExternalVendorDashboard from "@/components/dashboards/ExternalVendorDashboard";
+import WelcomeDialog from "@/components/onboarding/WelcomeDialog";
 
 // The original project-manager focused dashboard (registrations, BOM, etc.)
 // is preserved as-is and lazy-loaded so the lighter-role dashboards stay snappy.
@@ -21,22 +22,32 @@ const RoleDashboard = () => {
 
   const role = builderRole ?? readBuilderRoleFromStorage();
 
-  switch (role) {
-    case BUILDER_ROLES.CUSTOMER_SUPPORT:
-      return <CustomerSupportDashboard />;
-    case BUILDER_ROLES.INTERNAL_VENDOR:
-      return <InternalVendorDashboard />;
-    case BUILDER_ROLES.EXTERNAL_VENDOR:
-      return <ExternalVendorDashboard />;
-    case BUILDER_ROLES.ADMINISTRATOR:
-    case BUILDER_ROLES.PROJECT_MANAGER:
-    default:
-      return (
-        <Suspense fallback={<Loading />}>
-          <ProjectManagerDashboard />
-        </Suspense>
-      );
-  }
+  const dashboard = (() => {
+    switch (role) {
+      case BUILDER_ROLES.CUSTOMER_SUPPORT:
+        return <CustomerSupportDashboard />;
+      case BUILDER_ROLES.INTERNAL_VENDOR:
+        return <InternalVendorDashboard />;
+      case BUILDER_ROLES.EXTERNAL_VENDOR:
+        return <ExternalVendorDashboard />;
+      case BUILDER_ROLES.ADMINISTRATOR:
+      case BUILDER_ROLES.PROJECT_MANAGER:
+      default:
+        return (
+          <Suspense fallback={<Loading />}>
+            <ProjectManagerDashboard />
+          </Suspense>
+        );
+    }
+  })();
+
+  return (
+    <>
+      {/* First-run orientation; self-guards to staff roles and shows once per org. */}
+      <WelcomeDialog />
+      {dashboard}
+    </>
+  );
 };
 
 export default RoleDashboard;

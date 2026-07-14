@@ -48,8 +48,15 @@ import {
   Share2,
   Trash2,
   DollarSign,
-  FileBarChart
+  FileBarChart,
+  MoreHorizontal
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const propertyTypeConfig: Record<PropertyType, { icon: React.ElementType; color: string; label: string }> = {
   house: { icon: Home, color: "bg-blue-100 text-blue-700", label: "House" },
@@ -402,15 +409,22 @@ const ProjectDetail = () => {
                 </Button>
               )}
               {canDelete && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => setDeleteConfirmOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="px-2" aria-label="More actions">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onSelect={() => setDeleteConfirmOpen(true)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete project
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
           </div>

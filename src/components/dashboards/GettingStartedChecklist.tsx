@@ -4,10 +4,12 @@ import { CheckCircle2, Circle, X, Rocket } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { useProjectsQuery } from "@/store/api/projects";
 import {
   useGetBuilderVendorsQuery,
   useGetBuilderSuppliersQuery,
+  useGetDashboardCountQuery,
 } from "@/store/api";
 
 /** Extracts a record count from the various paged / wrapped response shapes. */
@@ -26,9 +28,26 @@ const count = (resp: unknown): number => {
 
 const dismissKey = (orgId: string | undefined) => `eg_getting_started_dismissed_${orgId ?? "unknown"}`;
 
+/** Mirrors Dashboard's builderId resolution (JWT payload first, org context fallback). */
+const resolveBuilderId = (fallback: string | undefined): string | null => {
+  try {
+    const raw = localStorage.getItem("userData");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.userInfo?.builderOrganization?.id) return parsed.userInfo.builderOrganization.id;
+      if (parsed.builderOrganization?.id) return parsed.builderOrganization.id;
+    }
+  } catch {
+    /* ignore */
+  }
+  return fallback ?? null;
+};
+
 const GettingStartedChecklist = () => {
   const { currentOrganization } = useOrganization();
+  const { hasModule } = useEntitlements();
   const orgId = currentOrganization?.id;
+  const builderId = useMemo(() => resolveBuilderId(orgId), [orgId]);
 
   const [dismissed, setDismissed] = useState(() =>
     typeof window !== "undefined" && localStorage.getItem(dismissKey(orgId)) === "true",
@@ -40,32 +59,51 @@ const GettingStartedChecklist = () => {
   );
   const { data: suppliers } = useGetBuilderSuppliersQuery({ page: 0, size: 1 });
   const { data: projects } = useProjectsQuery();
+  const { data: countData } = useGetDashboardCountQuery(
+    { builderId: builderId || "" },
+    { skip: !builderId },
+  );
+  const entitlementsSent = countData?.data?.entitlementsSent ?? 0;
 
+  // Steps are compliance-first and adapt to the org's enabled modules, so a
+  // construction builder without the SUPPLIERS module never sees a suppliers step.
   const steps = useMemo(
-    () => [
-      {
-        key: "trades",
-        label: "Add your trades",
-        help: "The vendors who carry out work on your builds.",
-        to: "/admin",
-        done: count(vendors) > 0,
-      },
-      {
-        key: "suppliers",
-        label: "Add your suppliers",
-        help: "The businesses that provide your materials and goods.",
-        to: "/admin",
-        done: count(suppliers) > 0,
-      },
-      {
-        key: "project",
-        label: "Create your first project",
-        help: "Set up a property with its activities, then register homeowners and hand over.",
-        to: "/projects/new",
-        done: count(projects) > 0,
-      },
-    ],
-    [vendors, suppliers, projects],
+    () =>
+      [
+        {
+          key: "project",
+          label: "Create your first project",
+          help: "Set up a property, then attach homeowner registrations and build a BOM.",
+          to: "/projects/new",
+          done: count(projects) > 0,
+          show: true,
+        },
+        {
+          key: "vendors",
+          label: "Add your trades",
+          help: "The vendors who carry out work on your builds.",
+          to: "/admin",
+          done: count(vendors) > 0,
+          show: hasModule("VENDORS"),
+        },
+        {
+          key: "suppliers",
+          label: "Add your suppliers",
+          help: "The businesses that provide your materials and goods.",
+          to: "/admin",
+          done: count(suppliers) > 0,
+          show: hasModule("SUPPLIERS"),
+        },
+        {
+          key: "compliance",
+          label: "Run compliance & send your first entitlement",
+          help: "Complete a registration's compliance checklist, then hand it over to the homeowner.",
+          to: "/registrations",
+          done: entitlementsSent > 0,
+          show: hasModule("COMPLIANCE_DOCS"),
+        },
+      ].filter((s) => s.show),
+    [vendors, suppliers, projects, entitlementsSent, hasModule],
   );
 
   const completed = steps.filter((s) => s.done).length;
@@ -76,7 +114,7 @@ const GettingStartedChecklist = () => {
     setDismissed(true);
   };
 
-  if (dismissed || allDone) return null;
+  if (dismissed || allDone || steps.length === 0) return null;
 
   return (
     <Card className="border-primary/30 bg-primary/[0.03]">
@@ -87,7 +125,7 @@ const GettingStartedChecklist = () => {
             Getting started
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            {completed} of {steps.length} done — finish setup to run your first handover.
+            {completed} of {steps.length} done — a complete, compliant handover is the goal.
           </p>
         </div>
         <Button

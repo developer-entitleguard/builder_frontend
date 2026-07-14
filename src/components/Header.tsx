@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { USER_DATA_EVENT, useOrganization } from "@/hooks/useOrganization";
+import { openWelcomeGuide } from "@/components/onboarding/welcomeGuide";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import OrganizationSelector from "@/components/OrganizationSelector";
 import {
@@ -420,7 +421,15 @@ const Header = () => {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem asChild>
-                        <Link to="/dashboard">Getting started</Link>
+                        <Link to="/help">Help center</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          openWelcomeGuide(currentOrganization?.id);
+                          if (location.pathname !== "/dashboard") navigate("/dashboard");
+                        }}
+                      >
+                        Getting started
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <a href="mailto:support@entitleguard.com">Contact support</a>

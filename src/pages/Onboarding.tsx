@@ -11,6 +11,7 @@ import CustomerDetailsForm, { type CustomerDetailsFormData, type CustomerDetails
 import ItemsSelectionForm from "@/components/ItemsSelectionForm";
 import ReviewApprovalForm from "@/components/ReviewApprovalForm";
 import SendConfirmationForm from "@/components/SendConfirmationForm";
+import { HandoverDateDialog } from "@/components/projects/HandoverDateDialog";
 import { RegistrationComplianceTab } from "@/components/compliance/RegistrationComplianceTab";
 import { Check, Circle } from "lucide-react";
 import {
@@ -90,7 +91,7 @@ const Onboarding = () => {
     items: 'Items',
     documents: 'Documents',
     review: 'Review',
-    send: 'Send',
+    send: 'Handover',
   };
 
   // Builder flow: load customer from API when opening with ?id= (customer id)
@@ -417,26 +418,10 @@ const Onboarding = () => {
       }
     }
     if (currentStep === 'review' && hasBuilderAuth() && registrationId && !isReadOnly) {
-      try {
-        await createCustomerEntitlement({ builderCustomerId: registrationId }).unwrap();
-        toast({
-          title: "Entitlement created",
-          description: "Customer entitlement has been created. You can continue later from your dashboard."
-        });
-        navigate('/dashboard');
-        return;
-      } catch (error: unknown) {
-        const description =
-          error && typeof error === "object" && "data" in error
-            ? String((error as { data?: unknown }).data ?? "Failed to create entitlement")
-            : error instanceof Error ? error.message : "Failed to create entitlement";
-        toast({
-          title: "Error creating entitlement",
-          description,
-          variant: "destructive"
-        });
-        return;
-      }
+      // Handover happens here — ask for the settlement/handover date first (it
+      // anchors the warranty). The actual handover runs in performHandover.
+      setHandoverDialogOpen(true);
+      return;
     }
     toast({
       title: "Registration saved",
@@ -471,8 +456,39 @@ const Onboarding = () => {
     setCurrentStep(stepId);
   };
 
-  const [createCustomerEntitlement] = useCreateCustomerEntitlementMutation();
+  const [createCustomerEntitlement, { isLoading: handingOver }] = useCreateCustomerEntitlementMutation();
   const [createBuilderCustomer] = useCreateBuilderCustomerMutation();
+  const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
+
+  // Handover creates the order and stamps the settlement date that anchors all
+  // warranty calculations, so always confirm the date via the popup first.
+  const performHandover = async (handoverDate: string) => {
+    if (!registrationId) return;
+    try {
+      const res = await createCustomerEntitlement({ builderCustomerId: registrationId, handoverDate }).unwrap();
+      // Backend returns success=false with a reason when compliance blocks handover.
+      if (res && (res as { success?: boolean }).success === false) {
+        toast({
+          title: "Handover blocked",
+          description: (res as { message?: string }).message || "Outstanding compliance documents must be resolved first.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "Handover complete",
+        description: "The homeowner has been handed their warranty entitlement.",
+      });
+      setHandoverDialogOpen(false);
+      navigate('/dashboard');
+    } catch (error: unknown) {
+      const description =
+        error && typeof error === "object" && "data" in error
+          ? String((error as { data?: unknown }).data ?? "Failed to complete handover")
+          : error instanceof Error ? error.message : "Failed to complete handover";
+      toast({ title: "Error during handover", description, variant: "destructive" });
+    }
+  };
 
   const saveCustomerFromFormData = useCallback(async (): Promise<boolean> => {
     if (!hasBuilderAuth()) return true;
@@ -711,6 +727,13 @@ const Onboarding = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <HandoverDateDialog
+        open={handoverDialogOpen}
+        onOpenChange={setHandoverDialogOpen}
+        loading={handingOver}
+        onConfirm={performHandover}
+      />
     </div>
   );
 };

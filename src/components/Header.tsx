@@ -417,6 +417,7 @@ const Header = () => {
                       <Button variant="ghost" size="sm" className="gap-1">
                         <HelpCircle className="h-4 w-4" />
                         Help
+                        <ChevronDown className="h-3 w-3 ml-1 opacity-70" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">

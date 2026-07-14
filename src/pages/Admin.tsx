@@ -11,11 +11,20 @@ import SupplierManagement from "@/components/admin/SupplierManagement";
 import { Shield, ArrowLeft } from "lucide-react";
 // Terms & Conditions used to be a fifth tab here; it now lives at the
 // top-level Catalog → Terms & Conditions route. See PRD_Org_Terms_And_Conditions.
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+
+const ADMIN_TABS = ["organization", "users", "vendors", "suppliers"] as const;
 
 export default function Admin() {
   const { organization, userRole, loading, isAdmin } = useOrganization();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Allow deep-links like /admin?tab=users (e.g. from the getting-started checklist).
+  const requestedTab = searchParams.get("tab");
+  const initialTab =
+    requestedTab && (ADMIN_TABS as readonly string[]).includes(requestedTab)
+      ? requestedTab
+      : "organization";
 
   if (loading) {
     return (
@@ -57,7 +66,7 @@ export default function Admin() {
         </Button>
       </div>
 
-      <Tabs defaultValue="organization" className="space-y-4">
+      <Tabs defaultValue={initialTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-1 sm:grid-cols-4 h-auto">
           <TabsTrigger value="organization">Organization Details</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>

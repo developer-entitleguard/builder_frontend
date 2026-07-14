@@ -25,6 +25,7 @@ import {
   useGetTicketQuery,
   useGetTicketFilesQuery,
   useLinkTicketToRegistrationMutation,
+  useReassessTicketCoverageMutation,
 } from "@/store/api/tickets";
 import { useDashboardRegistrationsQuery } from "@/store/api";
 import { CoverageReviewPanel } from "@/components/CoverageReviewPanel";
@@ -66,6 +67,7 @@ const TicketDetail = () => {
   const [convertMut, { isLoading: converting }] = useConvertTicketToQueryMutation();
   const [cancelMut, { isLoading: cancelling }] = useCancelTicketMutation();
   const [closeMut, { isLoading: closingTicket }] = useCloseTicketMutation();
+  const [reassessMut, { isLoading: reassessing }] = useReassessTicketCoverageMutation();
 
   // Single reason dialog used by both Cancel and Close; `closureMode` decides
   // which mutation to fire on submit.
@@ -118,6 +120,31 @@ const TicketDetail = () => {
     } catch (e) {
       toast({
         title: "Convert failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleReassess = async () => {
+    try {
+      const res = await reassessMut({ id }).unwrap();
+      if (!res.success) {
+        toast({ title: "Coverage check failed", description: res.message, variant: "destructive" });
+        return;
+      }
+      const status = res.data?.coverageStatus;
+      toast({
+        title: "Coverage check complete",
+        description:
+          status === "ok"
+            ? "A recommendation is now available."
+            : "The check ran but didn't produce a clear result.",
+      });
+      refetchTicket();
+    } catch (e) {
+      toast({
+        title: "Coverage check failed",
         description: e instanceof Error ? e.message : "Unknown error",
         variant: "destructive",
       });
@@ -212,7 +239,12 @@ const TicketDetail = () => {
         )}
 
         {ticket && (
-          <CoverageReviewPanel entity={ticket} onResolved={() => refetchTicket()} />
+          <CoverageReviewPanel
+            entity={ticket}
+            onResolved={() => refetchTicket()}
+            onReassess={handleReassess}
+            reassessing={reassessing}
+          />
         )}
 
         {ticket && ticketFiles.length > 0 && (

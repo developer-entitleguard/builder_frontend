@@ -7,6 +7,7 @@ import {
   useUpdateQueryMutation,
   useAddQueryCommentMutation,
   useLazyGetQueryByIdQuery,
+  useReassessQueryCoverageMutation,
 } from "@/lib/api/services/query";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { useGetEligibleOwnersQuery } from "@/store/api";
@@ -150,6 +151,8 @@ const QueryDetail = () => {
   const [updateQuery, { isLoading: isUpdating }] = useUpdateQueryMutation();
   const [addComment, { isLoading: isAddingComment }] =
     useAddQueryCommentMutation();
+  const [reassessCoverage, { isLoading: reassessing }] =
+    useReassessQueryCoverageMutation();
 
   const { data: statusesData } = useGetStatusesByModuleQuery(
     { module: "QUERY" },
@@ -183,6 +186,30 @@ const QueryDetail = () => {
   useEffect(() => {
     if (id) fetchQuery(id);
   }, [id, fetchQuery]);
+
+  // ── Manual coverage (re-)assessment ──
+  const handleReassessCoverage = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await reassessCoverage({ id }).unwrap();
+      if (!res.success) {
+        toast({
+          title: "Coverage check failed",
+          description: res.message,
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Coverage check complete" });
+      await fetchQuery(id);
+    } catch (e) {
+      toast({
+        title: "Coverage check failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  }, [id, reassessCoverage, toast, fetchQuery]);
 
   // ── Handlers ──
 
@@ -418,6 +445,8 @@ const QueryDetail = () => {
             <CoverageReviewPanel
               entity={queryData}
               onResolved={() => id && fetchQuery(id)}
+              onReassess={handleReassessCoverage}
+              reassessing={reassessing}
             />
             {/* Case Details */}
             <Card>

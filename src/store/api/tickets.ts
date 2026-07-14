@@ -123,6 +123,16 @@ export const ticketsApi = api.injectEndpoints({
       }),
       invalidatesTags: (_r, _e, arg) => [{ type: 'Ticket', id: arg.id }, 'Ticket'],
     }),
+
+    // Manually (re-)run the advisory warranty/duty-of-care coverage assessment.
+    // Synchronous on the backend, so the refetched ticket carries the verdict.
+    reassessTicketCoverage: build.mutation<DefaultListResponse<Ticket>, { id: string }>({
+      query: ({ id }) => ({
+        url: `/api/tickets/${id}/reassess-coverage`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_r, _e, arg) => [{ type: 'Ticket', id: arg.id }],
+    }),
   }),
 });
 
@@ -134,4 +144,5 @@ export const {
   useConvertTicketToQueryMutation,
   useCancelTicketMutation,
   useCloseTicketMutation,
+  useReassessTicketCoverageMutation,
 } = ticketsApi;

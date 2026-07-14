@@ -333,6 +333,16 @@ export const queryApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Query', 'Ticket'],
     }),
+
+    // Manually (re-)run the advisory warranty/duty-of-care coverage assessment for a
+    // query. Synchronous on the backend; the caller refetches the query for the verdict.
+    reassessQueryCoverage: build.mutation<AddCommentResponse, { id: string }>({
+      query: ({ id }) => ({
+        url: `/api/query/${id}/reassess-coverage`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['Query'],
+    }),
   }),
 });
 
@@ -343,5 +353,6 @@ export const {
   useAddQueryCommentMutation,
   useVerifyRegistrationMutation,
   useRejectRegistrationMutation,
+  useReassessQueryCoverageMutation,
 } = queryApi;
 

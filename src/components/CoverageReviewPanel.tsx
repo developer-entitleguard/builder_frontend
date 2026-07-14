@@ -9,7 +9,7 @@ import {
 } from "@/lib/api/services/query";
 import type { CoverageFields } from "@/store/api/coverage";
 import { formatDateTime } from "@/lib/datetime";
-import { AlertTriangle, ShieldCheck, ShieldQuestion, HomeIcon } from "lucide-react";
+import { AlertTriangle, ShieldCheck, ShieldQuestion, HomeIcon, RefreshCw } from "lucide-react";
 
 /**
  * Ticket/Query value-add (builder side). Renders, for a ticket or query:
@@ -22,10 +22,17 @@ import { AlertTriangle, ShieldCheck, ShieldQuestion, HomeIcon } from "lucide-rea
 export function CoverageReviewPanel({
   entity,
   onResolved,
+  onReassess,
+  reassessing,
 }: {
   entity: CoverageFields;
   /** Called after a successful verify/reject so a parent using local state can refetch. */
   onResolved?: () => void;
+  /** When provided, a "Run coverage check" button is shown whenever there is no
+   *  successful verdict, letting the builder trigger the assessment manually. */
+  onReassess?: () => void;
+  /** True while the manual re-assessment is in flight (drives the button spinner). */
+  reassessing?: boolean;
 }) {
   const { toast } = useToast();
   const [verifyMut, { isLoading: verifying }] = useVerifyRegistrationMutation();
@@ -34,8 +41,11 @@ export function CoverageReviewPanel({
   const regId = entity.linkedRegistrationId ?? undefined;
   const showVerifyBanner = entity.registrationAutoCreated === true && !!regId;
   const showCoverage = entity.coverageStatus === "ok" && !!entity.coverageVerdict;
+  // No usable verdict (pending / failed / insufficient / never run) — offer a manual
+  // trigger so the builder isn't left staring at a blank panel.
+  const showReassess = !!onReassess && !showCoverage;
 
-  if (!showVerifyBanner && !showCoverage) {
+  if (!showVerifyBanner && !showCoverage && !showReassess) {
     return null;
   }
 
@@ -192,8 +202,63 @@ export function CoverageReviewPanel({
           </CardContent>
         </Card>
       )}
+
+      {showReassess && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldQuestion className="h-4 w-4" />
+              Warranty / duty-of-care assessment
+              <Badge variant="secondary">{reassessStatusLabel(entity.coverageStatus)}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p className="text-muted-foreground">{reassessMessage(entity.coverageStatus)}</p>
+            <Button size="sm" onClick={onReassess} disabled={reassessing}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${reassessing ? "animate-spin" : ""}`} />
+              {reassessing
+                ? "Checking…"
+                : entity.coverageStatus
+                  ? "Re-run coverage check"
+                  : "Run coverage check"}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Advisory only — an AI-generated guide based on the handover date and the reported
+              issue, not a legal determination.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </>
   );
+}
+
+/** Short badge for the current (non-successful) assessment state. */
+function reassessStatusLabel(status?: string | null): string {
+  switch (status) {
+    case "pending":
+      return "Not completed";
+    case "failed":
+      return "Check failed";
+    case "insufficient":
+      return "Needs more detail";
+    default:
+      return "Not run";
+  }
+}
+
+/** Explanatory line shown above the manual-trigger button. */
+function reassessMessage(status?: string | null): string {
+  switch (status) {
+    case "pending":
+      return "The automated warranty / duty-of-care check didn't return a result. Run it now to see whether this issue is likely covered.";
+    case "failed":
+      return "The last automated check couldn't be completed. Try running it again.";
+    case "insufficient":
+      return "There wasn't enough detail in the request to assess coverage. You can run the check again once more context is available.";
+    default:
+      return "Run an automated warranty / duty-of-care check to see whether this issue is likely the builder's responsibility.";
+  }
 }
 
 function Field({ label, value }: { label: string; value: string }) {

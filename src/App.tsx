@@ -43,6 +43,7 @@ import QueryDetail from "./pages/QueryDetail";
 import CreateQuery from "./pages/CreateQuery";
 import VendorQuery from "./pages/VendorQuery";
 import ComplianceUpload from "./pages/ComplianceUpload";
+import ComplianceBatchUpload from "./pages/ComplianceBatchUpload";
 import Signup from "./pages/Signup";
 import QueryRedirect from "./pages/QueryRedirect";
 import MySchedule from "./pages/MySchedule";
@@ -424,6 +425,7 @@ const App = () => (
               <Route path="/vendor/query" element={<VendorQuery />} />
               {/* Public off-platform compliance-document upload — 30-day magic-link token, no auth. */}
               <Route path="/compliance-upload" element={<ComplianceUpload />} />
+              <Route path="/compliance-batch" element={<ComplianceBatchUpload />} />
               <Route path="/consent" element={<ConsentConfirmation />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

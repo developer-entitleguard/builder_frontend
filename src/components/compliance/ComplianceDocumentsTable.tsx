@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Paperclip, Pencil, Trash2, UserPlus } from "lucide-react";
 import type { ComplianceDocumentApi } from "@/store/api/complianceDocuments";
 import { ComplianceAttachmentsDialog } from "./ComplianceAttachmentsDialog";
@@ -43,6 +44,14 @@ interface ComplianceDocumentsTableProps {
   onAssign?: (doc: ComplianceDocumentApi) => void;
   onStatusChange?: (doc: ComplianceDocumentApi, status: string) => void;
   emptyMessage?: string;
+  /**
+   * Change #2 (opt-in): show a leading checkbox so several documents can be
+   * selected and shared together. Only enabled by the project Compliance tab;
+   * other usages omit these and render exactly as before.
+   */
+  selectable?: boolean;
+  selectedIds?: string[];
+  onToggleSelect?: (doc: ComplianceDocumentApi) => void;
 }
 
 export const ComplianceDocumentsTable = ({
@@ -56,6 +65,9 @@ export const ComplianceDocumentsTable = ({
   onAssign,
   onStatusChange,
   emptyMessage = "No compliance documents yet.",
+  selectable = false,
+  selectedIds = [],
+  onToggleSelect,
 }: ComplianceDocumentsTableProps) => {
   const [attachmentDoc, setAttachmentDoc] = useState<ComplianceDocumentApi | null>(null);
 
@@ -69,6 +81,7 @@ export const ComplianceDocumentsTable = ({
         <Table>
           <TableHeader>
             <TableRow>
+              {selectable && <TableHead className="w-[40px]" />}
               <TableHead>Document</TableHead>
               <TableHead className="w-[130px]">Requirement</TableHead>
               <TableHead className="w-[170px]">Status</TableHead>
@@ -81,8 +94,20 @@ export const ComplianceDocumentsTable = ({
               // A scoped builder may not edit developer-supplied statutory docs.
               const rowReadOnly =
                 readOnly || (scopedBuilder && party === "DEVELOPER");
+              const selected = selectedIds.includes(doc.id);
               return (
-              <TableRow key={doc.id}>
+              <TableRow key={doc.id} data-state={selected ? "selected" : undefined}>
+                {selectable && (
+                  <TableCell className="align-top pt-4">
+                    {!rowReadOnly && onToggleSelect ? (
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={() => onToggleSelect(doc)}
+                        aria-label={`Select ${doc.documentName}`}
+                      />
+                    ) : null}
+                  </TableCell>
+                )}
                 <TableCell>
                   <div className="font-medium flex items-center gap-2">
                     {doc.documentName}

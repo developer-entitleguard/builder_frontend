@@ -10,7 +10,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plus, RotateCcw, Sparkles, Upload, Home, UserPlus } from "lucide-react";
+import { Loader2, Plus, RotateCcw, Sparkles, Upload, Home, UserPlus, Send, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   useGetProjectComplianceDocumentsQuery,
@@ -22,7 +23,9 @@ import {
   useResetProjectComplianceDocumentsMutation,
   useAssignProjectComplianceDocumentMutation,
   useAssignProjectRegistrationDocTypeMutation,
+  useShareComplianceBatchMutation,
   useGetProjectRegistrationDocTypesQuery,
+  type BatchItemSpecApi,
   type ComplianceAssignBody,
   type ComplianceDocumentApi,
   type ComplianceDocumentBody,
@@ -72,6 +75,57 @@ export const ProjectComplianceSection = ({
   const [assignDoc, { isLoading: assigning }] = useAssignProjectComplianceDocumentMutation();
   const [assignPerUnitDoc, { isLoading: assigningPerUnitDoc }] =
     useAssignProjectRegistrationDocTypeMutation();
+  const [shareBatch, { isLoading: sharing }] = useShareComplianceBatchMutation();
+
+  // Change #2: multi-select several documents (project-level + per-unit types)
+  // to share with one recipient in a single request.
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [selectedPerUnit, setSelectedPerUnit] = useState<string[]>([]);
+  const [shareOpen, setShareOpen] = useState(false);
+  const selectedCount = selectedProjectIds.length + selectedPerUnit.length;
+
+  const toggleProject = (doc: ComplianceDocumentApi) =>
+    setSelectedProjectIds((prev) =>
+      prev.includes(doc.id) ? prev.filter((x) => x !== doc.id) : [...prev, doc.id]
+    );
+  const togglePerUnit = (documentName: string) =>
+    setSelectedPerUnit((prev) =>
+      prev.includes(documentName)
+        ? prev.filter((x) => x !== documentName)
+        : [...prev, documentName]
+    );
+  const clearSelection = () => {
+    setSelectedProjectIds([]);
+    setSelectedPerUnit([]);
+  };
+
+  const handleShareBatch = async (body: ComplianceAssignBody) => {
+    const items: BatchItemSpecApi[] = [
+      ...selectedProjectIds.map((id) => ({ tier: "PROJECT" as const, documentId: id })),
+      ...selectedPerUnit.map((name) => {
+        const d = perUnitDocs.find((p) => p.documentName === name);
+        return {
+          tier: "REGISTRATION_TYPE" as const,
+          documentName: name,
+          category: d?.category ?? null,
+        };
+      }),
+    ];
+    if (items.length === 0) return;
+    try {
+      const res = await shareBatch({ projectId, items, body }).unwrap();
+      toast({
+        title: "Documents shared",
+        description:
+          res?.message ??
+          "The recipient was sent one link to upload everything you selected.",
+      });
+      setShareOpen(false);
+      clearSelection();
+    } catch {
+      toast({ title: "Couldn't share documents", variant: "destructive" });
+    }
+  };
 
   const [generateOpen, setGenerateOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -240,6 +294,24 @@ export const ProjectComplianceSection = ({
 
       {completeness && <ComplianceCompletenessBar completeness={completeness} />}
 
+      {selectedCount > 0 && (
+        <div className="sticky top-2 z-10 flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 shadow-sm">
+          <span className="text-sm font-medium">
+            {selectedCount} document{selectedCount === 1 ? "" : "s"} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              <X className="h-4 w-4 mr-1.5" />
+              Clear
+            </Button>
+            <Button size="sm" onClick={() => setShareOpen(true)}>
+              <Send className="h-4 w-4 mr-1.5" />
+              Share selected
+            </Button>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -257,6 +329,9 @@ export const ProjectComplianceSection = ({
             onAssign={(doc) => setAssigningDoc(doc)}
             onStatusChange={handleStatusChange}
             emptyMessage="No project-level compliance documents yet. Generate the list or add one manually."
+            selectable
+            selectedIds={selectedProjectIds}
+            onToggleSelect={toggleProject}
           />
 
           {/* D3: per-unit (registration-scope) document types — one upload modal per unit. */}
@@ -269,7 +344,14 @@ export const ProjectComplianceSection = ({
               <div className="rounded-lg border border-border overflow-hidden divide-y">
                 {perUnitDocs.map((d) => (
                   <div key={d.documentName} className="flex items-center justify-between gap-3 p-3">
-                    <div className="min-w-0">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <Checkbox
+                        className="mt-0.5"
+                        checked={selectedPerUnit.includes(d.documentName)}
+                        onCheckedChange={() => togglePerUnit(d.documentName)}
+                        aria-label={`Select ${d.documentName}`}
+                      />
+                      <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <Home className="h-4 w-4 text-muted-foreground shrink-0" />
                         <span className="text-sm font-medium">{d.documentName}</span>
@@ -282,6 +364,7 @@ export const ProjectComplianceSection = ({
                       {d.category && (
                         <div className="ml-6 text-xs text-muted-foreground">{d.category}</div>
                       )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -351,6 +434,20 @@ export const ProjectComplianceSection = ({
         }
         isSaving={assigningPerUnitDoc}
         onAssign={handleAssignPerUnit}
+      />
+
+      <AssignComplianceDialog
+        open={shareOpen}
+        onOpenChange={(next) => !next && setShareOpen(false)}
+        document={null}
+        documentLabel={`${selectedCount} document${selectedCount === 1 ? "" : "s"}`}
+        helperNote={
+          selectedPerUnit.length > 0
+            ? "Selected documents will be requested together in ONE email with ONE upload link. Per-unit documents are requested for every unit."
+            : "Selected documents will be requested together in ONE email with ONE upload link."
+        }
+        isSaving={sharing}
+        onAssign={handleShareBatch}
       />
 
       <GenerateComplianceDialog

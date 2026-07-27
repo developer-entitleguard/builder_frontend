@@ -148,6 +148,18 @@ export interface ComplianceAssignBody {
   assigneeUserId?: string | null;
 }
 
+/**
+ * Change #2: one document the builder selected to share in a request batch.
+ * PROJECT = an existing project-level line (by id); REGISTRATION_TYPE = a
+ * per-unit document type (by name) that fans across every unit.
+ */
+export interface BatchItemSpecApi {
+  tier: "PROJECT" | "REGISTRATION_TYPE";
+  documentId?: string | null;
+  documentName?: string | null;
+  category?: string | null;
+}
+
 /** Phase C: canonical EG-curated job/trade category for the mapping pickers. */
 export interface JobCategoryApi {
   id: string;
@@ -430,6 +442,25 @@ export const complianceDocumentsApi = api.injectEndpoints({
       invalidatesTags: (_r, _e, { registrationId }) => [
         { type: "ComplianceDocuments", id: `registration-${registrationId}` },
         { type: "HandoverReadiness", id: registrationId },
+      ],
+    }),
+
+    // POST /api/builder/projects/:projectId/compliance-documents/share-batch
+    // Change #2: share SEVERAL documents (project-level + per-unit types) with
+    // ONE recipient — one email + one link (off-platform) or one portal notice.
+    shareComplianceBatch: build.mutation<
+      ListResponse<unknown>,
+      { projectId: string; items: BatchItemSpecApi[]; body: ComplianceAssignBody }
+    >({
+      query: ({ projectId, items, body }) => ({
+        url: `/api/builder/projects/${projectId}/compliance-documents/share-batch`,
+        method: "POST",
+        body: { ...body, items },
+      }),
+      invalidatesTags: (_r, _e, { projectId }) => [
+        { type: "ComplianceDocuments", id: `project-${projectId}` },
+        { type: "ComplianceDocuments", id: `registration-types-${projectId}` },
+        { type: "ComplianceDocuments", id: `project-completeness-${projectId}` },
       ],
     }),
 
@@ -851,6 +882,7 @@ export const {
   useAssignProjectComplianceDocumentMutation,
   useAssignProjectRegistrationDocTypeMutation,
   useAssignRegistrationComplianceDocumentMutation,
+  useShareComplianceBatchMutation,
   useLazyLookupAssigneeOrgQuery,
   useApproveComplianceAttachmentMutation,
   useRejectComplianceAttachmentMutation,

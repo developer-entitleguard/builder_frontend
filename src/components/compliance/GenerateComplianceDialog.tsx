@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +34,8 @@ interface GenerateComplianceDialogProps {
     features: ComplianceFeatureFlags
   ) => Promise<GenerateComplianceResponse>;
   onSuccess?: () => void;
+  /** Pre-tick the feature toggles from the project's saved details. */
+  initialFeatures?: ComplianceFeatureFlags;
 }
 
 const FEATURES: { key: keyof ComplianceFeatureFlags; label: string }[] = [
@@ -55,15 +57,24 @@ export const GenerateComplianceDialog = ({
   isLoading,
   onGenerate,
   onSuccess,
+  initialFeatures,
 }: GenerateComplianceDialogProps) => {
   const { toast } = useToast();
   const [prompt, setPrompt] = useState("");
-  const [features, setFeatures] = useState<ComplianceFeatureFlags>({});
+  const [features, setFeatures] = useState<ComplianceFeatureFlags>(initialFeatures ?? {});
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+
+  // Re-seed the toggles from the project's saved features each time the dialog
+  // opens, so the builder sees what's already known (and can still tweak it).
+  useEffect(() => {
+    if (open) {
+      setFeatures(initialFeatures ?? {});
+    }
+  }, [open, initialFeatures]);
 
   const reset = () => {
     setPrompt("");
-    setFeatures({});
+    setFeatures(initialFeatures ?? {});
     setFeedback(null);
   };
 

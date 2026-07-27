@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useProjects, PropertyType, CreateProjectData } from "@/hooks/useProjects";
 import { BUILDING_CLASS_OPTIONS, DEFAULT_BUILDING_CLASS_BY_TYPE } from "@/lib/buildingClass";
 import { useAuth } from "@/hooks/useAuth";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { useToast } from "@/hooks/use-toast";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { useGetTopographyTypesQuery, useGetBalRatingsQuery } from "@/store/api/projectOptions";
@@ -102,6 +103,7 @@ const hasBuilderAuth = (): boolean => {
 const ProjectCreate = () => {
   const { user, loading: authLoading } = useAuth();
   const { createProject } = useProjects();
+  const { hasModule } = useEntitlements();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [generateActivities] = useGenerateActivitiesMutation();
@@ -215,10 +217,13 @@ const ProjectCreate = () => {
     const prompt = formData.description?.trim();
     if (formData.auto_generate && prompt) {
       setIsGenerating(true);
-      const results = await Promise.allSettled([
-        generateActivities({ projectId, prompt }).unwrap(),
-        generateCompliance({ projectId, prompt }).unwrap(),
-      ]);
+      // Only generate activities when the org actually has the Activities module;
+      // compliance always generates. (Backend enforces the same gate.)
+      const tasks = [generateCompliance({ projectId, prompt }).unwrap()];
+      if (hasModule("ACTIVITIES")) {
+        tasks.push(generateActivities({ projectId, prompt }).unwrap());
+      }
+      const results = await Promise.allSettled(tasks);
       setIsGenerating(false);
       if (results.some((r) => r.status === "rejected")) {
         toast({

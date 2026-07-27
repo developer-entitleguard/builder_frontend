@@ -36,7 +36,7 @@ import { ComplianceDocumentsTable } from "./ComplianceDocumentsTable";
 import { ComplianceCompletenessBar } from "./ComplianceCompletenessBar";
 import { ComplianceDocumentDialog } from "./ComplianceDocumentDialog";
 import { AssignComplianceDialog } from "./AssignComplianceDialog";
-import { GenerateComplianceDialog } from "./GenerateComplianceDialog";
+import { GenerateComplianceDialog, type ComplianceFeatureFlags } from "./GenerateComplianceDialog";
 
 interface ProjectComplianceSectionProps {
   projectId: string;
@@ -45,6 +45,8 @@ interface ProjectComplianceSectionProps {
   /** Developer/Builder Decoupling: NSW reference version this checklist was generated against. */
   matrixReferenceVersion?: string | null;
   jurisdiction?: string | null;
+  /** The project's saved features — pre-tick the Generate dialog's toggles. */
+  initialFeatures?: ComplianceFeatureFlags;
 }
 
 export const ProjectComplianceSection = ({
@@ -52,6 +54,7 @@ export const ProjectComplianceSection = ({
   accessRole,
   matrixReferenceVersion,
   jurisdiction,
+  initialFeatures,
 }: ProjectComplianceSectionProps) => {
   const isScopedBuilder = accessRole === "SCOPED_BUILDER";
   const { toast } = useToast();
@@ -65,6 +68,7 @@ export const ProjectComplianceSection = ({
     documentName: string;
     category: string | null;
     unitsTotal: number;
+    reassign?: boolean;
   } | null>(null);
 
   const [generate, { isLoading: generating }] = useGenerateProjectComplianceDocumentsMutation();
@@ -188,11 +192,13 @@ export const ProjectComplianceSection = ({
   const handleAssign = async (body: ComplianceAssignBody) => {
     if (!assigningDoc) return;
     try {
+      const wasAssigned = !!assigningDoc.assigneeLabel;
       await assignDoc({ projectId, id: assigningDoc.id, body }).unwrap();
       toast({
-        title: "Assigned",
-        description:
-          "The trade/auditor was invited. Their certificate will close this line automatically.",
+        title: wasAssigned ? "Reassigned" : "Assigned",
+        description: wasAssigned
+          ? "The new party was invited; the previous assignee can no longer act."
+          : "The trade/auditor was invited. Their certificate will close this line automatically.",
       });
       setAssigningDoc(null);
     } catch {
@@ -210,10 +216,10 @@ export const ProjectComplianceSection = ({
         body,
       }).unwrap();
       toast({
-        title: "Assigned to all units",
+        title: assigningPerUnit.reassign ? "Reassigned across units" : "Assigned to all units",
         description:
           res?.message ??
-          "The trade/vendor was invited to upload one document per unit. Their certificates will close each line automatically.",
+          "The trade/vendor was invited to upload one document per unit. Any previous assignee can no longer act.",
       });
       setAssigningPerUnit(null);
     } catch {
@@ -364,6 +370,15 @@ export const ProjectComplianceSection = ({
                       {d.category && (
                         <div className="ml-6 text-xs text-muted-foreground">{d.category}</div>
                       )}
+                      {d.assigneeLabel && (
+                        <div className="ml-6 mt-1">
+                          <Badge variant="secondary" className="gap-1 font-normal text-[11px]">
+                            <UserPlus className="h-3 w-3" />
+                            Assigned to {d.assigneeLabel}
+                            {d.assignedUnits ? ` · ${d.assignedUnits}/${d.unitsTotal} units` : ""}
+                          </Badge>
+                        </div>
+                      )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -373,17 +388,20 @@ export const ProjectComplianceSection = ({
                       <Button
                         variant="outline"
                         size="sm"
-                        title="Assign to a trade/vendor for every unit"
+                        title={d.assigneeLabel
+                          ? `Reassign (currently ${d.assigneeLabel})`
+                          : "Assign to a trade/vendor for every unit"}
                         onClick={() =>
                           setAssigningPerUnit({
                             documentName: d.documentName,
                             category: d.category,
                             unitsTotal: d.unitsTotal,
+                            reassign: !!d.assigneeLabel,
                           })
                         }
                       >
                         <UserPlus className="h-4 w-4 mr-2" />
-                        Assign
+                        {d.assigneeLabel ? "Reassign" : "Assign"}
                       </Button>
                       <Button
                         variant="outline"
@@ -454,6 +472,7 @@ export const ProjectComplianceSection = ({
         open={generateOpen}
         onOpenChange={setGenerateOpen}
         isLoading={generating}
+        initialFeatures={initialFeatures}
         onGenerate={(prompt, features) => generate({ projectId, prompt, ...features }).unwrap()}
       />
 

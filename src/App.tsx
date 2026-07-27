@@ -91,9 +91,10 @@ const SessionExpiredScreen = () => {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/40" />
       <div className="relative z-10 max-w-md w-full bg-card border rounded-lg shadow-lg p-6 space-y-4">
-        <h2 className="text-xl font-semibold">Session expired</h2>
+        <h2 className="text-xl font-semibold">You've been signed out</h2>
         <p className="text-sm text-muted-foreground">
-          Your session is no longer valid. Please sign in again to continue.
+          For your security, sessions time out after a period of inactivity. This is not a
+          problem with your password — just sign in again to continue.
         </p>
         <div className="flex justify-end">
           <button
@@ -101,7 +102,7 @@ const SessionExpiredScreen = () => {
             className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             onClick={handleSignOut}
           >
-            Sign out
+            Sign in again
           </button>
         </div>
       </div>

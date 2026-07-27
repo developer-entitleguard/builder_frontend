@@ -142,9 +142,15 @@ export const ComplianceDocumentsTable = ({
                     </div>
                   )}
                   {doc.assigneeLabel && (
-                    <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                      <UserPlus className="h-3 w-3" />
-                      Assigned to {doc.assigneeLabel}
+                    <div className="mt-1">
+                      <Badge
+                        variant="secondary"
+                        className="gap-1 font-normal text-[11px]"
+                        title={`Assigned to ${doc.assigneeLabel}`}
+                      >
+                        <UserPlus className="h-3 w-3" />
+                        Assigned to {doc.assigneeLabel}
+                      </Badge>
                     </div>
                   )}
                 </TableCell>
@@ -187,12 +193,15 @@ export const ComplianceDocumentsTable = ({
                     >
                       <Paperclip className="h-4 w-4" />
                     </Button>
-                    {!rowReadOnly && onAssign && (
+                    {!rowReadOnly && onAssign
+                      && (doc.status ?? "").toUpperCase() !== "RECEIVED" && (
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        title="Assign to someone to provide"
+                        title={doc.assigneeLabel
+                          ? `Reassign (currently ${doc.assigneeLabel})`
+                          : "Assign to someone to provide"}
                         onClick={() => onAssign(doc)}
                       >
                         <UserPlus className="h-4 w-4" />

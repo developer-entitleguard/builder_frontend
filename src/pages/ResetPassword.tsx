@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSetPasswordForUserMutation } from '@/store/api';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Lock, Eye, EyeOff } from 'lucide-react';
+import { Lock, Eye, EyeOff, Check } from 'lucide-react';
+
+/** Mirror of the backend PasswordPolicy — must match Signup.tsx. */
+const PW_RULES: { label: string; test: (p: string) => boolean }[] = [
+  { label: 'At least 8 characters', test: (p) => p.length >= 8 },
+  { label: 'An uppercase letter', test: (p) => /[A-Z]/.test(p) },
+  { label: 'A lowercase letter', test: (p) => /[a-z]/.test(p) },
+  { label: 'A number', test: (p) => /[0-9]/.test(p) },
+  { label: 'A special character', test: (p) => /[^A-Za-z0-9\s]/.test(p) },
+  { label: 'No spaces', test: (p) => p.length > 0 && !/\s/.test(p) },
+];
 
 const ResetPassword = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -41,6 +51,10 @@ const ResetPassword = () => {
   };
 
   const email = getEmailFromToken(token);
+  const passwordValid = useMemo(
+    () => PW_RULES.every((r) => r.test(passwordData.password)),
+    [passwordData.password]
+  );
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,10 +68,10 @@ const ResetPassword = () => {
       return;
     }
 
-    if (passwordData.password.length < 6) {
+    if (!passwordValid) {
       toast({
-        title: 'Password too short',
-        description: 'Password must be at least 6 characters long.',
+        title: "Password doesn't meet the requirements",
+        description: 'Please satisfy all the rules shown below the password field.',
         variant: 'destructive',
       });
       return;
@@ -143,7 +157,7 @@ const ResetPassword = () => {
                       setPasswordData((prev) => ({ ...prev, password: e.target.value }))
                     }
                     required
-                    minLength={6}
+                    minLength={8}
                   />
                   <Button
                     type="button"
@@ -159,6 +173,24 @@ const ResetPassword = () => {
                     )}
                   </Button>
                 </div>
+                {passwordData.password.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {PW_RULES.map((rule) => {
+                      const ok = rule.test(passwordData.password);
+                      return (
+                        <li
+                          key={rule.label}
+                          className={`flex items-center gap-2 text-xs ${
+                            ok ? 'text-emerald-600' : 'text-muted-foreground'
+                          }`}
+                        >
+                          <Check className={`h-3 w-3 ${ok ? 'opacity-100' : 'opacity-30'}`} />
+                          {rule.label}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirm Password</Label>
@@ -177,7 +209,7 @@ const ResetPassword = () => {
                       }))
                     }
                     required
-                    minLength={6}
+                    minLength={8}
                   />
                   <Button
                     type="button"
@@ -194,7 +226,15 @@ const ResetPassword = () => {
                   </Button>
                 </div>
               </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={
+                  isLoading ||
+                  !passwordValid ||
+                  passwordData.password !== passwordData.confirmPassword
+                }
+              >
                 {isLoading ? 'Saving...' : 'Save Password'}
               </Button>
             </form>

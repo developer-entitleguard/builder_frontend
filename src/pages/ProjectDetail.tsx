@@ -452,7 +452,7 @@ const ProjectDetail = () => {
             )}
             {showComplianceTab && (
               <TabsTrigger value="compliance">
-                Compliance
+                Compliance documents
               </TabsTrigger>
             )}
             {showPricingTab && (
@@ -525,6 +525,13 @@ const ProjectDetail = () => {
               accessRole={projectResponse?.data?.accessRole}
               matrixReferenceVersion={projectResponse?.data?.matrixReferenceVersion}
               jurisdiction={projectResponse?.data?.complianceJurisdiction}
+              initialFeatures={project ? {
+                hasGas: project.has_gas ?? undefined,
+                hasPool: project.has_pool ?? undefined,
+                hasLift: project.has_lift ?? undefined,
+                isStrata: project.is_strata ?? undefined,
+                hasDuctedHvac: project.has_ducted_hvac ?? undefined,
+              } : undefined}
             />
           </TabsContent>
           )}

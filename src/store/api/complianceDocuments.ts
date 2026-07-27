@@ -557,6 +557,10 @@ export const complianceDocumentsApi = api.injectEndpoints({
           mandatory: string | null;
           unitsTotal: number;
           unitsReceived: number;
+          /** Who these units are assigned to ("Multiple parties" if mixed), or null. */
+          assigneeLabel?: string | null;
+          /** How many units currently have an active assignment. */
+          assignedUnits?: number;
         }>;
       },
       string

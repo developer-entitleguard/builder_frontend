@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useCreateBuilderCustomerMutation, useGetCustomerDetailsQuery, useDeleteBuilderCustomerMutation, useGetStatusesByTypeQuery, useCreateCustomerEntitlementMutation, useGetBuilderCustomerTermsQuery, useUpdateBuilderCustomerTermsMutation, useUpdateCustomerDetailsMutation } from '@/store/api';
 import { TermsVersionPicker } from '@/components/TermsVersionPicker';
 import { HandoverDateDialog } from '@/components/projects/HandoverDateDialog';
+import { HandoverSettledDialog } from '@/components/projects/HandoverSettledDialog';
 import { EditRegistrationDialog, type EditRegistrationValues, type RegistrationDetailsPatch } from '@/components/registrations/EditRegistrationDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -119,6 +120,9 @@ const RegistrationDetail = () => {
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
+  // Change 2 — "have you handed over & settled?" prompt shown when an
+  // activity-tracking builder clicks Send, offering a shortcut to handover.
+  const [settledPromptOpen, setSettledPromptOpen] = useState(false);
 
   const builderId = organization?.id ?? getBuilderId();
   const isBuilderFlow = !user && hasBuilderAuth();
@@ -616,7 +620,7 @@ const RegistrationDetail = () => {
                   {isHandedStatus ? 'View Details' : 'Continue Editing'}
                 </Button>
                 {canSendEntitlement && registration.status !== 'sent' && (
-                  <Button onClick={handleSendEntitlement}>
+                  <Button onClick={() => setSettledPromptOpen(true)}>
                     <Send className="h-4 w-4 mr-2" />
                     Send Entitlement
                   </Button>
@@ -985,6 +989,20 @@ const RegistrationDetail = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <HandoverSettledDialog
+        open={settledPromptOpen}
+        onOpenChange={setSettledPromptOpen}
+        count={1}
+        onNo={() => {
+          setSettledPromptOpen(false);
+          handleSendEntitlement();
+        }}
+        onYes={() => {
+          setSettledPromptOpen(false);
+          setHandoverDialogOpen(true);
+        }}
+      />
 
       <HandoverDateDialog
         open={handoverDialogOpen}

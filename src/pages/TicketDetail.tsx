@@ -22,6 +22,7 @@ import {
   useCancelTicketMutation,
   useCloseTicketMutation,
   useConvertTicketToQueryMutation,
+  useDeclineTicketMutation,
   useGetTicketQuery,
   useGetTicketFilesQuery,
   useLinkTicketToRegistrationMutation,
@@ -67,11 +68,12 @@ const TicketDetail = () => {
   const [convertMut, { isLoading: converting }] = useConvertTicketToQueryMutation();
   const [cancelMut, { isLoading: cancelling }] = useCancelTicketMutation();
   const [closeMut, { isLoading: closingTicket }] = useCloseTicketMutation();
+  const [declineMut, { isLoading: declining }] = useDeclineTicketMutation();
   const [reassessMut, { isLoading: reassessing }] = useReassessTicketCoverageMutation();
 
-  // Single reason dialog used by both Cancel and Close; `closureMode` decides
+  // Single reason dialog used by Cancel, Close and Decline; `closureMode` decides
   // which mutation to fire on submit.
-  const [closureMode, setClosureMode] = useState<"cancel" | "close" | null>(null);
+  const [closureMode, setClosureMode] = useState<"cancel" | "close" | "decline" | null>(null);
   const [closureReason, setClosureReason] = useState("");
 
   const [search, setSearch] = useState("");
@@ -112,14 +114,14 @@ const TicketDetail = () => {
     try {
       const res = await convertMut({ id }).unwrap();
       if (!res.success) {
-        toast({ title: "Convert failed", description: res.message, variant: "destructive" });
+        toast({ title: "Couldn't mark as ready", description: res.message, variant: "destructive" });
         return;
       }
-      toast({ title: "Query created", description: `Query ${res.data.queryId.slice(0, 8)}…` });
+      toast({ title: "Marked as ready", description: `Query ${res.data.queryId.slice(0, 8)}…` });
       navigate(`/queries/${res.data.queryId}`);
     } catch (e) {
       toast({
-        title: "Convert failed",
+        title: "Couldn't mark as ready",
         description: e instanceof Error ? e.message : "Unknown error",
         variant: "destructive",
       });
@@ -151,7 +153,7 @@ const TicketDetail = () => {
     }
   };
 
-  const openClosureDialog = (mode: "cancel" | "close") => {
+  const openClosureDialog = (mode: "cancel" | "close" | "decline") => {
     setClosureMode(mode);
     setClosureReason("");
   };
@@ -164,14 +166,20 @@ const TicketDetail = () => {
       return;
     }
     try {
-      const mutation = closureMode === "cancel" ? cancelMut : closeMut;
+      const mutation =
+        closureMode === "cancel" ? cancelMut : closureMode === "decline" ? declineMut : closeMut;
       const res = await mutation({ id, reason }).unwrap();
       if (!res.success) {
         toast({ title: "Update failed", description: res.message, variant: "destructive" });
         return;
       }
       toast({
-        title: closureMode === "cancel" ? "Ticket cancelled" : "Ticket closed",
+        title:
+          closureMode === "cancel"
+            ? "Ticket cancelled"
+            : closureMode === "decline"
+              ? "Request declined"
+              : "Ticket closed",
         description: reason,
       });
       setClosureMode(null);
@@ -381,12 +389,21 @@ const TicketDetail = () => {
                 Resolve ticket
               </CardTitle>
               <CardDescription>
-                Convert to a query to route it to a vendor, or close/cancel it without converting.
+                Mark as ready accepts the request (creates the query and verifies the property).
+                Decline rejects it. Close/cancel resolve it without creating a query.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               <Button onClick={handleConvert} disabled={converting}>
-                {converting ? "Converting…" : "Convert to query"}
+                {converting ? "Marking…" : "Mark as ready"}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => openClosureDialog("decline")}
+                disabled={declining}
+              >
+                <Ban className="h-4 w-4 mr-2" />
+                Decline
               </Button>
               <Button
                 variant="outline"
@@ -397,7 +414,7 @@ const TicketDetail = () => {
                 Close
               </Button>
               <Button
-                variant="destructive"
+                variant="outline"
                 onClick={() => openClosureDialog("cancel")}
                 disabled={cancelling}
               >
@@ -413,12 +430,18 @@ const TicketDetail = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {closureMode === "cancel" ? "Cancel ticket" : "Close ticket"}
+              {closureMode === "cancel"
+                ? "Cancel ticket"
+                : closureMode === "decline"
+                  ? "Decline request"
+                  : "Close ticket"}
             </DialogTitle>
             <DialogDescription>
               {closureMode === "cancel"
                 ? "Use this when the caller withdrew the request or the ticket isn't a real issue. Provide a short reason for the audit log."
-                : "Use this when the issue was resolved over the phone without creating a query. Provide a short reason for the audit log."}
+                : closureMode === "decline"
+                  ? "Reject this property request. If it was a homeowner-added property awaiting confirmation, its order is marked declined (the homeowner keeps it, view-only). Provide a short reason."
+                  : "Use this when the issue was resolved over the phone without creating a query. Provide a short reason for the audit log."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -430,7 +453,9 @@ const TicketDetail = () => {
               placeholder={
                 closureMode === "cancel"
                   ? "e.g. Caller confirmed it was a wrong number"
-                  : "e.g. Explained thermostat reset over the phone; caller confirmed resolved"
+                  : closureMode === "decline"
+                    ? "e.g. This isn't a property we built"
+                    : "e.g. Explained thermostat reset over the phone; caller confirmed resolved"
               }
               rows={4}
             />
@@ -442,18 +467,22 @@ const TicketDetail = () => {
             <Button
               onClick={handleClosureSubmit}
               disabled={
-                (closureMode === "cancel" ? cancelling : closingTicket)
+                (closureMode === "cancel" ? cancelling : closureMode === "decline" ? declining : closingTicket)
                 || !closureReason.trim()
               }
-              variant={closureMode === "cancel" ? "destructive" : "default"}
+              variant={closureMode === "close" ? "default" : "destructive"}
             >
               {closureMode === "cancel"
                 ? cancelling
                   ? "Cancelling…"
                   : "Confirm cancel"
-                : closingTicket
-                  ? "Closing…"
-                  : "Confirm close"}
+                : closureMode === "decline"
+                  ? declining
+                    ? "Declining…"
+                    : "Confirm decline"
+                  : closingTicket
+                    ? "Closing…"
+                    : "Confirm close"}
             </Button>
           </DialogFooter>
         </DialogContent>

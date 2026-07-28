@@ -124,6 +124,17 @@ export const ticketsApi = api.injectEndpoints({
       invalidatesTags: (_r, _e, arg) => [{ type: 'Ticket', id: arg.id }, 'Ticket'],
     }),
 
+    // Change 3 — decline a ticket (reject the request). Symmetric with convert:
+    // cancels the ticket and marks a still-pending property order DECLINED.
+    declineTicket: build.mutation<ApiResponseDto, { id: string; reason: string }>({
+      query: ({ id, reason }) => ({
+        url: `/api/tickets/${id}/decline`,
+        method: 'POST',
+        body: { reason },
+      }),
+      invalidatesTags: (_r, _e, arg) => [{ type: 'Ticket', id: arg.id }, 'Ticket'],
+    }),
+
     // Manually (re-)run the advisory warranty/duty-of-care coverage assessment.
     // Synchronous on the backend, so the refetched ticket carries the verdict.
     reassessTicketCoverage: build.mutation<DefaultListResponse<Ticket>, { id: string }>({
@@ -144,5 +155,6 @@ export const {
   useConvertTicketToQueryMutation,
   useCancelTicketMutation,
   useCloseTicketMutation,
+  useDeclineTicketMutation,
   useReassessTicketCoverageMutation,
 } = ticketsApi;

@@ -49,7 +49,6 @@ import QueryRedirect from "./pages/QueryRedirect";
 import MySchedule from "./pages/MySchedule";
 import MyAssignments from "./pages/MyAssignments";
 import MyAssignmentDetail from "./pages/MyAssignmentDetail";
-import TicketsTriage from "./pages/TicketsTriage";
 import TicketDetail from "./pages/TicketDetail";
 import Notifications from "./pages/Notifications";
 import AdminProtectedRoute from "@/components/admin-portal/AdminProtectedRoute";
@@ -205,11 +204,14 @@ const App = () => (
                   <TermsVersions />
                 </ProtectedRoute>
               } />
-              <Route path="/queries" element={
+              {/* Unified Support board (Tickets + Queries in one Kanban). */}
+              <Route path="/support" element={
                 <ProtectedRoute>
                   <QueriesManagement />
                 </ProtectedRoute>
               } />
+              {/* Legacy entry points now fold into the unified board. */}
+              <Route path="/queries" element={<Navigate to="/support" replace />} />
               <Route path="/queries/new" element={
                 <ProtectedRoute>
                   <CreateQuery />
@@ -352,13 +354,8 @@ const App = () => (
                   </RoleGate>
                 </ProtectedRoute>
               } />
-              <Route path="/tickets" element={
-                <ProtectedRoute>
-                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.CUSTOMER_SUPPORT]}>
-                    <TicketsTriage />
-                  </RoleGate>
-                </ProtectedRoute>
-              } />
+              {/* Tickets now live in the unified /support board. */}
+              <Route path="/tickets" element={<Navigate to="/support" replace />} />
               <Route path="/tickets/:id" element={
                 <ProtectedRoute>
                   <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.CUSTOMER_SUPPORT]}>

@@ -159,15 +159,8 @@ const Header = () => {
       mobileNavItems.push({ label: "Items", to: "/items" });
       mobileNavItems.push({ label: "Terms & Conditions", to: "/terms-versions" });
     }
-    if (showQueriesTab) {
-      mobileNavItems.push({ label: "Queries", to: "/queries", activePrefix: "/queries" });
-    }
-    if (showTicketsTab) {
-      mobileNavItems.push({
-        label: "Tickets",
-        to: "/tickets",
-        activePrefix: "/tickets",
-      });
+    if (showQueriesTab || showTicketsTab) {
+      mobileNavItems.push({ label: "Support", to: "/support", activePrefix: "/support" });
     }
     if (showSalesTab) {
       mobileNavItems.push({ label: "Customers", to: "/customers", activePrefix: "/customers" });
@@ -308,38 +301,19 @@ const Header = () => {
                         </DropdownMenu>
                       )}
                       {(showQueriesTab || showTicketsTab) && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant={
-                                location.pathname.startsWith("/queries") ||
-                                location.pathname.startsWith("/tickets")
-                                  ? "default"
-                                  : "ghost"
-                              }
-                              size="sm"
-                            >
-                              Support
-                              <ChevronDown className="h-3 w-3 ml-1 opacity-70" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            {showQueriesTab && (
-                              <DropdownMenuItem asChild>
-                                <Link to="/queries" className="cursor-pointer">
-                                  Queries
-                                </Link>
-                              </DropdownMenuItem>
-                            )}
-                            {showTicketsTab && (
-                              <DropdownMenuItem asChild>
-                                <Link to="/tickets" className="cursor-pointer">
-                                  Tickets
-                                </Link>
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Button
+                          asChild
+                          variant={
+                            location.pathname.startsWith("/support") ||
+                            location.pathname.startsWith("/queries") ||
+                            location.pathname.startsWith("/tickets")
+                              ? "default"
+                              : "ghost"
+                          }
+                          size="sm"
+                        >
+                          <Link to="/support">Support</Link>
+                        </Button>
                       )}
                       {showSalesTab && (
                         <DropdownMenu>

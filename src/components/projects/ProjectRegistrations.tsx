@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { LinkRegistrationDialog } from "./LinkRegistrationDialog";
 import { HandoverDateDialog } from "./HandoverDateDialog";
+import { HandoverSettledDialog } from "./HandoverSettledDialog";
 import { BulkAttachItemsDialog } from "./BulkAttachItemsDialog";
 import { RegistrationRow } from "./RegistrationRow";
 import {
@@ -88,6 +89,9 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [attachOpen, setAttachOpen] = useState(false);
   const [handoverOpen, setHandoverOpen] = useState(false);
+  // Change 2 — "have you handed over & settled?" prompt shown when an
+  // activity-tracking builder clicks bulk Send, offering a shortcut to handover.
+  const [settledPromptOpen, setSettledPromptOpen] = useState(false);
   const [editing, setEditing] = useState<Registration | null>(null);
   const [editMode, setEditMode] = useState(false);
 
@@ -444,7 +448,7 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
               Attach items
             </Button>
             {canSendEntitlement && (
-              <Button size="sm" variant="outline" onClick={handleSendEntitlement} disabled={sending}>
+              <Button size="sm" variant="outline" onClick={() => setSettledPromptOpen(true)} disabled={sending}>
                 <Send className="h-4 w-4 mr-2" />
                 {sending ? "Sending…" : "Send entitlement"}
               </Button>
@@ -542,6 +546,20 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
           onConfirmBom={handleAttachBom}
         />
       )}
+
+      <HandoverSettledDialog
+        open={settledPromptOpen}
+        onOpenChange={setSettledPromptOpen}
+        count={selectedCount}
+        onNo={() => {
+          setSettledPromptOpen(false);
+          handleSendEntitlement();
+        }}
+        onYes={() => {
+          setSettledPromptOpen(false);
+          setHandoverOpen(true);
+        }}
+      />
 
       <HandoverDateDialog
         open={handoverOpen}

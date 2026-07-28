@@ -591,7 +591,7 @@ const QueriesManagement = () => {
             <p className="text-muted-foreground">Loading support board...</p>
           </div>
         ) : (
-          <div className="flex gap-4 overflow-x-auto pb-2 items-stretch">
+          <div className="flex flex-col md:flex-row gap-3 items-stretch">
             {COLUMNS.filter((c) => canSeeTickets || c.kind === "query").map((col) => (
               <div
                 key={col.key}
@@ -604,7 +604,7 @@ const QueriesManagement = () => {
                 }
                 onDrop={(e) => handleDrop(col.key, e)}
                 className={cn(
-                  "flex-1 min-w-[240px] rounded-lg border bg-muted/30 p-3 min-h-[240px] transition-colors",
+                  "md:flex-1 md:min-w-0 rounded-lg border bg-muted/30 p-3 min-h-[240px] transition-colors",
                   dragOverLane === col.key && "ring-2 ring-primary bg-primary/5",
                 )}
               >

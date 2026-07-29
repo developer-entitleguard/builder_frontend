@@ -231,7 +231,14 @@ const ProjectDetail = () => {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (!projectResponse?.data || !id) return;
+    if (!id || projectLoading) return;
+    // The query has resolved. If it came back without a project (server error or
+    // not-found — the API returns HTTP 200 with success:false), stop loading so
+    // the page shows an error instead of spinning forever.
+    if (!projectResponse?.data) {
+      setLoading(false);
+      return;
+    }
     const p = projectResponse.data as BuilderProjectApi;
     const mapped: Project = {
       id: p.id,
@@ -263,7 +270,7 @@ const ProjectDetail = () => {
     fetchActivities();
     fetchApprovals();
     setLoading(false);
-  }, [projectResponse, id, fetchActivities, fetchApprovals]);
+  }, [projectResponse, projectLoading, id, fetchActivities, fetchApprovals]);
 
   // Resolve the current project's statusId from the statuses API
   const resolveStatusId = (): string | null => {
@@ -352,7 +359,20 @@ const ProjectDetail = () => {
   }
 
   if (!project) {
-    return null;
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="mx-auto max-w-lg px-4 py-20 text-center">
+          <h2 className="text-lg font-semibold">We couldn&rsquo;t load this project</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Something went wrong fetching it. Please refresh, or go back and try again.
+          </p>
+          <Button className="mt-4" variant="outline" onClick={() => navigate("/projects")}>
+            Back to projects
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   const typeConfig = propertyTypeConfig[project.property_type];

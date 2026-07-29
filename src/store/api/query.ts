@@ -44,6 +44,8 @@ export interface BuilderQuery {
   ownerUserId?: string | null;
   ownerName?: string | null;
   ownerInitials?: string | null;
+  /** Decoupling: builder that built this query's registration (dev sees who should work it). */
+  responsibleBuilderName?: string | null;
   createdAt?: string;
   updatedAt: string | null;
   queryFileMaps: QueryFile[];

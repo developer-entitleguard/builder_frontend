@@ -573,6 +573,18 @@ const QueryDetail = () => {
                       </div>
                     </div>
                   )}
+                  {queryData.responsibleBuilderName && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">
+                        Built by
+                      </Label>
+                      <div className="mt-1">
+                        <Badge variant="outline" className="font-semibold">
+                          {queryData.responsibleBuilderName}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
                   {queryData.dueDate && (
                     <div>
                       <Label className="text-sm font-medium text-gray-700">

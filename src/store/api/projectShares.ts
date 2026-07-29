@@ -14,6 +14,8 @@ export interface ProjectShare {
   scope: string;
   status: "ACTIVE" | "REVOKED";
   wholeOrgAccess?: boolean;
+  /** Build is always delegated; support is the one optional responsibility. */
+  delegateSupport?: boolean;
   sharedWithUserEmail?: string | null;
   grantedAt: string | null;
   revokedAt: string | null;
@@ -46,6 +48,13 @@ export interface ShareProjectBody {
   builderEmail?: string;
   /** True = everyone in the org can access; false/omitted = only the invited email. */
   wholeOrgAccess?: boolean;
+  /** True = the assigned builder also co-works support; false/omitted = developer keeps support. */
+  delegateSupport?: boolean;
+}
+
+export interface UpdateProjectShareBody {
+  /** Delegate (true) or take back (false) support for this builder. */
+  delegateSupport?: boolean;
 }
 
 interface OrgSearchResponse {
@@ -73,6 +82,18 @@ export const projectSharesApi = api.injectEndpoints({
       invalidatesTags: (_r, _e, { projectId }) => [{ type: "ProjectShares", id: projectId }],
     }),
 
+    updateProjectShare: build.mutation<
+      ProjectShareResponse,
+      { projectId: string; shareId: string; body: UpdateProjectShareBody }
+    >({
+      query: ({ projectId, shareId, body }) => ({
+        url: `/api/builder/projects/${projectId}/shares/${shareId}`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (_r, _e, { projectId }) => [{ type: "ProjectShares", id: projectId }],
+    }),
+
     revokeProjectShare: build.mutation<ProjectShareResponse, { projectId: string; shareId: string }>({
       query: ({ projectId, shareId }) => ({
         url: `/api/builder/projects/${projectId}/shares/${shareId}`,
@@ -95,6 +116,7 @@ export const projectSharesApi = api.injectEndpoints({
 export const {
   useGetProjectSharesQuery,
   useShareProjectMutation,
+  useUpdateProjectShareMutation,
   useRevokeProjectShareMutation,
   useLazySearchOrganizationsQuery,
 } = projectSharesApi;

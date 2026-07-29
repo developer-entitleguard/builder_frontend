@@ -68,6 +68,8 @@ interface RegistrationData {
   property_state: string;
   property_zip: string;
   project_name: string | null;
+  developer_name: string | null;
+  built_by_name: string | null;
   settlement_date: string | null;
   notes: string | null;
   status: string;
@@ -261,6 +263,8 @@ const RegistrationDetail = () => {
       property_state: (c.state as string) ?? '',
       property_zip: (c.zip as string) ?? '',
       project_name: (c.projectName as string | null) ?? project?.name ?? null,
+      developer_name: (c.developerOrganizationName as string | null) ?? null,
+      built_by_name: (c.builtByBuilderName as string | null) ?? null,
       settlement_date: (c.settlementDate as string | null) ?? null,
       notes: (c.notes as string | null) ?? null,
       status: internalStatus,
@@ -723,6 +727,28 @@ const RegistrationDetail = () => {
                   <div className="flex items-center space-x-2">
                     <Building className="h-4 w-4 text-muted-foreground" />
                     <p className="text-sm">{registration.project_name}</p>
+                  </div>
+                </div>
+              )}
+              {/* Decoupling (Req 5 & 7.2): show both parties when the build was
+                  delegated — the developer (operator) and the builder that built it. */}
+              {registration.built_by_name && (
+                <div className="grid grid-cols-2 gap-4">
+                  {registration.developer_name && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Developer</p>
+                      <div className="flex items-center space-x-2">
+                        <Building className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-sm">{registration.developer_name}</p>
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Built by</p>
+                    <div className="flex items-center space-x-2">
+                      <Building className="h-4 w-4 text-muted-foreground" />
+                      <p className="text-sm">{registration.built_by_name}</p>
+                    </div>
                   </div>
                 </div>
               )}

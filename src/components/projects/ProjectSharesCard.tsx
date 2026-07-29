@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, Trash2, UserPlus, Search } from "lucide-react";
+import { Building2, Trash2, UserPlus, Search, Check, Headset } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,11 +20,13 @@ import { useToast } from "@/hooks/use-toast";
 import {
   useGetProjectSharesQuery,
   useShareProjectMutation,
+  useUpdateProjectShareMutation,
   useRevokeProjectShareMutation,
   useLazySearchOrganizationsQuery,
   type ProjectShare,
   type OrgOption,
 } from "@/store/api/projectShares";
+import { useEntitlements } from "@/hooks/useEntitlements";
 
 /**
  * User change request (points 3 & 4). Share a project with a developer
@@ -36,15 +38,19 @@ export function ProjectSharesCard({ projectId }: { projectId: string }) {
   const { toast } = useToast();
   const { data, isLoading } = useGetProjectSharesQuery(projectId);
   const [shareProject, { isLoading: sharing }] = useShareProjectMutation();
+  const [updateShare] = useUpdateProjectShareMutation();
   const [revokeShare] = useRevokeProjectShareMutation();
   const [searchOrgs, { data: searchData, isFetching: searching }] =
     useLazySearchOrganizationsQuery();
+  const { hasModule } = useEntitlements();
+  const developerHasActivities = hasModule("ACTIVITIES");
 
   const [name, setName] = useState("");
   const [selectedOrg, setSelectedOrg] = useState<OrgOption | null>(null);
   const [inviteNew, setInviteNew] = useState(false);
   const [email, setEmail] = useState("");
   const [wholeOrg, setWholeOrg] = useState(false);
+  const [delegateSupport, setDelegateSupport] = useState(false);
   const [pendingRevoke, setPendingRevoke] = useState<ProjectShare | null>(null);
 
   const shares = data?.data ?? [];
@@ -66,6 +72,7 @@ export function ProjectSharesCard({ projectId }: { projectId: string }) {
     setInviteNew(false);
     setEmail("");
     setWholeOrg(false);
+    setDelegateSupport(false);
   };
 
   const handleShare = async () => {
@@ -74,7 +81,8 @@ export function ProjectSharesCard({ projectId }: { projectId: string }) {
       orgName?: string;
       builderEmail?: string;
       wholeOrgAccess?: boolean;
-    } = { wholeOrgAccess: wholeOrg };
+      delegateSupport?: boolean;
+    } = { wholeOrgAccess: wholeOrg, delegateSupport };
 
     if (selectedOrg) {
       body.builderOrgId = selectedOrg.id;
@@ -102,6 +110,21 @@ export function ProjectSharesCard({ projectId }: { projectId: string }) {
     } catch (err: any) {
       toast({
         title: "Could not share project",
+        description: err?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleToggleSupport = async (share: ProjectShare, next: boolean) => {
+    try {
+      await updateShare({ projectId, shareId: share.id, body: { delegateSupport: next } }).unwrap();
+      toast({
+        title: next ? "Support delegated to the builder" : "You’ve taken support back",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Could not update support",
         description: err?.data?.message ?? "Please try again.",
         variant: "destructive",
       });
@@ -217,6 +240,44 @@ export function ProjectSharesCard({ projectId }: { projectId: string }) {
             </label>
           )}
 
+          {/* Responsibility split. Build is always delegated; support is optional. */}
+          {(selectedOrg || inviteNew) && (
+            <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+              <div>
+                <p className="text-sm font-medium">This builder will handle the build</p>
+                <ul className="mt-1.5 space-y-1 text-sm text-muted-foreground">
+                  {developerHasActivities && (
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary" /> Manage activities
+                    </li>
+                  )}
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-primary" /> Customer handover
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-primary" /> Compliance
+                  </li>
+                </ul>
+              </div>
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={delegateSupport}
+                  onCheckedChange={(v) => setDelegateSupport(v === true)}
+                />
+                <span>
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <Headset className="h-4 w-4" /> Also let them handle support
+                  </span>
+                  <span className="text-muted-foreground">
+                    Homeowner tickets &amp; queries for these homes go to the builder too. Leave
+                    unticked to keep support yourself — you’ll still see which builder built each home.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
+
           <Button
             onClick={handleShare}
             disabled={sharing || (!selectedOrg && !inviteNew)}
@@ -238,8 +299,8 @@ export function ProjectSharesCard({ projectId }: { projectId: string }) {
       ) : (
         <ul className="divide-y rounded-md border">
           {shares.map((share) => (
-            <li key={share.id} className="flex items-center justify-between gap-3 p-3">
-              <div className="min-w-0">
+            <li key={share.id} className="flex items-start justify-between gap-3 p-3">
+              <div className="min-w-0 space-y-1">
                 <p className="truncate text-sm font-medium">
                   {share.builderOrgName ?? share.sharedWithUserEmail ?? "Organisation"}
                 </p>
@@ -248,6 +309,20 @@ export function ProjectSharesCard({ projectId }: { projectId: string }) {
                     ? "Whole organisation"
                     : share.sharedWithUserEmail ?? "Single user"}
                 </p>
+                {share.status === "ACTIVE" && (
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Checkbox
+                      checked={!!share.delegateSupport}
+                      onCheckedChange={(v) => handleToggleSupport(share, v === true)}
+                    />
+                    <span className="flex items-center gap-1">
+                      <Headset className="h-3.5 w-3.5" />
+                      {share.delegateSupport
+                        ? "Builder handles support"
+                        : "You handle support"}
+                    </span>
+                  </label>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={share.status === "ACTIVE" ? "default" : "secondary"}>

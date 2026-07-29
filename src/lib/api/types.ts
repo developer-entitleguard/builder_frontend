@@ -395,6 +395,11 @@ export interface BuilderCustomer {
   settlementDate?: string;
   notes?: string;
   billOfMaterials?: { id: string; bomName?: string; projectName?: string };
+  /** Decoupling: the builder that built this unit (null on integrated projects). */
+  builtByBuilderOrganizationId?: string | null;
+  builtByBuilderName?: string | null;
+  /** Decoupling: the project operator/developer org name. */
+  developerOrganizationName?: string | null;
   builderOrganization: {
     id: string;
     name: string;

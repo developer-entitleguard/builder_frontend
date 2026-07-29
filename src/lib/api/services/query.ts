@@ -65,6 +65,8 @@ export interface BuilderQuery extends CoverageFields {
   ownerUserId?: string | null;
   ownerName?: string | null;
   ownerInitials?: string | null;
+  /** Decoupling: builder that built this query's registration. */
+  responsibleBuilderName?: string | null;
   unitNumber?: string | null;
   builderOrganizationId?: string;
   queryFileMaps: QueryFile[];

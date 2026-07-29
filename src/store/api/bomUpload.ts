@@ -8,6 +8,8 @@ export interface UploadTemplateRequest {
   projectName?: string;
   builderOrganizationId: string;
   warranty?: number;
+  /** Req 4: link the BOM to a project so both operator + delegated builder see it. */
+  projectId?: string;
 }
 
 export interface UploadTemplateResponse {
@@ -28,6 +30,9 @@ export const bomUploadApi = api.injectEndpoints({
         formData.append('bomName', data.bomName);
         formData.append('projectName', data.projectName || '');
         formData.append('builderOrganizationId', data.builderOrganizationId);
+        if (data.projectId) {
+          formData.append('projectId', data.projectId);
+        }
         if (typeof data.warranty === 'number' && Number.isFinite(data.warranty)) {
           formData.append('warranty', String(data.warranty));
         }

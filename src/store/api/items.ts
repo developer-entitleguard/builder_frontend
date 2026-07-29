@@ -462,6 +462,34 @@ export const itemsApi = api.injectEndpoints({
       invalidatesTags: ['Item', 'Registration', 'Dashboard'],
     }),
 
+    // Req 4: the shared BOM pool for a project — visible to both the operator
+    // (developer) and the delegated builder. Access is enforced server-side.
+    getProjectBoms: build.query<{
+      success: boolean;
+      message: string;
+      data: Array<{ id: string; bomName: string; projectName: string }>;
+    }, string>({
+      query: (projectId) => ({
+        url: `/api/builder/projects/${projectId}/boms`,
+        method: 'GET',
+      }),
+      providesTags: ['Item'],
+    }),
+
+    // Req 4: assign a BOM to registrations of a specific project (validated
+    // server-side that each registration belongs to the project).
+    assignBomToProject: build.mutation<
+      { success: boolean; message?: string },
+      { projectId: string; billOfMaterialId: string; customerIds: string[] }
+    >({
+      query: ({ projectId, ...body }) => ({
+        url: `/api/builder/projects/${projectId}/boms/assign`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Item', 'Registration', 'Dashboard'],
+    }),
+
     deleteBuilderItemFiles: build.mutation<{ success: boolean; message?: string }, string>({
       query: (id) => ({
         url: `/api/delete/builderitem/files/${id}`,
@@ -538,6 +566,8 @@ export const {
   useCheckBOMRestrictionsQuery,
   useLazyCheckBOMRestrictionsQuery,
   useAssignBOMMutation,
+  useGetProjectBomsQuery,
+  useAssignBomToProjectMutation,
   useCheckExistingCustomerItemMapQuery,
   useLazyCheckExistingCustomerItemMapQuery,
   useDeleteBuilderItemFilesMutation,

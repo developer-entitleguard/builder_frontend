@@ -17,6 +17,12 @@ interface BOMUploadProps {
    * auto-select it. Undefined when the backend didn't include the id.
    */
   onSuccess: (newBomId?: string) => void;
+  /**
+   * Req 4: when set, the BOM is created for this project (project-scoped shared
+   * BOM) — access is resolved server-side so a delegated builder can create it
+   * too. The free-text "attach to project" field is hidden in this mode.
+   */
+  projectId?: string;
 }
 
 interface ParsedBomCsvItem {
@@ -33,7 +39,7 @@ interface ParsedBomCsvItem {
   warranty_years?: number | null;
 }
 
-export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
+export const BOMUpload = ({ onSuccess, projectId }: BOMUploadProps) => {
   const { organization } = useOrganization();
   const { toast } = useToast();
   const [uploadTemplate, { isLoading: isUploading }] = useUploadTemplateMutation();
@@ -155,6 +161,7 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
         bomName: formData.name,
         projectName: formData.projectName || undefined,
         builderOrganizationId,
+        projectId: projectId || undefined,
         warranty:
           typeof parsedWarranty === "number" && Number.isFinite(parsedWarranty)
             ? parsedWarranty
@@ -208,21 +215,31 @@ export const BOMUpload = ({ onSuccess }: BOMUploadProps) => {
               placeholder="e.g., Master BOM 2024"
             />
           </div>
-          <div>
-            <Label htmlFor="projectName">Attach to project (Optional)</Label>
-            <Input
-              id="projectName"
-              value={formData.projectName}
-              onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
-              placeholder="e.g., Riverside Development"
-            />
-            <p className="mt-2 flex items-start gap-2 text-sm text-blue-600">
+          {projectId ? (
+            <p className="flex items-start gap-2 text-sm text-blue-600">
               <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
               <span>
-                If provided this item set will be pre-linked to the selected project. You can still use it on other projects.
+                This BOM will be added to the current project and shared with everyone working
+                on it (the developer and the assigned builder).
               </span>
             </p>
-          </div>
+          ) : (
+            <div>
+              <Label htmlFor="projectName">Attach to project (Optional)</Label>
+              <Input
+                id="projectName"
+                value={formData.projectName}
+                onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
+                placeholder="e.g., Riverside Development"
+              />
+              <p className="mt-2 flex items-start gap-2 text-sm text-blue-600">
+                <InfoCircleOutlined className="mt-0.5 text-base shrink-0" />
+                <span>
+                  If provided this item set will be pre-linked to the selected project. You can still use it on other projects.
+                </span>
+              </p>
+            </div>
+          )}
           <div>
             <Label htmlFor="warrantyYears">Default warranty period (years)</Label>
             <Input

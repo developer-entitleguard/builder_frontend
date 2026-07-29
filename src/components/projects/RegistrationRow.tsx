@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Mail, Phone, MapPin, Calendar, Pencil, Check, Loader2 } from "lucide-react";
+import { Mail, Phone, MapPin, Calendar, Pencil, Check, Loader2, Hammer } from "lucide-react";
 import { format } from "date-fns";
 import type { RegistrationDetailsPatch } from "@/components/registrations/EditRegistrationDialog";
 
@@ -17,6 +17,7 @@ export interface RegistrationRowData {
   status: string;
   status_name: string | null;
   settlement_date: string | null;
+  built_by_name: string | null;
   first_name: string;
   last_name: string;
   unit_number: string;
@@ -214,6 +215,12 @@ export const RegistrationRow = ({
                     <MapPin className="h-3.5 w-3.5" />
                     {registration.property_address}
                   </span>
+                  {registration.built_by_name && (
+                    <span className="flex items-center gap-1">
+                      <Hammer className="h-3.5 w-3.5" />
+                      Built by {registration.built_by_name}
+                    </span>
+                  )}
                 </div>
               </div>
 

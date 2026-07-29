@@ -31,7 +31,7 @@ import {
   useUpdateCustomerDetailsMutation,
 } from "@/store/api/builderCustomer";
 import { useBulkHandoverMutation } from "@/store/api/customerEntitlement";
-import { useAssignBOMMutation } from "@/store/api";
+import { useAssignBomToProjectMutation } from "@/store/api";
 import { summariseBulk, type BulkOperationRow } from "@/store/api/bulkTypes";
 
 interface Registration {
@@ -44,6 +44,8 @@ interface Registration {
   status_name: string | null;
   settlement_date: string | null;
   created_at: string;
+  /** Decoupling: builder that built this unit (null on integrated projects). */
+  built_by_name: string | null;
   // Raw editable fields (for the inline per-row edit).
   first_name: string;
   last_name: string;
@@ -99,7 +101,7 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
 
   const [sendEntitlementBulk, { isLoading: sending }] = useSendEntitlementBulkMutation();
   const [bulkAttachItems, { isLoading: attaching }] = useBulkAttachItemsMutation();
-  const [assignBOM, { isLoading: assigningBom }] = useAssignBOMMutation();
+  const [assignBomToProject, { isLoading: assigningBom }] = useAssignBomToProjectMutation();
   const [bulkHandover, { isLoading: handing }] = useBulkHandoverMutation();
   const [updateCustomerDetails, { isLoading: savingEdit }] = useUpdateCustomerDetailsMutation();
 
@@ -136,6 +138,7 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
         createdAt?: string | null;
         created_at?: string | null;
         totalBuiltUpArea?: number | null;
+        builtByBuilderName?: string | null;
       };
 
       const fullName = [r.firstName, r.lastName].filter(Boolean).join(" ");
@@ -177,6 +180,7 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
         status_name: r.statusName ?? r.status ?? null,
         settlement_date,
         created_at,
+        built_by_name: r.builtByBuilderName ?? null,
         first_name: r.firstName ?? "",
         last_name: r.lastName ?? "",
         unit_number: r.unitNumber ?? "",
@@ -285,7 +289,8 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
   const handleAttachBom = async (bomId: string) => {
     if (!bomId) return;
     try {
-      const res = await assignBOM({
+      const res = await assignBomToProject({
+        projectId,
         billOfMaterialId: bomId,
         customerIds: Array.from(selectedIds),
       }).unwrap();
@@ -540,6 +545,7 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
           open={attachOpen}
           onOpenChange={setAttachOpen}
           builderId={builderId}
+          projectId={projectId}
           registrationCount={selectedCount}
           loading={attaching || assigningBom}
           onConfirm={handleAttachItems}

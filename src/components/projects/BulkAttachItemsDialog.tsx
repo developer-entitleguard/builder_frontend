@@ -18,12 +18,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useGetItemsByBuilderQuery, useGetBillOfMaterialsQuery } from "@/store/api";
+import {
+  useGetItemsByBuilderQuery,
+  useGetBillOfMaterialsQuery,
+  useGetProjectBomsQuery,
+} from "@/store/api";
+import { BOMUpload } from "@/components/BOMUpload";
 
 interface BulkAttachItemsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   builderId: string;
+  /**
+   * Req 4: when set, the BOM tab shows the project's SHARED BOM pool (visible to
+   * both the operator and the delegated builder) and lets either create a new
+   * project BOM inline. Omitted = legacy org-library BOMs.
+   */
+  projectId?: string;
   /** How many registrations the selection will be applied to (drives copy). */
   registrationCount: number;
   loading?: boolean;
@@ -43,11 +54,13 @@ export const BulkAttachItemsDialog = ({
   open,
   onOpenChange,
   builderId,
+  projectId,
   registrationCount,
   loading,
   onConfirm,
   onConfirmBom,
 }: BulkAttachItemsDialogProps) => {
+  const projectMode = !!projectId;
   const [tab, setTab] = useState<"bom" | "items">("bom");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bomId, setBomId] = useState<string>("");
@@ -55,9 +68,13 @@ export const BulkAttachItemsDialog = ({
   const { data: itemsData, isLoading: itemsLoading } = useGetItemsByBuilderQuery(builderId, {
     skip: !builderId || !open,
   });
-  const { data: bomData, isLoading: bomLoading } = useGetBillOfMaterialsQuery(
+  const { data: orgBomData, isLoading: orgBomLoading } = useGetBillOfMaterialsQuery(
     { builderId },
-    { skip: !builderId || !open }
+    { skip: projectMode || !builderId || !open }
+  );
+  const { data: projectBomData, isLoading: projectBomLoading } = useGetProjectBomsQuery(
+    projectId ?? "",
+    { skip: !projectMode || !open }
   );
 
   useEffect(() => {
@@ -70,7 +87,8 @@ export const BulkAttachItemsDialog = ({
 
   const categories = itemsData?.data ?? [];
   const hasItems = categories.some((c) => (c.items?.length ?? 0) > 0);
-  const boms = bomData?.data ?? [];
+  const boms = (projectMode ? projectBomData?.data : orgBomData?.data) ?? [];
+  const bomLoading = projectMode ? projectBomLoading : orgBomLoading;
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -106,9 +124,18 @@ export const BulkAttachItemsDialog = ({
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
               </div>
             ) : boms.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">
-                No Bills of Materials found. Create one first, then attach it here.
-              </p>
+              <div className="py-6 text-center space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  {projectMode
+                    ? "No BOMs for this project yet. Create one to share it with everyone working on the project."
+                    : "No Bills of Materials found. Create one first, then attach it here."}
+                </p>
+                {projectMode && (
+                  <div className="flex justify-center">
+                    <BOMUpload projectId={projectId} onSuccess={(id) => id && setBomId(id)} />
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="space-y-2 py-2">
                 <Select value={bomId} onValueChange={setBomId}>
@@ -128,6 +155,11 @@ export const BulkAttachItemsDialog = ({
                   Attaches every item in the selected BOM (including its warranty and
                   manual files) to each registration.
                 </p>
+                {projectMode && (
+                  <div className="pt-1">
+                    <BOMUpload projectId={projectId} onSuccess={(id) => id && setBomId(id)} />
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>

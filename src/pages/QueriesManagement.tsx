@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MapPin, Briefcase, Clock, Loader2, Plus, User } from "lucide-react";
+import { MapPin, Briefcase, Clock, Loader2, Plus, User, Hammer } from "lucide-react";
 import Header from "@/components/Header";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -270,6 +270,12 @@ const KanbanCard = ({
             <Clock className="h-3 w-3 shrink-0" />
             {formatAge(query.createdAt)}
           </span>
+          {query.responsibleBuilderName && (
+            <span className="inline-flex items-center gap-1" title="Builder">
+              <Hammer className="h-3 w-3 shrink-0" />
+              {query.responsibleBuilderName}
+            </span>
+          )}
         </div>
         {showPeople && (
           <div className="flex items-center justify-between gap-2 pt-0.5">

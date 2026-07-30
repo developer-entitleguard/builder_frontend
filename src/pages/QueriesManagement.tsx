@@ -47,7 +47,7 @@ interface ColumnDef {
 
 const COLUMNS: ColumnDef[] = [
   { key: "open", label: "Open", kind: "ticket" },
-  { key: "ready", label: "Ready", kind: "query", statusName: "CREATED" },
+  { key: "ready", label: "Ready", kind: "query", statusName: "READY" },
   { key: "in_progress", label: "In Progress", kind: "query", statusName: "INPROGRESS" },
   { key: "done", label: "Done", kind: "query", statusName: "DONE" },
   { key: "closed", label: "Closed / Cancelled", kind: "ticket" },
@@ -522,7 +522,12 @@ const QueriesManagement = () => {
         }
       }
 
-      const statusId = statusIdByName[COLUMNS.find((c) => c.key === laneKey)!.statusName!];
+      const col = COLUMNS.find((c) => c.key === laneKey)!;
+      // Tolerate the CREATED→READY status rename on either side of deploy: the
+      // Ready column resolves to whichever name the DB currently has.
+      const statusId =
+        statusIdByName[col.statusName!] ??
+        (col.statusName === "READY" ? statusIdByName["CREATED"] : undefined);
       if (!statusId) {
         toast({
           title: "Can't move query",

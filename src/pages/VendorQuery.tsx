@@ -227,7 +227,7 @@ const VendorQuery = () => {
     (s) => (s.name ?? "").toUpperCase() === "COMPLETED"
   )?.id;
   const createdStatusId = statuses.find(
-    (s) => (s.name ?? "").toUpperCase() === "CREATED"
+    (s) => ["READY", "CREATED"].includes((s.name ?? "").toUpperCase())
   )?.id;
 
   // ── Handlers ──

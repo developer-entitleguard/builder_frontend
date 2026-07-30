@@ -432,6 +432,10 @@ export interface CreateBuilderCustomerRequest {
   numRooms?: number;
   price?: number;
   totalBuiltUpArea?: number;
+  /** Compliance Intelligence Engine capture fields (drive the deterministic checklist). */
+  contractValue?: number;
+  contractSignedDate?: string;
+  fuelType?: string;
   consentMethod?: string;
   consentReceived?: boolean;
   consentReceivedAt?: string;

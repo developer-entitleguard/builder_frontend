@@ -30,6 +30,9 @@ export interface CustomerDetailsFormData {
   numBedrooms: string;
   numRooms: string;
   totalBuiltUpArea: string;
+  contractValue: string;
+  contractSignedDate: string;
+  fuelType: string;
 }
 
 export interface CustomerDetailsFormProps {
@@ -78,7 +81,10 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
     price: initialData?.price || '',
     numBedrooms: initialData?.numBedrooms || '',
     numRooms: initialData?.numRooms || '',
-    totalBuiltUpArea: initialData?.totalBuiltUpArea || ''
+    totalBuiltUpArea: initialData?.totalBuiltUpArea || '',
+    contractValue: initialData?.contractValue || '',
+    contractSignedDate: initialData?.contractSignedDate || '',
+    fuelType: initialData?.fuelType || ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -106,7 +112,10 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
       price: initialData.price ?? prev.price,
       numBedrooms: initialData.numBedrooms ?? prev.numBedrooms,
       numRooms: initialData.numRooms ?? prev.numRooms,
-      totalBuiltUpArea: initialData.totalBuiltUpArea ?? prev.totalBuiltUpArea
+      totalBuiltUpArea: initialData.totalBuiltUpArea ?? prev.totalBuiltUpArea,
+      contractValue: initialData.contractValue ?? prev.contractValue,
+      contractSignedDate: initialData.contractSignedDate ?? prev.contractSignedDate,
+      fuelType: initialData.fuelType ?? prev.fuelType
     }));
   }, [initialData]);
 
@@ -248,6 +257,7 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
     const numRooms = formData.numRooms ? Number(formData.numRooms) : undefined;
     const price = formData.price ? Number(formData.price) : undefined;
     const totalBuiltUpArea = formData.totalBuiltUpArea ? Number(formData.totalBuiltUpArea) : undefined;
+    const contractValue = formData.contractValue ? Number(formData.contractValue) : undefined;
 
     const result = await createBuilderCustomer({
       id: registrationId || initialData?.id || initialData?.registrationId || undefined,
@@ -269,6 +279,9 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
       numRooms: numRooms !== undefined && !Number.isNaN(numRooms) ? numRooms : undefined,
       price: price !== undefined && !Number.isNaN(price) ? price : undefined,
       totalBuiltUpArea: totalBuiltUpArea !== undefined && !Number.isNaN(totalBuiltUpArea) ? totalBuiltUpArea : undefined,
+      contractValue: contractValue !== undefined && !Number.isNaN(contractValue) ? contractValue : undefined,
+      contractSignedDate: formData.contractSignedDate || undefined,
+      fuelType: formData.fuelType || undefined,
       consentMethod: 'form',
       consentReceived: true,
       consentReceivedAt: new Date().toISOString(),
@@ -563,6 +576,44 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
                   onChange={(e) => handleInputChange('settlementDate', e.target.value)}
                   disabled={readOnly}
                 />
+              </div>
+            </div>
+            {/* Compliance profile inputs — drive the deterministic document checklist */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="contractValue">Contract Value (Optional)</Label>
+                <Input
+                  id="contractValue"
+                  type="number"
+                  value={formData.contractValue}
+                  onChange={(e) => handleInputChange('contractValue', e.target.value)}
+                  placeholder="e.g., 450000"
+                  min="0"
+                  step="1000"
+                  disabled={readOnly}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contractSignedDate">Contract Signed Date</Label>
+                <Input
+                  id="contractSignedDate"
+                  type="date"
+                  value={formData.contractSignedDate}
+                  onChange={(e) => handleInputChange('contractSignedDate', e.target.value)}
+                  disabled={readOnly}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fuelType">Fuel Type</Label>
+                <Select value={formData.fuelType} onValueChange={(value) => handleInputChange('fuelType', value)} disabled={readOnly}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select fuel type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GAS">Gas connected</SelectItem>
+                    <SelectItem value="ALL_ELECTRIC">All electric</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

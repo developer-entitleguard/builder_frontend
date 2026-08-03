@@ -18,35 +18,39 @@ import {
 } from "@/components/ui/table";
 import {
   AlertTriangle,
+  CheckCircle2,
   FileText,
   FolderUp,
   Loader2,
   ShieldCheck,
-  Wrench,
+  Trash2,
+  Upload,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ComplianceCompletenessBar } from "@/components/compliance/ComplianceCompletenessBar";
 import {
   useGetProjectDocumentsQuery,
   useLazyGetProjectDocumentsCheckQuery,
   useUploadDocumentsFolderMutation,
-  useUploadManualsFolderMutation,
 } from "@/store/api/projectDocuments";
+import {
+  useDeleteProjectComplianceDocumentMutation,
+  useUploadComplianceAttachmentMutation,
+  type ComplianceDocumentApi,
+} from "@/store/api/complianceDocuments";
 
 /**
- * Project + Compliance (Lite) — the simplified "Documents" tab for
- * self-sufficient builder/developer orgs, shown in place of the full Compliance
- * tab. Drop a folder of PDFs → they're classified and matched into the
- * compliance checklist; run a compliance check; drop a folder of product
- * manuals → they become the project's BOM. Everything flows to the customer at
- * handover.
+ * Project + Compliance (Lite) — the "Documents" tab. Uploaded-documents only:
+ * there is no auto-generated checklist. Drop a folder of PDFs and each becomes a
+ * row you can individually replace or remove. "Run compliance check" is advisory
+ * — it computes (nothing stored) what the rulebook still expects and lists what's
+ * missing, leaving it to the builder to act. (Product manuals live under each
+ * registration's BOM, not here.)
  */
 
 interface ProjectDocumentsSectionProps {
   projectId: string;
 }
 
-/** Keep only PDFs from a picked folder; return files + their webkit relative paths. */
 function collectPdfs(fileList: FileList | null): {
   pdfs: File[];
   relativePaths: string[];
@@ -60,21 +64,13 @@ function collectPdfs(fileList: FileList | null): {
   return { pdfs, relativePaths, skipped: all.length - pdfs.length };
 }
 
-const statusVariant = (status: string | null): "default" | "secondary" | "outline" => {
-  if (status === "RECEIVED") return "default";
-  if (status === "REQUIRED") return "secondary";
-  return "outline";
-};
-
-/** A folder picker rendered as a button; sets the non-standard webkitdirectory attrs via ref. */
+/** Folder picker rendered as a button; sets the non-standard webkitdirectory attrs via ref. */
 const FolderPickerButton = ({
   label,
-  icon,
   busy,
   onPick,
 }: {
   label: string;
-  icon: React.ReactNode;
   busy: boolean;
   onPick: (files: FileList | null) => void;
 }) => {
@@ -85,7 +81,6 @@ const FolderPickerButton = ({
         ref={(el) => {
           inputRef.current = el;
           if (el) {
-            // webkitdirectory / directory aren't typed on HTMLInputElement.
             el.setAttribute("webkitdirectory", "");
             el.setAttribute("directory", "");
           }
@@ -96,33 +91,107 @@ const FolderPickerButton = ({
         className="hidden"
         onChange={(e) => {
           onPick(e.target.files);
-          e.target.value = ""; // allow re-picking the same folder
+          e.target.value = "";
         }}
       />
-      <Button
-        type="button"
-        variant="outline"
-        disabled={busy}
-        onClick={() => inputRef.current?.click()}
-      >
-        {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <span className="mr-2">{icon}</span>}
+      <Button type="button" variant="outline" disabled={busy} onClick={() => inputRef.current?.click()}>
+        {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderUp className="mr-2 h-4 w-4" />}
         {label}
       </Button>
     </>
   );
 };
 
+const statusVariant = (status: string | null): "default" | "secondary" | "outline" => {
+  if (status === "RECEIVED") return "default";
+  if (status === "REQUIRED") return "secondary";
+  return "outline";
+};
+
+/** A single uploaded document with per-row replace / remove actions. */
+const DocumentRow = ({
+  projectId,
+  doc,
+  onChanged,
+}: {
+  projectId: string;
+  doc: ComplianceDocumentApi;
+  onChanged: () => void;
+}) => {
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [replace, { isLoading: replacing }] = useUploadComplianceAttachmentMutation();
+  const [remove, { isLoading: removing }] = useDeleteProjectComplianceDocumentMutation();
+
+  const onReplace = async (f: File | undefined) => {
+    if (!f) return;
+    try {
+      await replace({ ownerType: "PROJECT", ownerId: projectId, documentId: doc.id, file: f }).unwrap();
+      toast({ title: "Document replaced", description: doc.documentName });
+      onChanged();
+    } catch {
+      toast({ title: "Replace failed", description: doc.documentName, variant: "destructive" });
+    }
+  };
+
+  const onRemove = async () => {
+    if (!window.confirm(`Remove "${doc.documentName}"? This deletes the document and its file.`)) return;
+    try {
+      await remove({ projectId, id: doc.id }).unwrap();
+      toast({ title: "Document removed", description: doc.documentName });
+      onChanged();
+    } catch {
+      toast({ title: "Remove failed", description: doc.documentName, variant: "destructive" });
+    }
+  };
+
+  return (
+    <TableRow>
+      <TableCell className="flex items-center gap-2">
+        <FileText className="h-4 w-4 text-muted-foreground" />
+        {doc.documentName}
+      </TableCell>
+      <TableCell className="text-muted-foreground">{doc.category ?? "—"}</TableCell>
+      <TableCell>
+        <Badge variant={statusVariant(doc.status)}>{doc.status ?? "—"}</Badge>
+      </TableCell>
+      <TableCell className="text-right whitespace-nowrap">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            onReplace(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={replacing}
+          onClick={() => fileRef.current?.click()}
+          title="Replace file"
+        >
+          {replacing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+        </Button>
+        <Button size="sm" variant="ghost" disabled={removing} onClick={onRemove} title="Remove document">
+          {removing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+};
+
 export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionProps) => {
   const { toast } = useToast();
 
-  const { data: docsResp, isLoading } = useGetProjectDocumentsQuery({ projectId });
+  const { data: docsResp, isLoading, refetch } = useGetProjectDocumentsQuery({ projectId });
   const [uploadDocs, docsUploadState] = useUploadDocumentsFolderMutation();
-  const [uploadManuals, manualsUploadState] = useUploadManualsFolderMutation();
   const [runCheck, checkState] = useLazyGetProjectDocumentsCheckQuery();
 
   const documents = docsResp?.data ?? [];
   const lastDocsUpload = docsUploadState.data?.data;
-  const lastManualsUpload = manualsUploadState.data?.data;
   const check = checkState.data?.data;
 
   const handleDocsFolder = async (fileList: FileList | null) => {
@@ -153,34 +222,6 @@ export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionPr
     }
   };
 
-  const handleManualsFolder = async (fileList: FileList | null) => {
-    const { pdfs, relativePaths, skipped } = collectPdfs(fileList);
-    if (pdfs.length === 0) {
-      toast({
-        title: "No PDFs found",
-        description: "Pick a folder that contains PDF manuals.",
-        variant: "destructive",
-      });
-      return;
-    }
-    try {
-      const res = await uploadManuals({ projectId, files: pdfs, relativePaths }).unwrap();
-      const d = res.data;
-      toast({
-        title: res.message || "Manuals imported",
-        description: `${d.created.length} manual(s) added to the BOM${
-          d.skipped.length ? `, ${d.skipped.length} skipped` : ""
-        }${skipped ? `, ${skipped} non-PDF ignored` : ""}.`,
-      });
-    } catch {
-      toast({
-        title: "Import failed",
-        description: "Something went wrong importing the manuals folder.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleRunCheck = async () => {
     try {
       await runCheck({ projectId }).unwrap();
@@ -195,28 +236,20 @@ export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionPr
 
   return (
     <div className="space-y-6">
-      {/* Intake */}
       <Card>
         <CardHeader>
           <CardTitle>Documents</CardTitle>
           <CardDescription>
-            Upload a folder of PDFs (base or nested) — each document is read, classified and
-            matched into the compliance checklist. Upload a folder of product manuals to build the
-            BOM. Everything is sent to the homeowner at handover.
+            Upload a folder of PDFs (base or nested) — each becomes a document you can replace or
+            remove below. Run a compliance check any time to see what the rulebook still expects.
+            Everything here is sent to the homeowner at handover.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
           <FolderPickerButton
             label="Upload documents folder"
-            icon={<FolderUp className="h-4 w-4" />}
             busy={docsUploadState.isLoading}
             onPick={handleDocsFolder}
-          />
-          <FolderPickerButton
-            label="Upload manuals folder (BOM)"
-            icon={<Wrench className="h-4 w-4" />}
-            busy={manualsUploadState.isLoading}
-            onPick={handleManualsFolder}
           />
           <Button type="button" onClick={handleRunCheck} disabled={checkState.isFetching}>
             {checkState.isFetching ? (
@@ -229,62 +262,54 @@ export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionPr
         </CardContent>
       </Card>
 
-      {/* Last upload feedback */}
       {(lastDocsUpload?.unmatched?.length ?? 0) > 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm">
-          <div className="mb-1 flex items-center gap-2 font-medium text-amber-800">
-            <AlertTriangle className="h-4 w-4" />
-            {lastDocsUpload!.unmatched.length} file(s) couldn&apos;t be stored
-          </div>
-          <p className="text-amber-700">
-            {lastDocsUpload!.unmatched.join(", ")}
-          </p>
-          <p className="mt-1 text-amber-700">
-            Please retry these files. Everything else was filed — documents that didn&apos;t match a
-            checklist item were added as their own rows below.
-          </p>
-        </div>
-      )}
-      {(lastManualsUpload?.skipped?.length ?? 0) > 0 && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-700">
-          {lastManualsUpload!.skipped.length} manual(s) were skipped: {lastManualsUpload!.skipped.join(", ")}
+          {lastDocsUpload!.unmatched.length} file(s) couldn&apos;t be stored:{" "}
+          {lastDocsUpload!.unmatched.join(", ")}. Please retry these files.
         </div>
       )}
 
-      {/* Compliance check result */}
+      {/* Advisory compliance check result (nothing stored) */}
       {check && (
-        <div className="space-y-3">
-          <ComplianceCompletenessBar completeness={check.completeness} label="Compliance check" />
-          {check.outstandingRequired.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Still missing</CardTitle>
-                <CardDescription>
-                  These required documents haven&apos;t been provided yet.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-1 text-sm">
-                  {check.outstandingRequired.map((o) => (
-                    <li key={o.documentId} className="flex items-center gap-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Compliance check</CardTitle>
+            <CardDescription>
+              {check.rulebookCovered
+                ? "Advisory — based on the rulebook for this property. Add whatever applies; it's up to you."
+                : "Automated requirements aren't available for this location yet."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {check.rulebookCovered && check.missing.length === 0 && (
+              <div className="flex items-center gap-2 text-green-700">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                All {check.required.length} expected document(s) appear to be present.
+              </div>
+            )}
+            {check.missing.length > 0 && (
+              <>
+                <div className="font-medium text-amber-800">
+                  {check.missing.length} document(s) still expected:
+                </div>
+                <ul className="space-y-1">
+                  {check.missing.map((m) => (
+                    <li key={m.documentName} className="flex items-center gap-2">
                       <AlertTriangle className="h-4 w-4 text-amber-600" />
-                      <span>{o.documentName}</span>
-                      {o.category && (
-                        <span className="text-muted-foreground">({o.category})</span>
-                      )}
+                      <span>{m.documentName}</span>
                     </li>
                   ))}
                 </ul>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      {/* Current documents */}
+      {/* Uploaded documents */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Document checklist</CardTitle>
+          <CardTitle className="text-base">Uploaded documents</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -301,23 +326,13 @@ export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionPr
                 <TableRow>
                   <TableHead>Document</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Requirement</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {documents.map((doc) => (
-                  <TableRow key={doc.id}>
-                    <TableCell className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      {doc.documentName}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{doc.category ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{doc.mandatory ?? "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant(doc.status)}>{doc.status ?? "—"}</Badge>
-                    </TableCell>
-                  </TableRow>
+                  <DocumentRow key={doc.id} projectId={projectId} doc={doc} onChanged={refetch} />
                 ))}
               </TableBody>
             </Table>

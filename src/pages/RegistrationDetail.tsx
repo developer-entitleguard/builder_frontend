@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RegistrationComplianceTab } from '@/components/compliance/RegistrationComplianceTab';
+import { RegistrationBomSection } from '@/components/registrations/RegistrationBomSection';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft,
@@ -843,6 +844,18 @@ const RegistrationDetail = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Bill of Materials — products & manuals for this dwelling (Lite). */}
+          {isBuilderFlow && id && (
+            <RegistrationBomSection
+              registrationId={id}
+              projectId={
+                (customerDetailsResponse?.data?.customer as unknown as {
+                  project?: { id?: string };
+                } | undefined)?.project?.id
+              }
+            />
+          )}
 
           {/* Documents */}
           <Card>

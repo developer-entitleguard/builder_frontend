@@ -28,19 +28,18 @@ export interface FolderUploadResult {
   completeness: ComplianceCompleteness;
 }
 
+/** Advisory compliance check — computed on demand, nothing is stored. */
 export interface ComplianceCheckResult {
-  completeness: ComplianceCompleteness;
-  outstandingRequired: Array<{
-    documentId: string;
-    documentName: string;
-    category: string | null;
-  }>;
+  rulebookCovered: boolean;
+  uploadedCount: number;
+  required: Array<{ documentName: string; present: boolean }>;
+  missing: Array<{ documentName: string; present: boolean }>;
   readyForHandover: boolean;
 }
 
 export interface ManualsUploadResult {
-  bomId: string;
-  created: Array<{ fileName: string; itemId: string; productName: string }>;
+  registrationId: string;
+  created: Array<{ fileName: string; itemMapId: string; productName: string }>;
   skipped: string[];
 }
 
@@ -136,17 +135,19 @@ export const projectDocumentsApi = api.injectEndpoints({
       ],
     }),
 
-    // POST /api/builder/projects/:projectId/boms/manuals-folder  (multipart)
-    uploadManualsFolder: build.mutation<
+    // POST /api/builder/registrations/:registrationId/boms/manuals-folder  (multipart)
+    // Manuals now belong to a registration's BOM, not the project Documents tab.
+    uploadRegistrationManualsFolder: build.mutation<
       DefaultListResponse<ManualsUploadResult>,
-      { projectId: string; files: File[]; relativePaths: string[] }
+      { registrationId: string; files: File[]; relativePaths: string[] }
     >({
-      queryFn: ({ projectId, files, relativePaths }) =>
+      queryFn: ({ registrationId, files, relativePaths }) =>
         postFolder<DefaultListResponse<ManualsUploadResult>>(
-          `/api/builder/projects/${projectId}/boms/manuals-folder`,
+          `/api/builder/registrations/${registrationId}/boms/manuals-folder`,
           files,
           relativePaths,
         ),
+      invalidatesTags: ["Item", "Registration"],
     }),
   }),
 });
@@ -156,5 +157,5 @@ export const {
   useGetProjectDocumentsCheckQuery,
   useLazyGetProjectDocumentsCheckQuery,
   useUploadDocumentsFolderMutation,
-  useUploadManualsFolderMutation,
+  useUploadRegistrationManualsFolderMutation,
 } = projectDocumentsApi;

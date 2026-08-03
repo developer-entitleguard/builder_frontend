@@ -140,9 +140,9 @@ export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionPr
       const d = res.data;
       toast({
         title: res.message || "Upload complete",
-        description: `${d.matched.length} matched, ${d.unmatched.length} unclassified${
-          skipped ? `, ${skipped} non-PDF skipped` : ""
-        }.`,
+        description: `${d.matched.length} document(s) filed${
+          d.unmatched.length ? `, ${d.unmatched.length} failed` : ""
+        }${skipped ? `, ${skipped} non-PDF skipped` : ""}.`,
       });
     } catch {
       toast({
@@ -234,13 +234,14 @@ export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionPr
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm">
           <div className="mb-1 flex items-center gap-2 font-medium text-amber-800">
             <AlertTriangle className="h-4 w-4" />
-            {lastDocsUpload!.unmatched.length} file(s) couldn&apos;t be matched to a checklist item
+            {lastDocsUpload!.unmatched.length} file(s) couldn&apos;t be stored
           </div>
           <p className="text-amber-700">
             {lastDocsUpload!.unmatched.join(", ")}
           </p>
           <p className="mt-1 text-amber-700">
-            Add a matching checklist item and re-upload, or ignore these files.
+            Please retry these files. Everything else was filed — documents that didn&apos;t match a
+            checklist item were added as their own rows below.
           </p>
         </div>
       )}

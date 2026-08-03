@@ -179,7 +179,14 @@ export const RegistrationBomSection = ({ registrationId, projectId }: Props) => 
             {items.map((item) => (
               <div key={item.id} className="rounded-md border p-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">{item.name || "Item"}</div>
+                  <div>
+                    <div className="text-sm font-medium">{item.name || "Item"}</div>
+                    {(item.make || item.model || item.brand) && (
+                      <div className="text-xs text-muted-foreground">
+                        {[item.make || item.brand, item.model].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                  </div>
                   {item.category && (
                     <Badge variant="outline" className="text-xs">
                       {item.category}

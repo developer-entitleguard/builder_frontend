@@ -84,6 +84,8 @@ export const api = createApi({
     'ComplianceDocuments',
     'ComplianceAttachments',
     'HandoverReadiness',
+    // Project + Compliance (Lite) — simplified Documents surface (folder upload + check).
+    'ProjectDocuments',
     // Platform Synergy PRD §3.4 — effective entitlements (org modules/capabilities + caller permissions).
     'Entitlements',
     // Developer/Builder Decoupling PRD — scoped builder delegation per project.

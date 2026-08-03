@@ -30,6 +30,7 @@ import { ApprovalsList } from "@/components/projects/ApprovalsList";
 import { ProjectRegistrations } from "@/components/projects/ProjectRegistrations";
 import { ProjectPricing } from "@/components/projects/ProjectPricing";
 import { ProjectComplianceSection } from "@/components/compliance/ProjectComplianceSection";
+import { ProjectDocumentsSection } from "@/components/documents/ProjectDocumentsSection";
 import { ProjectSharesCard } from "@/components/projects/ProjectSharesCard";
 import { EditProjectDialog } from "@/components/projects/EditProjectDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -177,6 +178,9 @@ const ProjectDetail = () => {
   const showRegistrationsTab = hasModule("REGISTRATIONS");
   const showApprovalsTab = hasModule("APPROVALS");
   const showComplianceTab = hasModule("COMPLIANCE_DOCS");
+  // Project + Compliance (Lite): the simplified "Documents" surface replaces the
+  // full Compliance tab for Lite orgs (they get DOCUMENTS, not COMPLIANCE_DOCS).
+  const showDocumentsTab = hasModule("DOCUMENTS");
   const showPricingTab = pricingVisible && hasModule("PRICING");
   const defaultProjectTab = showActivitiesTab
     ? "activities"
@@ -186,6 +190,8 @@ const ProjectDetail = () => {
     ? "approvals"
     : showComplianceTab
     ? "compliance"
+    : showDocumentsTab
+    ? "documents"
     : showPricingTab
     ? "pricing"
     : "activities";
@@ -475,6 +481,11 @@ const ProjectDetail = () => {
                 Compliance documents
               </TabsTrigger>
             )}
+            {showDocumentsTab && (
+              <TabsTrigger value="documents">
+                Documents
+              </TabsTrigger>
+            )}
             {showPricingTab && (
               <TabsTrigger value="pricing" className="flex items-center gap-1">
                 <DollarSign className="h-4 w-4" />
@@ -553,6 +564,12 @@ const ProjectDetail = () => {
                 hasDuctedHvac: project.has_ducted_hvac ?? undefined,
               } : undefined}
             />
+          </TabsContent>
+          )}
+
+          {showDocumentsTab && (
+          <TabsContent value="documents">
+            <ProjectDocumentsSection projectId={id!} />
           </TabsContent>
           )}
 

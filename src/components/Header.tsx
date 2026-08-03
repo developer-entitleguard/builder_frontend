@@ -76,12 +76,17 @@ const Header = () => {
   const showOrgNavItems = !isVendor;
   // Projects no longer have a single PROJECTS module — the tab shows when the org
   // holds any project-scoped sub-module (Activities / Approvals / Pricing /
-  // Compliance docs). Individual tabs inside a project gate on their own module.
+  // Compliance docs / Registrations / Documents). Individual tabs inside a project
+  // gate on their own module. Registrations + Documents matter for the Project +
+  // Compliance (Lite) profile, which has neither Activities nor Compliance docs but
+  // still creates and works projects.
   const hasAnyProjectModule =
     hasModule("ACTIVITIES") ||
     hasModule("APPROVALS") ||
     hasModule("PRICING") ||
-    hasModule("COMPLIANCE_DOCS");
+    hasModule("COMPLIANCE_DOCS") ||
+    hasModule("REGISTRATIONS") ||
+    hasModule("DOCUMENTS");
   const showProjectsTab = (canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === null) && hasAnyProjectModule;
   // Bulk upload of past projects (CSV import / bulk onboarding) — its own bolt-on,
   // so it can be hidden independently of the project list.

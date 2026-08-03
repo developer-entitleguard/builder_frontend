@@ -172,11 +172,15 @@ const Projects = () => {
   const canImport = canManageProjects(builderRole) && hasModule("PROJECT_IMPORT");
   // PROJECTS was split into per-tab modules; the project list shows when the org
   // holds any project-scoped module. hasModule fails open while entitlements load.
+  // Registrations + Documents are included for the Project + Compliance (Lite)
+  // profile, which works projects without Activities or Compliance docs.
   const hasAnyProjectModule =
     hasModule("ACTIVITIES") ||
     hasModule("APPROVALS") ||
     hasModule("PRICING") ||
-    hasModule("COMPLIANCE_DOCS");
+    hasModule("COMPLIANCE_DOCS") ||
+    hasModule("REGISTRATIONS") ||
+    hasModule("DOCUMENTS");
 
   useEffect(() => {
     // Redirect only when neither Supabase user nor builder JWT is present

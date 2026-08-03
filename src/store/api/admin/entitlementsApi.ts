@@ -23,3 +23,18 @@ export const useSetAdminBoltonMutation = () =>
         body: JSON.stringify({ key, enabled }),
       }),
   );
+
+/**
+ * Project + Compliance (Lite): apply (enabled=true) or clear (enabled=false) the
+ * Lite preset in one call. Applying pins the org to projects + registrations +
+ * the Documents surface only; clearing removes all bolt-ons back to capability
+ * defaults. Atomic alternative to flipping ~12 module bolt-ons by hand.
+ */
+export const useSetAdminComplianceLitePresetMutation = () =>
+  useAdminMutation<{ orgType: string; orgId: string; enabled: boolean }, void>(
+    ({ orgType, orgId, enabled }) =>
+      adminFetch<void>(`/api/admin/orgs/${orgType}/${orgId}/entitlements/preset/compliance-lite`, {
+        method: 'PUT',
+        body: JSON.stringify({ enabled }),
+      }),
+  );

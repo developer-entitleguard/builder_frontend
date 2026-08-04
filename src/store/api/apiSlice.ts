@@ -94,6 +94,9 @@ export const api = createApi({
     'Quote',
     'Invoice',
     'Customer',
+    // Commercial Segment PRD 1 — commercial projects, registrations, businesses, handover.
+    'Commercial',
+    'CommercialBusiness',
   ],
   endpoints: () => ({}),
 });

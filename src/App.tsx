@@ -36,6 +36,7 @@ import Payments from "./pages/Payments";
 import PublicQuote from "./pages/PublicQuote";
 import BuilderOnboarding from "./pages/BuilderOnboarding";
 import ProjectDetail from "./pages/ProjectDetail";
+import CommercialProjectWorkspace from "./pages/CommercialProjectWorkspace";
 import ProjectReport from "./pages/ProjectReport";
 import OrgReport from "./pages/OrgReport";
 import ApprovalDetail from "./pages/ApprovalDetail";
@@ -336,6 +337,13 @@ const App = () => (
               <Route path="/projects/:id" element={
                 <ProtectedRoute>
                   <ProjectDetail />
+                </ProtectedRoute>
+              } />
+              {/* Commercial Segment PRD 1 — commercial project workspace (setup, parts,
+                  registrations, checklist, handover). Gated on commercial access inside. */}
+              <Route path="/projects/:id/commercial" element={
+                <ProtectedRoute>
+                  <CommercialProjectWorkspace />
                 </ProtectedRoute>
               } />
               {/* Per-project management report — admin only. */}

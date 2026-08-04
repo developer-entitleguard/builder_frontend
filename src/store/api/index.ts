@@ -38,6 +38,8 @@ import './projectShares';
 import './quotes';
 import './invoices';
 import './customers';
+// Commercial Segment PRD 1 — commercial project flow, registrations, handover.
+import './commercial';
 
 // Export the main API slice
 export { api } from './apiSlice';

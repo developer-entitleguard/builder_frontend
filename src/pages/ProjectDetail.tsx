@@ -171,6 +171,15 @@ const ProjectDetail = () => {
   // Pricing is the builder's data — hidden from a developer-operator of a decoupled
   // project. Defaults to visible when the flag is absent (older responses).
   const pricingVisible = projectResponse?.data?.pricingVisible !== false;
+
+  // Commercial projects live in their own workspace; this residential detail page
+  // isn't commercial-aware. Redirect once the project has loaded so links from the
+  // projects list (and "Back to Project") land on the right screen.
+  const isCommercialProject =
+    (projectResponse?.data?.propertyType ?? "").toLowerCase() === "commercial";
+  useEffect(() => {
+    if (isCommercialProject && id) navigate(`/projects/${id}/commercial`, { replace: true });
+  }, [isCommercialProject, id, navigate]);
   // Project tabs are individually entitled now that PROJECTS was split into
   // per-tab modules. hasModule fails open while entitlements load, so tabs never
   // flash-hide. Compliance reuses the existing COMPLIANCE_DOCS module.

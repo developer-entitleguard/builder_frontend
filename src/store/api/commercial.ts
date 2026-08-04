@@ -204,7 +204,8 @@ export const commercialApi = api.injectEndpoints({
     }),
     createCommercialRegistration: build.mutation<CommercialRegistration, { projectId: string; body: CommercialRegistration }>({
       query: ({ projectId, body }) => ({ url: `/api/builder/commercial/projects/${projectId}/registrations`, method: 'POST', body }),
-      invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId)],
+      // A new registration may create a business inline (newBusiness) — refresh the business list too.
+      invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId), 'CommercialBusiness'],
     }),
     getCommercialRegistration: build.query<CommercialRegistration, string>({
       query: (id) => ({ url: `/api/builder/commercial/registrations/${id}`, method: 'GET' }),
@@ -212,11 +213,18 @@ export const commercialApi = api.injectEndpoints({
     }),
     updateCommercialRegistration: build.mutation<CommercialRegistration, { id: string; body: CommercialRegistration }>({
       query: ({ id, body }) => ({ url: `/api/builder/commercial/registrations/${id}`, method: 'PUT', body }),
-      invalidatesTags: (_r, _e, { id }) => [regTag(id)],
+      // Also refresh the project-scoped registrations list, not just this row.
+      invalidatesTags: (result, _e, { id }) =>
+        result?.projectId ? [regTag(id), projectTag(result.projectId)] : [regTag(id)],
     }),
     tagRegistrationBusiness: build.mutation<CommercialRegistration, { id: string; body: CommercialRegistration }>({
       query: ({ id, body }) => ({ url: `/api/builder/commercial/registrations/${id}/business`, method: 'PUT', body }),
-      invalidatesTags: (_r, _e, { id }) => [regTag(id)],
+      // Tagging updates the list (Tagged badge) + this row's handover readiness, and
+      // may have created a business inline — refresh all three.
+      invalidatesTags: (result, _e, { id }) =>
+        result?.projectId
+          ? [regTag(id), projectTag(result.projectId), 'CommercialBusiness']
+          : [regTag(id), 'CommercialBusiness'],
     }),
 
     // --- Assets (R10) ---
@@ -246,7 +254,9 @@ export const commercialApi = api.injectEndpoints({
     // --- Handover (R11/R12) ---
     getHandoverReadiness: build.query<CommercialHandoverRecord, string>({
       query: (registrationId) => ({ url: `/api/builder/commercial/registrations/${registrationId}/handover/readiness`, method: 'GET' }),
-      providesTags: (_r, _e, id) => [regTag(id)],
+      // Depend on the project tag too — readiness reads the project's practical
+      // completion date, so saving Setup must refresh it.
+      providesTags: (result, _e, id) => result?.projectId ? [regTag(id), projectTag(result.projectId)] : [regTag(id)],
     }),
     getHandoverRecord: build.query<CommercialHandoverRecord | null, string>({
       query: (registrationId) => ({ url: `/api/builder/commercial/registrations/${registrationId}/handover`, method: 'GET' }),
@@ -254,7 +264,8 @@ export const commercialApi = api.injectEndpoints({
     }),
     executeHandover: build.mutation<CommercialHandoverRecord, { registrationId: string; confirmAccuracy: boolean; sendEmail?: boolean }>({
       query: ({ registrationId, ...body }) => ({ url: `/api/builder/commercial/registrations/${registrationId}/handover`, method: 'POST', body }),
-      invalidatesTags: (_r, _e, { registrationId }) => [regTag(registrationId)],
+      invalidatesTags: (result, _e, { registrationId }) =>
+        result?.projectId ? [regTag(registrationId), projectTag(result.projectId)] : [regTag(registrationId)],
     }),
   }),
 });

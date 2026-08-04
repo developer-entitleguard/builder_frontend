@@ -29,5 +29,14 @@ export function useEntitlements() {
     hasModule: (key: string) => has(data?.modules, key),
     hasCapability: (key: string) => has(data?.capabilities, key),
     hasPermission: (key: string) => has(data?.permissions, key),
+    // Commercial Segment PRD 1 (R2/R3). Segment access gates the project-type
+    // selector and every commercial surface. Fail-CLOSED for commercial while
+    // loading (default false) so a residential-only builder never flashes a
+    // commercial option; residential stays fail-open to match module gating.
+    segments: {
+      residential: !ready ? true : !!data?.segments?.residential,
+      commercial: !ready ? false : !!data?.segments?.commercial,
+    },
+    hasCommercialAccess: () => (!ready ? false : !!data?.segments?.commercial),
   };
 }

@@ -12,6 +12,12 @@ export interface EntitlementsView {
   capabilities: string[];
   modules: string[];
   permissions: string[];
+  /**
+   * Commercial Segment PRD 1 (R2/R3). Derived building-segment access the SPA
+   * uses to gate the project-type selector and commercial surfaces. residential
+   * = the org holds BUILD|DEVELOP; commercial = it holds COMMERCIAL.
+   */
+  segments: { residential: boolean; commercial: boolean };
 }
 
 export const entitlementsApi = api.injectEndpoints({

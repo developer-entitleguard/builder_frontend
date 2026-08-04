@@ -51,6 +51,12 @@ export interface CreateProjectData {
   state: string;
   postcode: string;
   property_type: PropertyType;
+  /**
+   * Commercial Segment PRD 1 (R3). RESIDENTIAL | COMMERCIAL | MIXED_USE. Only sent
+   * by dual-access builders; omitted (backend defaults to the org's single segment)
+   * otherwise. Immutable after creation.
+   */
+  project_type?: string | null;
   /** NCC building classification code (e.g. CLASS_1A). Mandatory on create/update. */
   building_class?: string | null;
   start_date?: string | null;
@@ -237,6 +243,10 @@ export const useProjects = () => {
         hasLift: data.has_lift ?? null,
         isStrata: data.is_strata ?? null,
         hasDuctedHvac: data.has_ducted_hvac ?? null,
+        // Commercial Segment PRD 1 (R3). Sent only by dual-access builders; the
+        // backend defaults it to the org's single segment otherwise. Immutable,
+        // so it is deliberately NOT sent on update.
+        projectType: data.project_type ?? null,
       };
       const result = await createProjectMutation(body).unwrap();
       if (!result?.success) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -85,8 +85,11 @@ const australianStates = [
   { value: 'NT', label: 'Northern Territory' }
 ];
 
-const STEPS = ['basics', 'type', 'timeline'] as const;
-type Step = typeof STEPS[number];
+// Commercial Segment PRD 1 (R3). 'segment' is prepended only for dual-access
+// builders (see `steps` inside the component); a single-access builder never
+// sees it and the type defaults silently.
+type Step = 'segment' | 'basics' | 'type' | 'timeline';
+const BASE_STEPS: Step[] = ['basics', 'type', 'timeline'];
 
 // Consider authenticated if Supabase user OR builder JWT in localStorage
 const hasBuilderAuth = (): boolean => {
@@ -103,13 +106,30 @@ const hasBuilderAuth = (): boolean => {
 const ProjectCreate = () => {
   const { user, loading: authLoading } = useAuth();
   const { createProject } = useProjects();
-  const { hasModule } = useEntitlements();
+  const { hasModule, segments, ready: entitlementsReady } = useEntitlements();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [generateActivities] = useGenerateActivitiesMutation();
   const [generateCompliance] = useGenerateProjectComplianceDocumentsMutation();
 
+  // Commercial Segment PRD 1 (R3). The project-type selector is shown only to a
+  // dual-access builder; a single-access builder never sees it and the type
+  // defaults silently (RESIDENTIAL, or COMMERCIAL for a commercial-only org).
+  const showSegmentStep = segments.residential && segments.commercial;
+  const steps = useMemo<Step[]>(
+    () => (showSegmentStep ? (['segment', ...BASE_STEPS] as Step[]) : BASE_STEPS),
+    [showSegmentStep],
+  );
+
   const [currentStep, setCurrentStep] = useState<Step>('basics');
+  // Once entitlements resolve, land on the real first step (segment for dual-access).
+  const initStepRef = useRef(false);
+  useEffect(() => {
+    if (entitlementsReady && !initStepRef.current) {
+      initStepRef.current = true;
+      setCurrentStep(steps[0]);
+    }
+  }, [entitlementsReady, steps]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   
@@ -120,6 +140,9 @@ const ProjectCreate = () => {
     state: '',
     postcode: '',
     property_type: 'house',
+    // Commercial Segment PRD 1 (R3). Default residential; only a dual-access
+    // builder changes it via the segment step.
+    project_type: 'RESIDENTIAL',
     building_class: DEFAULT_BUILDING_CLASS_BY_TYPE['house'],
     start_date: null,
     target_end_date: null,
@@ -146,7 +169,7 @@ const ProjectCreate = () => {
     }
   }, [user, authLoading, navigate]);
 
-  const currentStepIndex = STEPS.indexOf(currentStep);
+  const currentStepIndex = steps.indexOf(currentStep);
 
   const updateField = (field: keyof CreateProjectData, value: CreateProjectData[keyof CreateProjectData]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -168,6 +191,10 @@ const ProjectCreate = () => {
 
   const canProceed = () => {
     switch (currentStep) {
+      case 'segment':
+        // Phase 1 ships the selector and the residential flow. Commercial and
+        // mixed-use capture arrive in Phase 2, so only residential can proceed.
+        return formData.project_type === 'RESIDENTIAL';
       case 'basics':
         return formData.name && formData.address && formData.city && formData.state && formData.postcode;
       case 'type': {
@@ -189,15 +216,15 @@ const ProjectCreate = () => {
 
   const handleNext = () => {
     const nextIndex = currentStepIndex + 1;
-    if (nextIndex < STEPS.length) {
-      setCurrentStep(STEPS[nextIndex]);
+    if (nextIndex < steps.length) {
+      setCurrentStep(steps[nextIndex]);
     }
   };
 
   const handleBack = () => {
     const prevIndex = currentStepIndex - 1;
     if (prevIndex >= 0) {
-      setCurrentStep(STEPS[prevIndex]);
+      setCurrentStep(steps[prevIndex]);
     }
   };
 
@@ -240,7 +267,7 @@ const ProjectCreate = () => {
 
   const renderStepIndicator = () => (
     <div className="flex items-center justify-center mb-8">
-      {STEPS.map((step, index) => (
+      {steps.map((step, index) => (
         <div key={step} className="flex items-center">
           <div
             className={cn(
@@ -254,7 +281,7 @@ const ProjectCreate = () => {
           >
             {index < currentStepIndex ? <Check className="h-4 w-4" /> : index + 1}
           </div>
-          {index < STEPS.length - 1 && (
+          {index < steps.length - 1 && (
             <div
               className={cn(
                 "w-16 h-1 mx-2",
@@ -589,13 +616,57 @@ const ProjectCreate = () => {
     </div>
   );
 
+  const renderSegmentStep = () => {
+    const options: { value: string; label: string; description: string; icon: React.ElementType }[] = [
+      { value: 'RESIDENTIAL', label: 'Residential', description: 'Homes: houses, townhouses, apartments, duplexes', icon: Home },
+      { value: 'COMMERCIAL', label: 'Commercial', description: 'NCC Class 3–9: shops, offices, warehouses, care', icon: Building2 },
+      { value: 'MIXED_USE', label: 'Mixed use', description: 'One building with both residential and commercial parts', icon: LayoutGrid },
+    ];
+    const selected = formData.project_type ?? 'RESIDENTIAL';
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-3">
+          {options.map((opt) => {
+            const Icon = opt.icon;
+            const isSelected = selected === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => updateField('project_type', opt.value)}
+                className={cn(
+                  'flex items-start gap-3 rounded-lg border p-4 text-left transition-colors',
+                  isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50',
+                )}
+              >
+                <Icon className={cn('h-5 w-5 mt-0.5', isSelected ? 'text-primary' : 'text-muted-foreground')} />
+                <div>
+                  <div className="font-medium">{opt.label}</div>
+                  <div className="text-sm text-muted-foreground">{opt.description}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        {selected !== 'RESIDENTIAL' && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            Commercial and mixed-use project creation is arriving in the next release. For now,
+            choose Residential to continue — your commercial access is already active.
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const stepTitles = {
+    segment: 'Project Type',
     basics: 'Project Basics',
     type: 'Property Type',
     timeline: 'Timeline & Confirm'
   };
 
   const stepHints = {
+    segment: 'Choose the building segment. This is fixed once the project is created.',
     basics: 'Name the build and its address — e.g. "42 Rose St, Bathurst". This is what homeowners and your team will see.',
     type: 'Pick the property type and NCC class so activities and compliance are scoped correctly.',
     timeline: 'Set the key dates. Warranty periods are calculated from the settlement date you enter here.'
@@ -632,6 +703,7 @@ const ProjectCreate = () => {
             <h2 className="text-xl font-semibold mb-1">{stepTitles[currentStep]}</h2>
             <p className="text-sm text-muted-foreground mb-6">{stepHints[currentStep]}</p>
             
+            {currentStep === 'segment' && renderSegmentStep()}
             {currentStep === 'basics' && renderBasicsStep()}
             {currentStep === 'type' && renderTypeStep()}
             {currentStep === 'timeline' && renderTimelineStep()}

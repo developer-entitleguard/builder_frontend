@@ -29,6 +29,8 @@ const Signup = () => {
 
   const [isBuilder, setIsBuilder] = useState(true);
   const [isDeveloper, setIsDeveloper] = useState(false);
+  // Commercial Segment PRD 1 (R2). Which building segment(s) the org builds for.
+  const [segment, setSegment] = useState<"RESIDENTIAL" | "COMMERCIAL" | "BOTH">("RESIDENTIAL");
   const [orgName, setOrgName] = useState("");
   const [abn, setAbn] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -96,6 +98,7 @@ const Signup = () => {
         body: JSON.stringify({
           orgKind: "CONSTRUCTION",
           constructionRoles: roles,
+          segment,
           orgName: orgName.trim(),
           abn: abn.trim() || null,
           contactPhone: contactPhone.trim() || null,
@@ -150,6 +153,29 @@ const Signup = () => {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">Select one or both.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>This business builds for</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { key: "RESIDENTIAL", label: "Residential" },
+                  { key: "COMMERCIAL", label: "Commercial" },
+                  { key: "BOTH", label: "Both" },
+                ] as const).map((opt) => (
+                  <Button
+                    key={opt.key}
+                    type="button"
+                    variant={segment === opt.key ? "default" : "outline"}
+                    onClick={() => setSegment(opt.key)}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Commercial covers NCC Class 3–9 buildings. You can change this later.
+              </p>
             </div>
 
             <div className="space-y-2">

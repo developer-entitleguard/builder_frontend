@@ -75,6 +75,8 @@ export interface CreateBuilderProjectBody {
   name: string;
   postcode: string;
   propertyType: string;
+  /** Commercial Segment PRD 1 (R3). RESIDENTIAL | COMMERCIAL | MIXED_USE. Optional; backend defaults it. */
+  projectType?: string | null;
   /** NCC building classification code (e.g. CLASS_1A). Mandatory. */
   buildingClass?: string | null;
   startDate: string;

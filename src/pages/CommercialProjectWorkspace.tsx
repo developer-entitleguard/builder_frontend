@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, Building2, Upload, UserPlus } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, Building2, Upload, UserPlus, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { getApiBaseUrl } from "@/lib/config";
-import { useProjectByIdQuery } from "@/store/api/projects";
+import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
+import { useProjectByIdQuery, useUpdateProjectMutation } from "@/store/api/projects";
 import {
   BuildingPart,
   BusinessContact,
@@ -54,6 +56,7 @@ const CommercialProjectWorkspace = () => {
   const { id: projectId = "" } = useParams();
   const navigate = useNavigate();
   const { segments, ready } = useEntitlements();
+  const [editOpen, setEditOpen] = useState(false);
 
   if (ready && !segments.commercial) {
     return (
@@ -75,7 +78,13 @@ const CommercialProjectWorkspace = () => {
         <Button variant="ghost" onClick={() => navigate(`/projects`)} className="mb-4">
           <ArrowLeft className="h-4 w-4 mr-2" /> Back to Projects
         </Button>
-        <h1 className="text-2xl font-semibold mb-6">Commercial Project</h1>
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Commercial Project</h1>
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            <Pencil className="h-4 w-4 mr-2" /> Edit details
+          </Button>
+        </div>
+        <EditProjectDetailsDialog projectId={projectId} open={editOpen} onOpenChange={setEditOpen} />
 
         <Tabs defaultValue="setup">
           <TabsList className="mb-6 flex-wrap">
@@ -756,6 +765,128 @@ function HandoverRow({ registrationId, label }: { registrationId: string; label:
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ---- Edit project details (name / address / status / dates) ----
+const AU_STATES = ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"];
+
+interface EditForm {
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  postcode: string;
+  statusId: string;
+  startDate: string;
+  targetEndDate: string;
+}
+
+function EditProjectDetailsDialog({ projectId, open, onOpenChange }: { projectId: string; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { data: resp, refetch } = useProjectByIdQuery({ id: projectId });
+  const project = resp?.data;
+  const { data: statusResp } = useGetStatusesByModuleQuery({ module: "PROJECT" });
+  const statuses = useMemo(() => statusResp?.data ?? [], [statusResp]);
+  const [update, { isLoading }] = useUpdateProjectMutation();
+  const { toast } = useToast();
+  const [form, setForm] = useState<EditForm | null>(null);
+
+  // Seed the form from the project each time the dialog opens. The API returns the
+  // status name, not its id — resolve the id from the PROJECT status list.
+  useEffect(() => {
+    if (open && project) {
+      const norm = (s?: string | null) => (s ?? "").toLowerCase().replace(/[\s_]/g, "");
+      const matchedStatusId = statuses.find((s) => norm(s.name) === norm(project.status))?.id ?? "";
+      setForm({
+        name: project.name ?? "",
+        address: project.address ?? "",
+        city: project.city ?? "",
+        state: project.state ?? "",
+        postcode: project.postcode ?? "",
+        statusId: matchedStatusId,
+        startDate: project.startDate ?? "",
+        targetEndDate: project.targetEndDate ?? "",
+      });
+    }
+  }, [open, project, statuses]);
+
+  const set = (patch: Partial<EditForm>) => setForm((f) => (f ? { ...f, ...patch } : f));
+
+  const onSave = async () => {
+    if (!form || !project) return;
+    if (!form.name.trim() || !form.address.trim() || !form.city.trim() || !form.state || !form.postcode.trim() || !form.statusId) {
+      toast({ title: "Fill in name, address, city, state, postcode and status", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await update({
+        id: projectId,
+        body: {
+          name: form.name.trim(),
+          address: form.address.trim(),
+          city: form.city.trim(),
+          state: form.state,
+          postcode: form.postcode.trim(),
+          // Preserve segment + non-edited fields; buildingClass stays null for commercial.
+          propertyType: project.propertyType ?? "commercial",
+          buildingClass: null,
+          startDate: form.startDate || project.startDate || "",
+          targetEndDate: form.targetEndDate || project.targetEndDate || "",
+          statusId: form.statusId,
+          description: project.description ?? "",
+          activitiesVisibleToHomeowner: project.activitiesVisibleToHomeowner ?? true,
+        },
+      }).unwrap();
+      if (!res?.success) {
+        toast({ title: "Could not save", description: res?.message || "Please try again.", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Project updated" });
+      refetch();
+      onOpenChange(false);
+    } catch (e) {
+      toast({ title: "Could not save", description: errMessage(e, "Please try again."), variant: "destructive" });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader><DialogTitle>Edit project details</DialogTitle></DialogHeader>
+        {!form ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <div className="space-y-3">
+            <Field label="Project name"><Input value={form.name} onChange={(e) => set({ name: e.target.value })} /></Field>
+            <Field label="Address"><Input value={form.address} onChange={(e) => set({ address: e.target.value })} /></Field>
+            <div className="grid sm:grid-cols-3 gap-2">
+              <Field label="City"><Input value={form.city} onChange={(e) => set({ city: e.target.value })} /></Field>
+              <Field label="State">
+                <select className="border rounded-md h-10 px-2 text-sm w-full" value={form.state} onChange={(e) => set({ state: e.target.value })}>
+                  <option value="">—</option>
+                  {AU_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </Field>
+              <Field label="Postcode"><Input value={form.postcode} onChange={(e) => set({ postcode: e.target.value })} /></Field>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-2">
+              <Field label="Status">
+                <select className="border rounded-md h-10 px-2 text-sm w-full" value={form.statusId} onChange={(e) => set({ statusId: e.target.value })}>
+                  <option value="">—</option>
+                  {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Start date"><Input type="date" value={form.startDate} onChange={(e) => set({ startDate: e.target.value })} /></Field>
+              <Field label="Target end date"><Input type="date" value={form.targetEndDate} onChange={(e) => set({ targetEndDate: e.target.value })} /></Field>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button onClick={onSave} disabled={isLoading}>{isLoading ? "Saving…" : "Save"}</Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

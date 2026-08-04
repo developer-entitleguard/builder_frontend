@@ -26,7 +26,7 @@ import {
   useGetChecklistDocumentsQuery,
   useGetCommercialDetailQuery,
   useGetBuildingPartsQuery,
-  useGetHandoverReadinessQuery,
+  useGetCommercialHandoverReadinessQuery,
   useListCommercialAssetsQuery,
   useListCommercialBusinessesQuery,
   useListCommercialRegistrationsQuery,
@@ -631,7 +631,7 @@ function HandoverTab({ projectId }: { projectId: string }) {
 }
 
 function HandoverRow({ registrationId, label }: { registrationId: string; label: string }) {
-  const { data: readiness } = useGetHandoverReadinessQuery(registrationId);
+  const { data: readiness } = useGetCommercialHandoverReadinessQuery(registrationId);
   const [handover, { isLoading }] = useExecuteHandoverMutation();
   const { toast } = useToast();
   const done = readiness?.lifecycle;

@@ -252,7 +252,12 @@ export const commercialApi = api.injectEndpoints({
     }),
 
     // --- Handover (R11/R12) ---
-    getHandoverReadiness: build.query<CommercialHandoverRecord, string>({
+    // NOTE: must NOT be named `getHandoverReadiness` — a residential endpoint of
+    // that name exists in complianceDocuments.ts, and RTK injectEndpoints keeps
+    // only the first injection of a duplicate name. The collision made this hook
+    // silently call the residential `/registrations/{id}/handover-readiness` with
+    // the wrong (object) arg → `undefined` id → handover never became ready.
+    getCommercialHandoverReadiness: build.query<CommercialHandoverRecord, string>({
       query: (registrationId) => ({ url: `/api/builder/commercial/registrations/${registrationId}/handover/readiness`, method: 'GET' }),
       // Depend on the project tag too — readiness reads the project's practical
       // completion date, so saving Setup must refresh it.
@@ -290,7 +295,7 @@ export const {
   useRemoveCommercialAssetMutation,
   useListCommercialBusinessesQuery,
   useSearchCommercialBusinessesQuery,
-  useGetHandoverReadinessQuery,
+  useGetCommercialHandoverReadinessQuery,
   useGetHandoverRecordQuery,
   useExecuteHandoverMutation,
 } = commercialApi;

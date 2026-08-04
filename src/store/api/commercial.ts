@@ -65,6 +65,8 @@ export interface CommercialComplianceDocument {
   tier: 'BUILDING' | 'TENANCY';
   status: string;
   egCreatable?: boolean | null;
+  /** Current assignee display label (name / org / email), or null if unassigned. */
+  assigneeLabel?: string | null;
 }
 
 export interface BusinessContact {

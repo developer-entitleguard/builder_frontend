@@ -672,7 +672,7 @@ function DocRow({ doc, projectId }: { doc: CommercialComplianceDocument; project
         <div className="min-w-0">
           {doc.documentName}
           {doc.mandatory === "REQUIRED" && <Badge variant="destructive" className="ml-2">Mandatory</Badge>}
-          {doc.egCreatable && <Badge variant="secondary" className="ml-2">EG can issue</Badge>}
+          {doc.assigneeLabel && <Badge variant="secondary" className="ml-2">Assigned · {doc.assigneeLabel}</Badge>}
           {atts.length > 0 && <Badge variant="outline" className="ml-2">{atts.length} file{atts.length > 1 ? "s" : ""}</Badge>}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">

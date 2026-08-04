@@ -27,6 +27,7 @@ import {
   useGetCommercialDetailQuery,
   useGetBuildingPartsQuery,
   useGetCommercialHandoverReadinessQuery,
+  useGetHandoverRecordQuery,
   useListCommercialAssetsQuery,
   useListCommercialBusinessesQuery,
   useListCommercialRegistrationsQuery,
@@ -632,9 +633,13 @@ function HandoverTab({ projectId }: { projectId: string }) {
 
 function HandoverRow({ registrationId, label }: { registrationId: string; label: string }) {
   const { data: readiness } = useGetCommercialHandoverReadinessQuery(registrationId);
+  // The readiness DTO carries no lifecycle — only the handover record does. Read
+  // the record so a handed-over unit shows its lifecycle badge instead of a live
+  // (and, server-side, rejected) "Hand over" button.
+  const { data: record } = useGetHandoverRecordQuery(registrationId);
   const [handover, { isLoading }] = useExecuteHandoverMutation();
   const { toast } = useToast();
-  const done = readiness?.lifecycle;
+  const done = record?.lifecycle;
 
   const onHandover = async () => {
     try {

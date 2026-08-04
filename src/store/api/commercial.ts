@@ -148,8 +148,39 @@ export interface CommercialHandoverRecord {
   outstandingMandatory?: string[];
 }
 
+export interface ComplianceAttachment {
+  id: string;
+  fileId?: string | null;
+  fileName?: string | null;
+  fileType?: string | null;
+  externalUrl?: string | null;
+  notes?: string | null;
+  version?: number | null;
+  isCurrent?: boolean | null;
+  uploadedBy?: string | null;
+  reviewStatus?: string | null;
+  createdAt?: string | null;
+}
+
+export interface ComplianceAssignRequest {
+  assigneeUserId?: string | null;
+  assigneeOrgType?: string | null;
+  assigneeOrgId?: string | null;
+  assigneeName?: string | null;
+  assigneeEmail?: string | null;
+}
+
+/** Backend DefaultListResponse envelope. */
+interface ListEnvelope<T> {
+  success: boolean;
+  message: string;
+  data: T;
+}
+
 const projectTag = (projectId: string) => ({ type: 'Commercial' as const, id: `project:${projectId}` });
 const regTag = (id: string) => ({ type: 'Commercial' as const, id: `reg:${id}` });
+// Per checklist-document tag — scopes the attachment list to one row.
+const docTag = (id: string) => ({ type: 'Commercial' as const, id: `cdoc:${id}` });
 
 export const commercialApi = api.injectEndpoints({
   endpoints: (build) => ({
@@ -272,6 +303,31 @@ export const commercialApi = api.injectEndpoints({
       invalidatesTags: (result, _e, { registrationId }) =>
         result?.projectId ? [regTag(registrationId), projectTag(result.projectId)] : [regTag(registrationId)],
     }),
+
+    // --- Checklist document delivery: attachments + assign-to-trade ---
+    listCommercialAttachments: build.query<ComplianceAttachment[], string>({
+      query: (documentId) => ({ url: `/api/builder/commercial/checklist-documents/${documentId}/attachments`, method: 'GET' }),
+      transformResponse: (r: ListEnvelope<ComplianceAttachment[]>) => r?.data ?? [],
+      providesTags: (_r, _e, documentId) => [docTag(documentId)],
+    }),
+    uploadCommercialAttachment: build.mutation<unknown, { documentId: string; projectId: string; file: File; notes?: string }>({
+      query: ({ documentId, file, notes }) => {
+        const form = new FormData();
+        form.append('file', file);
+        if (notes) form.append('notes', notes);
+        return { url: `/api/builder/commercial/checklist-documents/${documentId}/attachments`, method: 'POST', body: form };
+      },
+      // Attaching auto-marks the row RECEIVED — refresh the checklist list too.
+      invalidatesTags: (_r, _e, { documentId, projectId }) => [docTag(documentId), projectTag(projectId)],
+    }),
+    deleteCommercialAttachment: build.mutation<unknown, { documentId: string; projectId: string; attachmentId: string }>({
+      query: ({ documentId, attachmentId }) => ({ url: `/api/builder/commercial/checklist-documents/${documentId}/attachments/${attachmentId}`, method: 'DELETE' }),
+      invalidatesTags: (_r, _e, { documentId, projectId }) => [docTag(documentId), projectTag(projectId)],
+    }),
+    assignCommercialDocument: build.mutation<unknown, { documentId: string; projectId: string; body: ComplianceAssignRequest }>({
+      query: ({ documentId, body }) => ({ url: `/api/builder/commercial/checklist-documents/${documentId}/assign`, method: 'POST', body }),
+      invalidatesTags: (_r, _e, { documentId, projectId }) => [docTag(documentId), projectTag(projectId)],
+    }),
   }),
 });
 
@@ -298,4 +354,8 @@ export const {
   useGetCommercialHandoverReadinessQuery,
   useGetHandoverRecordQuery,
   useExecuteHandoverMutation,
+  useListCommercialAttachmentsQuery,
+  useUploadCommercialAttachmentMutation,
+  useDeleteCommercialAttachmentMutation,
+  useAssignCommercialDocumentMutation,
 } = commercialApi;

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -8,32 +8,37 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, Building2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, Building2, Upload, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlements } from "@/hooks/useEntitlements";
+import { getApiBaseUrl } from "@/lib/config";
 import { useProjectByIdQuery } from "@/store/api/projects";
 import {
   BuildingPart,
   BusinessContact,
   CommercialAsset,
   CommercialBusiness,
+  CommercialComplianceDocument,
   CommercialProjectDetail,
   CommercialRegistration,
   useAddCommercialAssetMutation,
+  useAssignCommercialDocumentMutation,
   useCreateCommercialRegistrationMutation,
+  useDeleteCommercialAttachmentMutation,
   useExecuteHandoverMutation,
-  useGenerateCommercialActivitiesMutation,
   useGetChecklistDocumentsQuery,
   useGetCommercialDetailQuery,
   useGetBuildingPartsQuery,
   useGetCommercialHandoverReadinessQuery,
   useGetHandoverRecordQuery,
   useListCommercialAssetsQuery,
+  useListCommercialAttachmentsQuery,
   useListCommercialBusinessesQuery,
   useListCommercialRegistrationsQuery,
   useMarkChecklistStatusMutation,
   useRegenerateChecklistMutation,
   useRemoveCommercialAssetMutation,
+  useUploadCommercialAttachmentMutation,
   useReplaceBuildingPartsMutation,
   useTagRegistrationBusinessMutation,
   useUpdateCommercialRegistrationMutation,
@@ -48,7 +53,6 @@ import {
 const CommercialProjectWorkspace = () => {
   const { id: projectId = "" } = useParams();
   const navigate = useNavigate();
-  const { toast } = useToast();
   const { segments, ready } = useEntitlements();
 
   if (ready && !segments.commercial) {
@@ -85,7 +89,7 @@ const CommercialProjectWorkspace = () => {
           <TabsContent value="setup"><SetupTab projectId={projectId} /></TabsContent>
           <TabsContent value="parts"><PartsTab projectId={projectId} /></TabsContent>
           <TabsContent value="registrations"><RegistrationsTab projectId={projectId} /></TabsContent>
-          <TabsContent value="checklist"><ChecklistTab projectId={projectId} toast={toast} /></TabsContent>
+          <TabsContent value="checklist"><ChecklistTab projectId={projectId} /></TabsContent>
           <TabsContent value="handover"><HandoverTab projectId={projectId} /></TabsContent>
         </Tabs>
       </main>
@@ -566,12 +570,13 @@ function AssetsSection({ registrationId }: { registrationId: string }) {
   );
 }
 
-// ---- Checklist (R8) ----
-function ChecklistTab({ projectId, toast }: { projectId: string; toast: ReturnType<typeof useToast>["toast"] }) {
+// ---- Checklist (R8) — generate, deliver (attach), assign ----
+const fileHref = (fileId?: string | null): string | undefined =>
+  fileId ? `${getApiBaseUrl()}/unsecure/download/${fileId}` : undefined;
+
+function ChecklistTab({ projectId }: { projectId: string }) {
   const { data: docs } = useGetChecklistDocumentsQuery(projectId);
   const [regenerate, { isLoading }] = useRegenerateChecklistMutation();
-  const [markStatus] = useMarkChecklistStatusMutation();
-  const [genActivities] = useGenerateCommercialActivitiesMutation();
 
   const grouped = useMemo(() => {
     const g: Record<string, typeof docs> = { BUILDING: [], TENANCY: [] };
@@ -581,42 +586,118 @@ function ChecklistTab({ projectId, toast }: { projectId: string; toast: ReturnTy
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle>Document checklist</CardTitle>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={async () => { await genActivities({ projectId }); toast({ title: "Activity generation started" }); }}>
-            Generate activities
-          </Button>
-          <Button size="sm" onClick={async () => { await regenerate(projectId); }} disabled={isLoading}>
-            <RefreshCw className="h-4 w-4 mr-1" /> {isLoading ? "Generating…" : "Regenerate"}
-          </Button>
+      <CardHeader className="flex-row items-start justify-between">
+        <div>
+          <CardTitle>Document checklist</CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            The compliance documents this building must hand over. Regenerate rebuilds it from the
+            building's classes and factors. Attach each delivered document, or assign it to a trade to produce.
+          </p>
         </div>
+        <Button size="sm" onClick={() => regenerate(projectId)} disabled={isLoading}>
+          <RefreshCw className="h-4 w-4 mr-1" /> {isLoading ? "Generating…" : "Regenerate"}
+        </Button>
       </CardHeader>
       <CardContent className="space-y-6">
         {(["BUILDING", "TENANCY"] as const).map((tier) => (
           <div key={tier}>
             <h3 className="text-sm font-semibold mb-2">{tier === "BUILDING" ? "Whole building" : "Per tenancy"}</h3>
             {(grouped[tier] ?? []).length === 0 && <p className="text-sm text-muted-foreground">No documents — press Regenerate.</p>}
-            {(grouped[tier] ?? []).map((d) => (
-              <div key={d.id} className="flex items-center justify-between border-b py-2 text-sm">
-                <div>
-                  {d.documentName}
-                  {d.mandatory === "REQUIRED" && <Badge variant="destructive" className="ml-2">Mandatory</Badge>}
-                  {d.egCreatable && <Badge variant="secondary" className="ml-2">EG can issue</Badge>}
-                </div>
-                <select className="border rounded-md h-8 px-2 text-xs" value={d.status}
-                  onChange={(e) => markStatus({ documentId: d.id, status: e.target.value, projectId })}>
-                  <option value="REQUIRED">Required</option>
-                  <option value="RECEIVED">Received</option>
-                  <option value="NOT_APPLICABLE">N/A</option>
-                  <option value="OPTIONAL">Optional</option>
-                </select>
-              </div>
-            ))}
+            {(grouped[tier] ?? []).map((d) => <DocRow key={d.id} doc={d} projectId={projectId} />)}
           </div>
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+/** One checklist row: status, delivered-document attachments, and assign-to-trade. */
+function DocRow({ doc, projectId }: { doc: CommercialComplianceDocument; projectId: string }) {
+  const { data: attachments } = useListCommercialAttachmentsQuery(doc.id);
+  const [markStatus] = useMarkChecklistStatusMutation();
+  const [upload, { isLoading: uploading }] = useUploadCommercialAttachmentMutation();
+  const [removeAttachment] = useDeleteCommercialAttachmentMutation();
+  const [assign, { isLoading: assigning }] = useAssignCommercialDocumentMutation();
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [showAssign, setShowAssign] = useState(false);
+  const [assignName, setAssignName] = useState("");
+  const [assignEmail, setAssignEmail] = useState("");
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (fileRef.current) fileRef.current.value = "";
+    if (!file) return;
+    try {
+      await upload({ documentId: doc.id, projectId, file }).unwrap();
+      toast({ title: "Document attached" });
+    } catch (err) {
+      toast({ title: "Upload failed", description: errMessage(err, "Could not attach the document."), variant: "destructive" });
+    }
+  };
+
+  const onAssign = async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignEmail.trim())) {
+      toast({ title: "Enter a valid trade email", variant: "destructive" });
+      return;
+    }
+    try {
+      await assign({ documentId: doc.id, projectId, body: { assigneeName: assignName.trim() || null, assigneeEmail: assignEmail.trim() } }).unwrap();
+      toast({ title: "Assigned to trade", description: "They'll get a link to upload the document." });
+      setShowAssign(false); setAssignName(""); setAssignEmail("");
+    } catch (err) {
+      toast({ title: "Could not assign", description: errMessage(err, "Please try again."), variant: "destructive" });
+    }
+  };
+
+  const atts = attachments ?? [];
+
+  return (
+    <div className="border-b py-2 text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          {doc.documentName}
+          {doc.mandatory === "REQUIRED" && <Badge variant="destructive" className="ml-2">Mandatory</Badge>}
+          {doc.egCreatable && <Badge variant="secondary" className="ml-2">EG can issue</Badge>}
+          {atts.length > 0 && <Badge variant="outline" className="ml-2">{atts.length} file{atts.length > 1 ? "s" : ""}</Badge>}
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <input ref={fileRef} type="file" className="hidden" onChange={onFile} />
+          <Button variant="ghost" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            <Upload className="h-4 w-4 mr-1" /> {uploading ? "…" : "Attach"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setShowAssign((s) => !s)}>
+            <UserPlus className="h-4 w-4 mr-1" /> Assign
+          </Button>
+          <select className="border rounded-md h-8 px-2 text-xs" value={doc.status}
+            onChange={(e) => markStatus({ documentId: doc.id, status: e.target.value, projectId })}>
+            <option value="REQUIRED">Required</option>
+            <option value="RECEIVED">Received</option>
+            <option value="NOT_APPLICABLE">N/A</option>
+            <option value="OPTIONAL">Optional</option>
+          </select>
+        </div>
+      </div>
+
+      {atts.map((a) => (
+        <div key={a.id} className="ml-4 mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <a href={a.externalUrl || fileHref(a.fileId)} target="_blank" rel="noreferrer" className="truncate underline hover:text-foreground">
+            {a.fileName || a.externalUrl || "Attachment"}
+          </a>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAttachment({ documentId: doc.id, projectId, attachmentId: a.id })}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ))}
+
+      {showAssign && (
+        <div className="ml-4 mt-2 flex flex-wrap items-end gap-2 rounded-md border bg-muted/30 p-2">
+          <Field label="Trade name"><Input className="h-8" value={assignName} onChange={(e) => setAssignName(e.target.value)} placeholder="ABC Electrical" /></Field>
+          <Field label="Trade email"><Input className="h-8" type="email" value={assignEmail} onChange={(e) => setAssignEmail(e.target.value)} placeholder="trade@example.com" /></Field>
+          <Button size="sm" onClick={onAssign} disabled={assigning}>{assigning ? "Assigning…" : "Send request"}</Button>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -19,6 +19,7 @@ import {
 import { useOrganization } from "@/hooks/useOrganization";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { useGetBuilderTermsStatusQuery } from "@/store/api";
+import { useProjectsQuery } from "@/store/api/projects";
 import {
   BUILDER_ROLE_LABELS,
   readBuilderRoleFromStorage,
@@ -81,14 +82,26 @@ const WelcomeDialog = () => {
     typeof window !== "undefined" &&
     localStorage.getItem(seenKey(orgId)) === "true";
 
+  // The project-managing welcome is a genuine first-run orientation ("set up your
+  // first project") — it must not greet an established org just because this
+  // browser has no localStorage flag yet. Gate its auto-open on project
+  // existence. CS orientation is about queries, not projects, so it isn't gated.
+  const isProjectPath = !isCustomerSupport(role);
+  const { data: projectsResp, isLoading: projectsLoading } = useProjectsQuery(undefined, {
+    skip: !isStaff || !isProjectPath,
+  });
+  const hasProjects = (projectsResp?.data?.length ?? 0) > 0;
+
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (!isStaff) return;
     if (!termsAccepted) return;
     if (alreadySeen) return;
+    // For the project path, wait until we know, then skip established orgs.
+    if (isProjectPath && (projectsLoading || hasProjects)) return;
     setOpen(true);
-  }, [isStaff, termsAccepted, alreadySeen]);
+  }, [isStaff, termsAccepted, alreadySeen, isProjectPath, projectsLoading, hasProjects]);
 
   // Allow the Help menu (or anywhere) to re-open the guide on demand.
   useEffect(() => {

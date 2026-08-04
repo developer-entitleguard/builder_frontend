@@ -324,7 +324,7 @@ export const commercialApi = api.injectEndpoints({
       query: ({ documentId, attachmentId }) => ({ url: `/api/builder/commercial/checklist-documents/${documentId}/attachments/${attachmentId}`, method: 'DELETE' }),
       invalidatesTags: (_r, _e, { documentId, projectId }) => [docTag(documentId), projectTag(projectId)],
     }),
-    assignCommercialDocument: build.mutation<unknown, { documentId: string; projectId: string; body: ComplianceAssignRequest }>({
+    assignCommercialDocument: build.mutation<{ success: boolean; message: string; data?: unknown }, { documentId: string; projectId: string; body: ComplianceAssignRequest }>({
       query: ({ documentId, body }) => ({ url: `/api/builder/commercial/checklist-documents/${documentId}/assign`, method: 'POST', body }),
       invalidatesTags: (_r, _e, { documentId, projectId }) => [docTag(documentId), projectTag(projectId)],
     }),

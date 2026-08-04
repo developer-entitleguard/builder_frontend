@@ -642,7 +642,12 @@ function DocRow({ doc, projectId }: { doc: CommercialComplianceDocument; project
       return;
     }
     try {
-      await assign({ documentId: doc.id, projectId, body: { assigneeName: assignName.trim() || null, assigneeEmail: assignEmail.trim() } }).unwrap();
+      const res = await assign({ documentId: doc.id, projectId, body: { assigneeName: assignName.trim() || null, assigneeEmail: assignEmail.trim() } }).unwrap();
+      // The backend returns HTTP 200 with success:false for soft failures (e.g. already received).
+      if (res && res.success === false) {
+        toast({ title: "Could not assign", description: res.message || "Please try again.", variant: "destructive" });
+        return;
+      }
       toast({ title: "Assigned to trade", description: "They'll get a link to upload the document." });
       setShowAssign(false); setAssignName(""); setAssignEmail("");
     } catch (err) {

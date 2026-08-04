@@ -116,23 +116,11 @@ const ProjectCreate = () => {
   // dual-access builder; a single-access builder never sees it and the type
   // defaults silently (RESIDENTIAL, or COMMERCIAL for a commercial-only org).
   const showSegmentStep = segments.residential && segments.commercial;
-  const steps = useMemo<Step[]>(
-    () => (showSegmentStep ? (['segment', ...BASE_STEPS] as Step[]) : BASE_STEPS),
-    [showSegmentStep],
-  );
 
   const [currentStep, setCurrentStep] = useState<Step>('basics');
-  // Once entitlements resolve, land on the real first step (segment for dual-access).
-  const initStepRef = useRef(false);
-  useEffect(() => {
-    if (entitlementsReady && !initStepRef.current) {
-      initStepRef.current = true;
-      setCurrentStep(steps[0]);
-    }
-  }, [entitlementsReady, steps]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  
+
   const [formData, setFormData] = useState<CreateProjectData>({
     name: '',
     address: '',
@@ -153,6 +141,24 @@ const ProjectCreate = () => {
     auto_generate: true,
     dwelling_count: null
   });
+
+  // Commercial Segment PRD 1 (R3/R4). Commercial and mixed-use projects skip the
+  // residential property-type step (NCC class is captured per building part in the
+  // commercial workspace); the segment step is prepended only for dual-access.
+  const isCommercial = formData.project_type === 'COMMERCIAL' || formData.project_type === 'MIXED_USE';
+  const steps = useMemo<Step[]>(() => {
+    const base: Step[] = isCommercial ? ['basics', 'timeline'] : BASE_STEPS;
+    return showSegmentStep ? (['segment', ...base] as Step[]) : base;
+  }, [showSegmentStep, isCommercial]);
+
+  // Once entitlements resolve, land on the real first step (segment for dual-access).
+  const initStepRef = useRef(false);
+  useEffect(() => {
+    if (entitlementsReady && !initStepRef.current) {
+      initStepRef.current = true;
+      setCurrentStep(steps[0]);
+    }
+  }, [entitlementsReady, steps]);
 
   const { data: statusResponse } = useGetStatusesByModuleQuery({ module: 'PROJECT' });
   const projectStatuses = statusResponse?.data ?? [];
@@ -192,9 +198,7 @@ const ProjectCreate = () => {
   const canProceed = () => {
     switch (currentStep) {
       case 'segment':
-        // Phase 1 ships the selector and the residential flow. Commercial and
-        // mixed-use capture arrive in Phase 2, so only residential can proceed.
-        return formData.project_type === 'RESIDENTIAL';
+        return !!formData.project_type;
       case 'basics':
         return formData.name && formData.address && formData.city && formData.state && formData.postcode;
       case 'type': {
@@ -230,10 +234,24 @@ const ProjectCreate = () => {
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    const projectId = await createProject(formData);
+    // Commercial/mixed-use: the NCC class lives per building part, so send a
+    // commercial property_type and no residential building_class; the commercial
+    // workspace captures the rest.
+    const payload: CreateProjectData = isCommercial
+      ? { ...formData, property_type: 'commercial', building_class: null, dwelling_count: null, auto_generate: false }
+      : formData;
+    const projectId = await createProject(payload);
 
     if (!projectId) {
       setIsSubmitting(false);
+      return;
+    }
+
+    // Commercial projects go straight to the commercial workspace; the residential
+    // auto-generation below does not apply to them.
+    if (isCommercial) {
+      setIsSubmitting(false);
+      navigate(`/projects/${projectId}/commercial`);
       return;
     }
 
@@ -649,9 +667,10 @@ const ProjectCreate = () => {
           })}
         </div>
         {selected !== 'RESIDENTIAL' && (
-          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-            Commercial and mixed-use project creation is arriving in the next release. For now,
-            choose Residential to continue — your commercial access is already active.
+          <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+            After the basics, you'll set up NCC classes per building part, contract and
+            factor details, registrations and the document checklist in the commercial
+            workspace.
           </div>
         )}
       </div>

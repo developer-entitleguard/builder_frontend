@@ -19,17 +19,19 @@ import {
   useGetCustomerDetailsQuery,
   useDeleteItemFileMutation,
 } from "@/store/api";
+import { useUploadRegistrationManualsFolderMutation } from "@/store/api/projectDocuments";
 import { useOrganization } from "@/hooks/useOrganization";
-import { 
-  Home, 
-  Lightbulb, 
-  Wrench, 
+import {
+  Home,
+  Lightbulb,
+  Wrench,
   Building,
   ChevronRight,
   Trash2,
   Plus,
   Edit2,
   FileText,
+  FolderUp,
   X
 } from "lucide-react";
 
@@ -116,6 +118,7 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, readOnly, onS
   const isAuthenticated = !!user || hasBuilderAuth();
   const [updateBuilderCustomerMap] = useUpdateBuilderCustomerMapMutation();
   const [deleteItemFile] = useDeleteItemFileMutation();
+  const [uploadManualsFolder, { isLoading: uploadingFolder }] = useUploadRegistrationManualsFolderMutation();
 
   const [selectedBomId, setSelectedBomId] = useState<string>("");
   const [initialBomId, setInitialBomId] = useState<string | null>(null);
@@ -364,6 +367,29 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, readOnly, onS
     setSelectedItems(prev => prev.map(item => 
       item.id === itemId ? { ...item, [field]: value } : item
     ));
+  };
+
+  /**
+   * Bulk intake: drop a folder of product warranties/manuals onto the registration.
+   * Each file becomes (or attaches to) a BOM item, categorised warranty vs manual on
+   * the backend. Reuses the same endpoint the Lite BOM section uses.
+   */
+  const handleFolderUpload = async (fileList: FileList | null) => {
+    if (!registrationId || !fileList || fileList.length === 0) return;
+    const all = Array.from(fileList) as (File & { webkitRelativePath?: string })[];
+    const files = all.filter((f) => f.name.toLowerCase().endsWith('.pdf'));
+    if (files.length === 0) {
+      toast({ title: 'No PDFs found in that folder', variant: 'destructive' });
+      return;
+    }
+    const relativePaths = files.map((f) => f.webkitRelativePath || f.name);
+    try {
+      const res = await uploadManualsFolder({ registrationId, files, relativePaths }).unwrap();
+      toast({ title: res?.message || `Imported ${files.length} document(s)` });
+      fetchExistingMap(registrationId);
+    } catch (err) {
+      toast({ title: 'Folder upload failed', description: 'Please try again.', variant: 'destructive' });
+    }
   };
 
   const handleFileUpload = async (itemId: string, file: File, documentType: 'warranty' | 'manual') => {
@@ -722,6 +748,39 @@ const ItemsSelectionForm = ({ onNext, initialData, registrationId, readOnly, onS
                   ))}
                 </SelectContent>
               </Select>
+
+              {!readOnly && registrationId && (
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    id="bom-manuals-folder"
+                    type="file"
+                    multiple
+                    className="hidden"
+                    ref={(el) => {
+                      if (el) {
+                        el.setAttribute("webkitdirectory", "");
+                        el.setAttribute("directory", "");
+                      }
+                    }}
+                    onChange={(e) => {
+                      handleFolderUpload(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById("bom-manuals-folder")?.click()}
+                    disabled={uploadingFolder}
+                  >
+                    <FolderUp className="h-4 w-4 mr-2" />
+                    {uploadingFolder ? "Uploading…" : "Upload manuals/warranties folder"}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    PDFs are matched to items and filed as Warranty or Manual automatically.
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
 

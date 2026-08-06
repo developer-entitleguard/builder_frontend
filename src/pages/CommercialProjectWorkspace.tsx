@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, Building2, Upload, UserPlus, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, Building2, Upload, UserPlus, Pencil, FileUp, FolderUp, ClipboardCheck, CheckCircle2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { getApiBaseUrl } from "@/lib/config";
@@ -19,13 +19,18 @@ import {
   BuildingPart,
   BusinessContact,
   CommercialAsset,
+  CommercialAssetDocument,
   CommercialBusiness,
+  CommercialComplianceCheck,
   CommercialComplianceDocument,
   CommercialProjectDetail,
   CommercialRegistration,
+  useAddChecklistDocumentMutation,
   useAddCommercialAssetMutation,
   useAssignCommercialDocumentMutation,
   useCreateCommercialRegistrationMutation,
+  useDeleteChecklistDocumentMutation,
+  useDeleteCommercialAssetDocumentMutation,
   useDeleteCommercialAttachmentMutation,
   useExecuteHandoverMutation,
   useGetChecklistDocumentsQuery,
@@ -33,6 +38,8 @@ import {
   useGetBuildingPartsQuery,
   useGetCommercialHandoverReadinessQuery,
   useGetHandoverRecordQuery,
+  useImportCommercialAssetsCsvMutation,
+  useLazyGetCommercialComplianceCheckQuery,
   useListCommercialAssetsQuery,
   useListCommercialAttachmentsQuery,
   useListCommercialBusinessesQuery,
@@ -40,6 +47,8 @@ import {
   useMarkChecklistStatusMutation,
   useRegenerateChecklistMutation,
   useRemoveCommercialAssetMutation,
+  useUploadChecklistFolderMutation,
+  useUploadCommercialAssetWarrantiesMutation,
   useUploadCommercialAttachmentMutation,
   useReplaceBuildingPartsMutation,
   useTagRegistrationBusinessMutation,
@@ -420,10 +429,9 @@ function RegistrationsTab({ projectId }: { projectId: string }) {
             {scope === "TENANCY" && (
               <Field label="Tenancy identifier"><Input value={tenancyIdentifier} onChange={(e) => setTenancyIdentifier(e.target.value)} placeholder="Shop 1" /></Field>
             )}
-            <div className="min-w-56">
-              <Label className="text-xs text-muted-foreground mb-1 block">Owning / occupying business</Label>
+            <Field label="Owning / occupying business">
               <BusinessForm businesses={businesses ?? []} value={sel} onChange={setSel} />
-            </div>
+            </Field>
           </div>
           <Button onClick={onCreate} disabled={isLoading}>{isLoading ? "Adding…" : "Add registration"}</Button>
         </CardContent>
@@ -522,13 +530,65 @@ function RegistrationEditor({ reg, businesses }: { reg: CommercialRegistration; 
   );
 }
 
+// ---- shared folder picker (webkitdirectory) ----
+type PickedFile = File & { webkitRelativePath?: string };
+
+/** A button that opens a folder picker and returns the chosen files + their relative paths. */
+function FolderButton({
+  label,
+  extensions,
+  onPick,
+  disabled,
+}: {
+  label: string;
+  extensions?: string[];
+  onPick: (files: File[], relativePaths: string[]) => void;
+  disabled?: boolean;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.setAttribute("webkitdirectory", "");
+      ref.current.setAttribute("directory", "");
+    }
+  }, []);
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const all = Array.from(e.target.files ?? []) as PickedFile[];
+    if (ref.current) ref.current.value = "";
+    const files = extensions
+      ? all.filter((f) => extensions.some((ext) => f.name.toLowerCase().endsWith("." + ext)))
+      : all;
+    if (files.length) onPick(files, files.map((f) => f.webkitRelativePath || f.name));
+  };
+  return (
+    <>
+      <input ref={ref} type="file" multiple className="hidden" onChange={onChange} />
+      <Button variant="outline" size="sm" onClick={() => ref.current?.click()} disabled={disabled}>
+        <FolderUp className="h-4 w-4 mr-1" /> {label}
+      </Button>
+    </>
+  );
+}
+
+const DOC_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "heic"];
+const ASSET_DOC_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "heic", "doc", "docx"];
+
+const ASSET_DOC_CATEGORY_LABEL: Record<string, string> = {
+  WARRANTY: "Warranty",
+  MANUAL: "Manual",
+  OTHER: "Other",
+};
+
 // ---- Assets (R10) ----
 function AssetsSection({ registrationId }: { registrationId: string }) {
   const { data: assets } = useListCommercialAssetsQuery(registrationId);
   const [add, { isLoading }] = useAddCommercialAssetMutation();
   const [remove] = useRemoveCommercialAssetMutation();
+  const [importCsv, { isLoading: importing }] = useImportCommercialAssetsCsvMutation();
+  const [uploadWarranties, { isLoading: uploadingWarranties }] = useUploadCommercialAssetWarrantiesMutation();
   const { toast } = useToast();
   const [draft, setDraft] = useState<CommercialAsset>({ name: "" });
+  const csvRef = useRef<HTMLInputElement>(null);
 
   const set = (patch: Partial<CommercialAsset>) => setDraft((d) => ({ ...d, ...patch }));
 
@@ -546,19 +606,62 @@ function AssetsSection({ registrationId }: { registrationId: string }) {
     }
   };
 
+  const onCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (csvRef.current) csvRef.current.value = "";
+    if (!file) return;
+    try {
+      const res = await importCsv({ registrationId, file }).unwrap();
+      toast({ title: `Imported ${res.created} asset(s)`, description: res.skipped?.length ? `${res.skipped.length} row(s) skipped.` : undefined });
+    } catch (err) {
+      toast({ title: "CSV import failed", description: errMessage(err, "Check the file has a Name column."), variant: "destructive" });
+    }
+  };
+
+  const onWarranties = async (files: File[], relativePaths: string[]) => {
+    try {
+      const res = await uploadWarranties({ registrationId, files, relativePaths }).unwrap();
+      toast({ title: `Attached ${res.created?.length ?? 0} document(s)`, description: res.skipped?.length ? `${res.skipped.length} file(s) skipped.` : undefined });
+    } catch (err) {
+      toast({ title: "Upload failed", description: errMessage(err, "Could not attach the warranties."), variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-2">
-      <Label className="text-xs uppercase tracking-wide text-muted-foreground">Assets & plant</Label>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Label className="text-xs uppercase tracking-wide text-muted-foreground">Assets & plant</Label>
+        <div className="flex items-center gap-1.5">
+          <input ref={csvRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onCsv} />
+          <Button variant="outline" size="sm" onClick={() => csvRef.current?.click()} disabled={importing}>
+            <FileUp className="h-4 w-4 mr-1" /> {importing ? "Importing…" : "Import BOM (CSV)"}
+          </Button>
+          <FolderButton label={uploadingWarranties ? "Uploading…" : "Upload warranties"} extensions={ASSET_DOC_EXTENSIONS} onPick={onWarranties} disabled={uploadingWarranties} />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        CSV columns: Name, Make, Model, Serial, Location, Commissioning date, Warranty months, Registrable plant.
+        Folder documents are matched to assets by name and filed as Warranty or Manual.
+      </p>
       {(assets ?? []).length === 0 && <p className="text-xs text-muted-foreground">No assets yet.</p>}
       {(assets ?? []).map((a) => (
-        <div key={a.id} className="flex items-center justify-between border rounded-md px-3 py-2 text-sm">
-          <span>
-            <span className="font-medium">{a.name}</span>
-            {a.serialNumber && <span className="text-muted-foreground"> · {a.serialNumber}</span>}
-            {a.registrablePlant && <Badge variant="secondary" className="ml-2">Registrable plant</Badge>}
-            {a.warrantyExpiry && <span className="text-muted-foreground"> · warranty to {a.warrantyExpiry}</span>}
-          </span>
-          <Button variant="ghost" size="icon" onClick={() => remove({ registrationId, assetId: a.id! })}><Trash2 className="h-4 w-4" /></Button>
+        <div key={a.id} className="border rounded-md px-3 py-2 text-sm">
+          <div className="flex items-center justify-between">
+            <span>
+              <span className="font-medium">{a.name}</span>
+              {a.serialNumber && <span className="text-muted-foreground"> · {a.serialNumber}</span>}
+              {a.registrablePlant && <Badge variant="secondary" className="ml-2">Registrable plant</Badge>}
+              {a.warrantyExpiry && <span className="text-muted-foreground"> · warranty to {a.warrantyExpiry}</span>}
+            </span>
+            <Button variant="ghost" size="icon" onClick={() => remove({ registrationId, assetId: a.id! })}><Trash2 className="h-4 w-4" /></Button>
+          </div>
+          {(a.documents ?? []).length > 0 && (
+            <div className="mt-1.5 ml-1 flex flex-wrap gap-1.5">
+              {(a.documents ?? []).map((doc) => (
+                <AssetDocChip key={doc.id} doc={doc} registrationId={registrationId} assetId={a.id!} />
+              ))}
+            </div>
+          )}
         </div>
       ))}
       <div className="rounded-md border bg-muted/30 p-3 grid sm:grid-cols-3 gap-2 items-end">
@@ -579,19 +682,56 @@ function AssetsSection({ registrationId }: { registrationId: string }) {
   );
 }
 
+/** A single asset document (warranty / manual / other) chip with download + delete. */
+function AssetDocChip({ doc, registrationId, assetId }: { doc: CommercialAssetDocument; registrationId: string; assetId: string }) {
+  const [remove] = useDeleteCommercialAssetDocumentMutation();
+  const isWarranty = doc.category === "WARRANTY";
+  const chipClass = isWarranty
+    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+    : doc.category === "MANUAL"
+      ? "bg-blue-50 text-blue-700 border-blue-200"
+      : "bg-muted text-muted-foreground";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${chipClass}`}>
+      <span className="font-medium">{ASSET_DOC_CATEGORY_LABEL[doc.category] ?? "Other"}</span>
+      <a href={fileHref(doc.fileId)} target="_blank" rel="noreferrer" className="max-w-[10rem] truncate underline">
+        {doc.fileName || doc.documentName || "file"}
+      </a>
+      <button type="button" className="opacity-60 hover:opacity-100" onClick={() => remove({ registrationId, assetId, documentId: doc.id })}>
+        <Trash2 className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
+
 // ---- Checklist (R8) — generate, deliver (attach), assign ----
 const fileHref = (fileId?: string | null): string | undefined =>
   fileId ? `${getApiBaseUrl()}/unsecure/download/${fileId}` : undefined;
 
 function ChecklistTab({ projectId }: { projectId: string }) {
   const { data: docs } = useGetChecklistDocumentsQuery(projectId);
+  const { data: regs } = useListCommercialRegistrationsQuery(projectId);
   const [regenerate, { isLoading }] = useRegenerateChecklistMutation();
+  const [uploadFolder, { isLoading: uploadingFolder }] = useUploadChecklistFolderMutation();
+  const [runCheck, { data: checkResult, isFetching: checking }] = useLazyGetCommercialComplianceCheckQuery();
+  const { toast } = useToast();
+  const [addOpen, setAddOpen] = useState(false);
 
   const grouped = useMemo(() => {
     const g: Record<string, typeof docs> = { BUILDING: [], TENANCY: [] };
     (docs ?? []).forEach((d) => { (g[d.tier] = g[d.tier] || []).push(d); });
     return g;
   }, [docs]);
+
+  const onFolder = async (files: File[], relativePaths: string[]) => {
+    try {
+      const res = await uploadFolder({ projectId, files, relativePaths }).unwrap();
+      const data = res?.data as { matched?: unknown[]; unmatched?: string[] } | undefined;
+      toast({ title: res?.message || "Folder processed", description: data?.unmatched?.length ? `${data.unmatched.length} file(s) didn't match a row.` : undefined });
+    } catch (err) {
+      toast({ title: "Upload failed", description: errMessage(err, "Could not process the folder."), variant: "destructive" });
+    }
+  };
 
   return (
     <Card>
@@ -603,11 +743,21 @@ function ChecklistTab({ projectId }: { projectId: string }) {
             building's classes and factors. Attach each delivered document, or assign it to a trade to produce.
           </p>
         </div>
-        <Button size="sm" onClick={() => regenerate(projectId)} disabled={isLoading}>
-          <RefreshCw className="h-4 w-4 mr-1" /> {isLoading ? "Generating…" : "Regenerate"}
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => runCheck(projectId)} disabled={checking}>
+            <ClipboardCheck className="h-4 w-4 mr-1" /> {checking ? "Checking…" : "Run compliance check"}
+          </Button>
+          <FolderButton label={uploadingFolder ? "Uploading…" : "Upload folder"} extensions={DOC_EXTENSIONS} onPick={onFolder} disabled={uploadingFolder} />
+          <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> Add document
+          </Button>
+          <Button size="sm" onClick={() => regenerate(projectId)} disabled={isLoading}>
+            <RefreshCw className="h-4 w-4 mr-1" /> {isLoading ? "Generating…" : "Regenerate"}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {checkResult && <ComplianceCheckCard result={checkResult} />}
         {(["BUILDING", "TENANCY"] as const).map((tier) => (
           <div key={tier}>
             <h3 className="text-sm font-semibold mb-2">{tier === "BUILDING" ? "Whole building" : "Per tenancy"}</h3>
@@ -616,7 +766,95 @@ function ChecklistTab({ projectId }: { projectId: string }) {
           </div>
         ))}
       </CardContent>
+      <AddChecklistDocumentDialog projectId={projectId} regs={regs ?? []} open={addOpen} onOpenChange={setAddOpen} />
     </Card>
+  );
+}
+
+/** Advisory result of the assessment-only compliance check (generates nothing). */
+function ComplianceCheckCard({ result }: { result: CommercialComplianceCheck }) {
+  const ok = result.readyForHandover;
+  return (
+    <div className={`rounded-md border p-3 text-sm ${ok ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+      <div className="flex items-center gap-2 font-medium">
+        {ok ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertCircle className="h-4 w-4 text-amber-600" />}
+        {ok
+          ? "All mandatory documents appear to be present"
+          : `${result.missing.length} mandatory document(s) still needed`}
+      </div>
+      {!ok && result.missing.length > 0 && (
+        <ul className="mt-1.5 ml-6 list-disc text-muted-foreground">
+          {result.missing.map((m, i) => <li key={i}>{m.documentName}</li>)}
+        </ul>
+      )}
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        Assessment only — this does not generate or change any documents. {result.uploadedCount} received.
+      </p>
+    </div>
+  );
+}
+
+/** Dialog to add an ad-hoc (MANUAL) checklist row the rulebook didn't generate. */
+function AddChecklistDocumentDialog({ projectId, regs, open, onOpenChange }: { projectId: string; regs: CommercialRegistration[]; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const [add, { isLoading }] = useAddChecklistDocumentMutation();
+  const { toast } = useToast();
+  const [name, setName] = useState("");
+  const [tier, setTier] = useState<"BUILDING" | "TENANCY">("BUILDING");
+  const [mandatory, setMandatory] = useState<"REQUIRED" | "OPTIONAL">("OPTIONAL");
+  const [registrationId, setRegistrationId] = useState<string>("");
+  const tenancies = regs.filter((r) => r.scope === "TENANCY");
+
+  const onSave = async () => {
+    if (!name.trim()) {
+      toast({ title: "Document name is required", variant: "destructive" });
+      return;
+    }
+    if (tier === "TENANCY" && !registrationId) {
+      toast({ title: "Pick a tenancy for a tenancy document", variant: "destructive" });
+      return;
+    }
+    try {
+      await add({ projectId, body: { documentName: name.trim(), tier, mandatory, commercialRegistrationId: tier === "TENANCY" ? registrationId : null } }).unwrap();
+      toast({ title: "Document added" });
+      setName(""); setTier("BUILDING"); setMandatory("OPTIONAL"); setRegistrationId("");
+      onOpenChange(false);
+    } catch (err) {
+      toast({ title: "Could not add document", description: errMessage(err, "Please try again."), variant: "destructive" });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Add a document</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <Field label="Document name *"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Fire safety statement" /></Field>
+          <Field label="Scope">
+            <select className="border rounded-md h-10 px-2 text-sm w-full" value={tier} onChange={(e) => setTier(e.target.value as "BUILDING" | "TENANCY")}>
+              <option value="BUILDING">Whole building</option>
+              <option value="TENANCY">Per tenancy</option>
+            </select>
+          </Field>
+          {tier === "TENANCY" && (
+            <Field label="Tenancy">
+              <select className="border rounded-md h-10 px-2 text-sm w-full" value={registrationId} onChange={(e) => setRegistrationId(e.target.value)}>
+                <option value="">— Select tenancy —</option>
+                {tenancies.map((r) => <option key={r.id} value={r.id!}>{r.tenancyIdentifier || "Tenancy"}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label="Requirement">
+            <select className="border rounded-md h-10 px-2 text-sm w-full" value={mandatory} onChange={(e) => setMandatory(e.target.value as "REQUIRED" | "OPTIONAL")}>
+              <option value="OPTIONAL">Optional</option>
+              <option value="REQUIRED">Mandatory (gates handover)</option>
+            </select>
+          </Field>
+          <div className="flex justify-end">
+            <Button onClick={onSave} disabled={isLoading}>{isLoading ? "Adding…" : "Add document"}</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -627,11 +865,14 @@ function DocRow({ doc, projectId }: { doc: CommercialComplianceDocument; project
   const [upload, { isLoading: uploading }] = useUploadCommercialAttachmentMutation();
   const [removeAttachment] = useDeleteCommercialAttachmentMutation();
   const [assign, { isLoading: assigning }] = useAssignCommercialDocumentMutation();
+  const [deleteRow] = useDeleteChecklistDocumentMutation();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [showAssign, setShowAssign] = useState(false);
   const [assignName, setAssignName] = useState("");
   const [assignEmail, setAssignEmail] = useState("");
+
+  const received = doc.status === "RECEIVED";
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -667,12 +908,13 @@ function DocRow({ doc, projectId }: { doc: CommercialComplianceDocument; project
   const atts = attachments ?? [];
 
   return (
-    <div className="border-b py-2 text-sm">
+    <div className={`border-b py-2 text-sm ${received ? "bg-emerald-50/60" : ""}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           {doc.documentName}
-          {doc.mandatory === "REQUIRED" && <Badge variant="destructive" className="ml-2">Mandatory</Badge>}
-          {doc.assigneeLabel && <Badge variant="secondary" className="ml-2">Assigned · {doc.assigneeLabel}</Badge>}
+          {received && <Badge className="ml-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Received</Badge>}
+          {doc.mandatory === "REQUIRED" && !received && <Badge variant="destructive" className="ml-2">Mandatory</Badge>}
+          {doc.assigneeLabel && !received && <Badge variant="secondary" className="ml-2">Assigned · {doc.assigneeLabel}</Badge>}
           {atts.length > 0 && <Badge variant="outline" className="ml-2">{atts.length} file{atts.length > 1 ? "s" : ""}</Badge>}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -680,9 +922,11 @@ function DocRow({ doc, projectId }: { doc: CommercialComplianceDocument; project
           <Button variant="ghost" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
             <Upload className="h-4 w-4 mr-1" /> {uploading ? "…" : "Attach"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setShowAssign((s) => !s)}>
-            <UserPlus className="h-4 w-4 mr-1" /> Assign
-          </Button>
+          {!received && (
+            <Button variant="ghost" size="sm" onClick={() => setShowAssign((s) => !s)}>
+              <UserPlus className="h-4 w-4 mr-1" /> Assign
+            </Button>
+          )}
           <select className="border rounded-md h-8 px-2 text-xs" value={doc.status}
             onChange={(e) => markStatus({ documentId: doc.id, status: e.target.value, projectId })}>
             <option value="REQUIRED">Required</option>
@@ -690,6 +934,10 @@ function DocRow({ doc, projectId }: { doc: CommercialComplianceDocument; project
             <option value="NOT_APPLICABLE">N/A</option>
             <option value="OPTIONAL">Optional</option>
           </select>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            onClick={() => deleteRow({ projectId, documentId: doc.id })} title="Remove document">
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 

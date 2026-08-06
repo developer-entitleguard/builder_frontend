@@ -112,6 +112,16 @@ export interface CommercialRegistration {
   status?: string;
 }
 
+export interface CommercialAssetDocument {
+  id: string;
+  commercialAssetId: string;
+  fileId?: string | null;
+  fileName?: string | null;
+  /** WARRANTY | MANUAL | OTHER. */
+  category: string;
+  documentName?: string | null;
+}
+
 export interface CommercialAsset {
   id?: string;
   commercialRegistrationId?: string;
@@ -128,6 +138,16 @@ export interface CommercialAsset {
   registrablePlant?: boolean | null;
   plantRegistrationNumber?: string | null;
   warrantyExpiry?: string | null;
+  documents?: CommercialAssetDocument[];
+}
+
+/** Assessment-only compliance-check result (mirrors the residential Lite shape). */
+export interface CommercialComplianceCheck {
+  rulebookCovered: boolean;
+  uploadedCount: number;
+  required: { documentName: string; present: boolean; tier?: string }[];
+  missing: { documentName: string; present: boolean; tier?: string }[];
+  readyForHandover: boolean;
 }
 
 export interface CommercialHandoverRecord {
@@ -223,6 +243,30 @@ export const commercialApi = api.injectEndpoints({
       query: ({ documentId, status }) => ({ url: `/api/builder/commercial/checklist-documents/${documentId}/status`, method: 'PUT', body: { status } }),
       invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId)],
     }),
+    // Add an ad-hoc (MANUAL) checklist row the rulebook didn't generate.
+    addChecklistDocument: build.mutation<CommercialComplianceDocument, { projectId: string; body: { documentName: string; tier: string; mandatory: string; commercialRegistrationId?: string | null } }>({
+      query: ({ projectId, body }) => ({ url: `/api/builder/commercial/projects/${projectId}/checklist/documents`, method: 'POST', body }),
+      invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId)],
+    }),
+    deleteChecklistDocument: build.mutation<unknown, { projectId: string; documentId: string }>({
+      query: ({ documentId }) => ({ url: `/api/builder/commercial/checklist-documents/${documentId}`, method: 'DELETE' }),
+      invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId)],
+    }),
+    // Bulk-attach a folder of delivered certificates; classify + match + mark received.
+    uploadChecklistFolder: build.mutation<ListEnvelope<{ matched: unknown[]; unmatched: string[] }>, { projectId: string; files: File[]; relativePaths: string[] }>({
+      query: ({ projectId, files, relativePaths }) => {
+        const form = new FormData();
+        files.forEach((f) => form.append('files', f));
+        relativePaths.forEach((p) => form.append('relativePaths', p));
+        return { url: `/api/builder/commercial/projects/${projectId}/checklist/folder`, method: 'POST', body: form };
+      },
+      invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId)],
+    }),
+    // Assessment-only compliance check (generates nothing). Lazy — run on demand.
+    getCommercialComplianceCheck: build.query<CommercialComplianceCheck, string>({
+      query: (projectId) => ({ url: `/api/builder/commercial/projects/${projectId}/checklist/check`, method: 'GET' }),
+      transformResponse: (r: ListEnvelope<CommercialComplianceCheck>) => r?.data,
+    }),
 
     // --- Activities (R7) ---
     generateCommercialActivities: build.mutation<unknown, { projectId: string; prompt?: string }>({
@@ -271,6 +315,29 @@ export const commercialApi = api.injectEndpoints({
     }),
     removeCommercialAsset: build.mutation<void, { registrationId: string; assetId: string }>({
       query: ({ registrationId, assetId }) => ({ url: `/api/builder/commercial/registrations/${registrationId}/assets/${assetId}`, method: 'DELETE' }),
+      invalidatesTags: (_r, _e, { registrationId }) => [regTag(registrationId)],
+    }),
+    // Bulk-create assets from a full-field BOM CSV.
+    importCommercialAssetsCsv: build.mutation<{ created: number; skipped: string[] }, { registrationId: string; file: File }>({
+      query: ({ registrationId, file }) => {
+        const form = new FormData();
+        form.append('file', file);
+        return { url: `/api/builder/commercial/registrations/${registrationId}/assets/import-csv`, method: 'POST', body: form };
+      },
+      invalidatesTags: (_r, _e, { registrationId }) => [regTag(registrationId)],
+    }),
+    // Attach a folder of warranty/manual documents, matched to assets by name.
+    uploadCommercialAssetWarranties: build.mutation<{ created: unknown[]; skipped: string[] }, { registrationId: string; files: File[]; relativePaths: string[] }>({
+      query: ({ registrationId, files, relativePaths }) => {
+        const form = new FormData();
+        files.forEach((f) => form.append('files', f));
+        relativePaths.forEach((p) => form.append('relativePaths', p));
+        return { url: `/api/builder/commercial/registrations/${registrationId}/assets/warranties-folder`, method: 'POST', body: form };
+      },
+      invalidatesTags: (_r, _e, { registrationId }) => [regTag(registrationId)],
+    }),
+    deleteCommercialAssetDocument: build.mutation<void, { registrationId: string; assetId: string; documentId: string }>({
+      query: ({ registrationId, assetId, documentId }) => ({ url: `/api/builder/commercial/registrations/${registrationId}/assets/${assetId}/documents/${documentId}`, method: 'DELETE' }),
       invalidatesTags: (_r, _e, { registrationId }) => [regTag(registrationId)],
     }),
 
@@ -351,6 +418,13 @@ export const {
   useListCommercialAssetsQuery,
   useAddCommercialAssetMutation,
   useRemoveCommercialAssetMutation,
+  useImportCommercialAssetsCsvMutation,
+  useUploadCommercialAssetWarrantiesMutation,
+  useDeleteCommercialAssetDocumentMutation,
+  useAddChecklistDocumentMutation,
+  useDeleteChecklistDocumentMutation,
+  useUploadChecklistFolderMutation,
+  useLazyGetCommercialComplianceCheckQuery,
   useListCommercialBusinessesQuery,
   useSearchCommercialBusinessesQuery,
   useGetCommercialHandoverReadinessQuery,

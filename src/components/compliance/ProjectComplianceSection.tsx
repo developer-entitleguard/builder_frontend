@@ -10,9 +10,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plus, RotateCcw, Sparkles, Upload, Home, UserPlus, Send, X } from "lucide-react";
+import { Loader2, Plus, RotateCcw, Sparkles, Upload, Home, UserPlus, Send, X, FolderUp, ClipboardCheck, CheckCircle2, AlertCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import {
+  useUploadDocumentsFolderMutation,
+  useLazyGetProjectDocumentsCheckQuery,
+  type ComplianceCheckResult,
+} from "@/store/api/projectDocuments";
 import {
   useGetProjectComplianceDocumentsQuery,
   useGetProjectComplianceCompletenessQuery,
@@ -49,6 +54,29 @@ interface ProjectComplianceSectionProps {
   initialFeatures?: ComplianceFeatureFlags;
 }
 
+/** Advisory result of the assessment-only compliance check (generates nothing). */
+const ComplianceCheckCard = ({ result }: { result: ComplianceCheckResult }) => {
+  const ok = result.readyForHandover;
+  return (
+    <div className={`rounded-md border p-3 text-sm ${ok ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+      <div className="flex items-center gap-2 font-medium">
+        {ok ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertCircle className="h-4 w-4 text-amber-600" />}
+        {ok
+          ? "All required documents appear to be present"
+          : `${result.missing.length} required document(s) still needed`}
+      </div>
+      {!ok && result.missing.length > 0 && (
+        <ul className="mt-1.5 ml-6 list-disc text-muted-foreground">
+          {result.missing.map((m, i) => <li key={i}>{m.documentName}</li>)}
+        </ul>
+      )}
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        Assessment only — this does not generate or change any documents. {result.uploadedCount} uploaded.
+      </p>
+    </div>
+  );
+};
+
 export const ProjectComplianceSection = ({
   projectId,
   accessRole,
@@ -80,6 +108,29 @@ export const ProjectComplianceSection = ({
   const [assignPerUnitDoc, { isLoading: assigningPerUnitDoc }] =
     useAssignProjectRegistrationDocTypeMutation();
   const [shareBatch, { isLoading: sharing }] = useShareComplianceBatchMutation();
+  const [uploadFolder, { isLoading: uploadingFolder }] = useUploadDocumentsFolderMutation();
+  const [runCheck, { data: checkResult, isFetching: checking }] = useLazyGetProjectDocumentsCheckQuery();
+
+  const onFolder = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const all = Array.from(fileList) as (File & { webkitRelativePath?: string })[];
+    const files = all.filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+    if (files.length === 0) {
+      toast({ title: "No PDFs found in that folder", variant: "destructive" });
+      return;
+    }
+    const relativePaths = files.map((f) => f.webkitRelativePath || f.name);
+    try {
+      const res = await uploadFolder({ projectId, files, relativePaths }).unwrap();
+      const data = res?.data;
+      toast({
+        title: res?.message || `Processed ${files.length} document(s)`,
+        description: data?.unmatched?.length ? `${data.unmatched.length} file(s) didn't match a row.` : undefined,
+      });
+    } catch {
+      toast({ title: "Folder upload failed", description: "Please try again.", variant: "destructive" });
+    }
+  };
 
   // Change #2: multi-select several documents (project-level + per-unit types)
   // to share with one recipient in a single request.
@@ -277,7 +328,35 @@ export const ProjectComplianceSection = ({
         {/* Generating, resetting and adding statutory documents are operator
             (developer) actions; a delegated builder works the resulting list. */}
         {!isScopedBuilder && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="outline" onClick={() => runCheck(projectId)} disabled={checking}>
+              <ClipboardCheck className="h-4 w-4 mr-2" />
+              {checking ? "Checking…" : "Run compliance check"}
+            </Button>
+            <input
+              id="project-compliance-folder"
+              type="file"
+              multiple
+              className="hidden"
+              ref={(el) => {
+                if (el) {
+                  el.setAttribute("webkitdirectory", "");
+                  el.setAttribute("directory", "");
+                }
+              }}
+              onChange={(e) => {
+                onFolder(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              variant="outline"
+              onClick={() => document.getElementById("project-compliance-folder")?.click()}
+              disabled={uploadingFolder}
+            >
+              <FolderUp className="h-4 w-4 mr-2" />
+              {uploadingFolder ? "Uploading…" : "Upload folder"}
+            </Button>
             <Button
               variant="outline"
               onClick={() => setResetOpen(true)}
@@ -297,6 +376,8 @@ export const ProjectComplianceSection = ({
           </div>
         )}
       </div>
+
+      {checkResult && <ComplianceCheckCard result={checkResult} />}
 
       {completeness && <ComplianceCompletenessBar completeness={completeness} />}
 

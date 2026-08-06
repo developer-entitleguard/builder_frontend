@@ -329,7 +329,7 @@ export const ProjectComplianceSection = ({
             (developer) actions; a delegated builder works the resulting list. */}
         {!isScopedBuilder && (
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button variant="outline" onClick={() => runCheck(projectId)} disabled={checking}>
+            <Button variant="outline" onClick={() => runCheck({ projectId })} disabled={checking}>
               <ClipboardCheck className="h-4 w-4 mr-2" />
               {checking ? "Checking…" : "Run compliance check"}
             </Button>
@@ -377,7 +377,7 @@ export const ProjectComplianceSection = ({
         )}
       </div>
 
-      {checkResult && <ComplianceCheckCard result={checkResult} />}
+      {checkResult?.data && <ComplianceCheckCard result={checkResult.data} />}
 
       {completeness && <ComplianceCompletenessBar completeness={completeness} />}
 

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Shield, Building2, Users, LogOut, BarChart3, Database } from 'lucide-react';
+import { Shield, Building2, Users, LogOut, BarChart3, Database, Megaphone } from 'lucide-react';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -8,6 +8,7 @@ const navItems = [
   { to: '/platform-admin/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/platform-admin/orgs', label: 'Organizations', icon: Building2 },
   { to: '/platform-admin/records', label: 'Records', icon: Database },
+  { to: '/platform-admin/announcements', label: 'Announcements', icon: Megaphone },
   { to: '/platform-admin/admins', label: 'Super Admins', icon: Users },
 ];
 

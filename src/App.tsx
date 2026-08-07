@@ -60,6 +60,8 @@ import AdminOrgDetail from "./pages/admin-portal/AdminOrgDetail";
 import AdminAdmins from "./pages/admin-portal/AdminAdmins";
 import AdminRecords from "./pages/admin-portal/AdminRecords";
 import AdminAnalytics from "./pages/admin-portal/AdminAnalytics";
+import AdminAnnouncements from "./pages/admin-portal/AdminAnnouncements";
+import AdminAnnouncementForm from "./pages/admin-portal/AdminAnnouncementForm";
 import { useValidateTokenQuery } from "@/store/api";
 
 const queryClient = new QueryClient();
@@ -425,6 +427,15 @@ const App = () => (
               } />
               <Route path="/platform-admin/records" element={
                 <AdminProtectedRoute><AdminRecords /></AdminProtectedRoute>
+              } />
+              <Route path="/platform-admin/announcements" element={
+                <AdminProtectedRoute><AdminAnnouncements /></AdminProtectedRoute>
+              } />
+              <Route path="/platform-admin/announcements/new" element={
+                <AdminProtectedRoute><AdminAnnouncementForm /></AdminProtectedRoute>
+              } />
+              <Route path="/platform-admin/announcements/:id" element={
+                <AdminProtectedRoute><AdminAnnouncementForm /></AdminProtectedRoute>
               } />
               {/* Public customer-facing quote view — token is the credential, no auth. */}
               <Route path="/q/:token" element={<PublicQuote />} />

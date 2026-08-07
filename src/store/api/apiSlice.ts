@@ -97,6 +97,8 @@ export const api = createApi({
     // Commercial Segment PRD 1 — commercial projects, registrations, businesses, handover.
     'Commercial',
     'CommercialBusiness',
+    // Platform Announcements — builder-staff CLIENT consume side (banner/modal + ack).
+    'Announcement',
   ],
   endpoints: () => ({}),
 });

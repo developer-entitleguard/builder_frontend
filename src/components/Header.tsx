@@ -32,6 +32,7 @@ import {
 } from "@/lib/roles";
 import { useUnreadNotificationCountQuery } from "@/lib/api/services/notifications";
 import { Menu, ChevronDown, Bell, HelpCircle } from "lucide-react";
+import { AnnouncementCenter } from "@/components/announcements/AnnouncementCenter";
 
 const hasBuilderAuth = (): boolean => {
   try {
@@ -190,6 +191,7 @@ const Header = () => {
   };
 
   return (
+    <>
     <header className="bg-card border-b border-border shadow-soft">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
@@ -499,6 +501,8 @@ const Header = () => {
         </div>
       </div>
     </header>
+    <AnnouncementCenter />
+    </>
   );
 };
 export default Header;

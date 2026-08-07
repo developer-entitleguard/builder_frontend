@@ -57,6 +57,60 @@ export interface AdminCatalog {
   rolesByOrgType: Record<string, string[]>;
 }
 
+// ---- Platform Announcements -------------------------------------------------
+
+export type AnnouncementKind = 'MODAL' | 'BANNER';
+export type AnnouncementSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
+export type AnnouncementScope = 'EVERYONE' | 'PORTAL' | 'ORG' | 'INDIVIDUAL';
+/** Distinct from AdminOrgType: COMMERCIAL + CONSUMER are separate identities. */
+export type AnnouncementPortal =
+  | 'BUILDER'
+  | 'MERCHANT'
+  | 'TRADE'
+  | 'AUDITOR'
+  | 'COMMERCIAL'
+  | 'CONSUMER';
+export type RecipientType = 'USER_INFO' | 'BUSINESS_USER' | 'CUSTOMER';
+
+export interface AnnouncementTarget {
+  scope: AnnouncementScope;
+  portal?: AnnouncementPortal | null;
+  orgId?: string | null;
+  recipientType?: RecipientType | null;
+  recipientId?: string | null;
+  /** Display-only hint (org/user name); not persisted server-side. */
+  label?: string | null;
+}
+
+export interface Announcement {
+  id?: string;
+  kind: AnnouncementKind;
+  severity: AnnouncementSeverity;
+  title?: string | null;
+  message: string;
+  linkUrl?: string | null;
+  linkLabel?: string | null;
+  requiresAck?: boolean | null;
+  dismissible?: boolean | null;
+  /** ISO strings (datetime-local in the form). */
+  startAt?: string | null;
+  endAt?: string | null;
+  isActive?: boolean | null;
+  targets: AnnouncementTarget[];
+  createdByAdminId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  ackCount?: number | null;
+}
+
+export interface RecipientSearchResult {
+  recipientType: RecipientType;
+  recipientId: string;
+  name?: string | null;
+  email?: string | null;
+  portal: AnnouncementPortal;
+}
+
 export interface AdminLoginResponse {
   success: boolean;
   message: string;

@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { useCreateBuilderCustomerMutation, useGetCustomerDetailsQuery, useDeleteBuilderCustomerMutation, useGetStatusesByTypeQuery, useCreateCustomerEntitlementMutation, useGetBuilderCustomerTermsQuery, useUpdateBuilderCustomerTermsMutation, useUpdateCustomerDetailsMutation } from '@/store/api';
 import { TermsVersionPicker } from '@/components/TermsVersionPicker';
 import { HandoverDateDialog } from '@/components/projects/HandoverDateDialog';
-import { HandoverSettledDialog } from '@/components/projects/HandoverSettledDialog';
 import { EditRegistrationDialog, type EditRegistrationValues, type RegistrationDetailsPatch } from '@/components/registrations/EditRegistrationDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -114,18 +113,20 @@ const RegistrationDetail = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { organization } = useOrganization();
-  const { hasModule } = useEntitlements();
+  const { hasModule, ready } = useEntitlements();
   const { toast } = useToast();
   // Without the project-management modules there is no pre-handover "sent" stage
   // to expose to the homeowner, so skip Send Entitlement and hand over directly.
-  const canSendEntitlement = hasModule("ACTIVITIES") || hasModule("APPROVALS");
+  // Fail CLOSED for this action: hasModule() is optimistic (returns true) while
+  // entitlements load or on fetch error, which would wrongly show "Send" to an org
+  // that has no project-management module. Require a loaded entitlement set first.
+  const canSendEntitlement = ready && (hasModule("ACTIVITIES") || hasModule("APPROVALS"));
   const [registration, setRegistration] = useState<RegistrationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
   // Change 2 — "have you handed over & settled?" prompt shown when an
   // activity-tracking builder clicks Send, offering a shortcut to handover.
-  const [settledPromptOpen, setSettledPromptOpen] = useState(false);
 
   const builderId = organization?.id ?? getBuilderId();
   const isBuilderFlow = !user && hasBuilderAuth();
@@ -624,16 +625,19 @@ const RegistrationDetail = () => {
                   <Edit className="h-4 w-4 mr-2" />
                   {isHandedStatus ? 'View Details' : 'Continue Editing'}
                 </Button>
+                {/* Handover is the DEFAULT action for every org — it captures the
+                    settlement date and hands the property to the homeowner. */}
+                <Button onClick={() => setHandoverDialogOpen(true)}>
+                  <KeyRound className="h-4 w-4 mr-2" />
+                  Mark Handed Over
+                </Button>
+                {/* Send-only "share progress" — a pre-handover update that flips the
+                    registration to SENT without handing over. Shown only to orgs with
+                    a project-management module, and only before it's been shared/handed. */}
                 {canSendEntitlement && registration.status !== 'sent' && (
-                  <Button onClick={() => setSettledPromptOpen(true)}>
+                  <Button variant="secondary" onClick={handleSendEntitlement}>
                     <Send className="h-4 w-4 mr-2" />
-                    Send Entitlement
-                  </Button>
-                )}
-                {(registration.status === 'sent' || !canSendEntitlement) && (
-                  <Button variant="secondary" onClick={() => setHandoverDialogOpen(true)}>
-                    <KeyRound className="h-4 w-4 mr-2" />
-                    Mark Handed Over
+                    Share Project Progress
                   </Button>
                 )}
                 <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
@@ -1028,20 +1032,6 @@ const RegistrationDetail = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <HandoverSettledDialog
-        open={settledPromptOpen}
-        onOpenChange={setSettledPromptOpen}
-        count={1}
-        onNo={() => {
-          setSettledPromptOpen(false);
-          handleSendEntitlement();
-        }}
-        onYes={() => {
-          setSettledPromptOpen(false);
-          setHandoverDialogOpen(true);
-        }}
-      />
 
       <HandoverDateDialog
         open={handoverDialogOpen}

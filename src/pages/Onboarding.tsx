@@ -619,7 +619,12 @@ const Onboarding = () => {
       case 'review':
         return (
           <ReviewApprovalForm
-            onNext={hasBuilderAuth() ? handleNextStep : handleSendEntitlement}
+            // Handover is the default finish for the builder flow: after the review
+            // form saves the details it opens the settlement-date dialog, which drives
+            // performHandover (creates the order + anchors the warranty). The send-only
+            // path stays on the summary page ("Share Project Progress"), not here.
+            // The Supabase (non-builder) flow keeps its legacy send-then-confirm step.
+            onNext={hasBuilderAuth() ? () => setHandoverDialogOpen(true) : handleSendEntitlement}
             formData={formData}
             registrationId={registrationId}
             useBuilderEntitlementApi={hasBuilderAuth()}

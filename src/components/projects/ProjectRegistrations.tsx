@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { LinkRegistrationDialog } from "./LinkRegistrationDialog";
 import { HandoverDateDialog } from "./HandoverDateDialog";
-import { HandoverSettledDialog } from "./HandoverSettledDialog";
 import { BulkAttachItemsDialog } from "./BulkAttachItemsDialog";
 import { RegistrationRow } from "./RegistrationRow";
 import {
@@ -83,17 +82,17 @@ const getBuilderId = (): string | null => {
 export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { hasModule } = useEntitlements();
+  const { hasModule, ready } = useEntitlements();
   // No project-management modules ⇒ no pre-handover "sent" stage; hand over directly.
-  const canSendEntitlement = hasModule("ACTIVITIES") || hasModule("APPROVALS");
+  // Fail CLOSED: hasModule() is optimistic while entitlements load / on error, which
+  // would wrongly expose "Send entitlement" to an org without a PM module — require
+  // the entitlement set to be loaded before offering Send.
+  const canSendEntitlement = ready && (hasModule("ACTIVITIES") || hasModule("APPROVALS"));
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [attachOpen, setAttachOpen] = useState(false);
   const [handoverOpen, setHandoverOpen] = useState(false);
-  // Change 2 — "have you handed over & settled?" prompt shown when an
-  // activity-tracking builder clicks bulk Send, offering a shortcut to handover.
-  const [settledPromptOpen, setSettledPromptOpen] = useState(false);
   const [editing, setEditing] = useState<Registration | null>(null);
   const [editMode, setEditMode] = useState(false);
 
@@ -452,16 +451,19 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
               <Package className="h-4 w-4 mr-2" />
               Attach items
             </Button>
-            {canSendEntitlement && (
-              <Button size="sm" variant="outline" onClick={() => setSettledPromptOpen(true)} disabled={sending}>
-                <Send className="h-4 w-4 mr-2" />
-                {sending ? "Sending…" : "Send entitlement"}
-              </Button>
-            )}
+            {/* Handover is the DEFAULT bulk action — it captures the settlement date. */}
             <Button size="sm" onClick={() => setHandoverOpen(true)} disabled={handing}>
               <KeyRound className="h-4 w-4 mr-2" />
               Handover
             </Button>
+            {/* Send-only "share progress" — flips the selected registrations to SENT
+                without handing over. Only for orgs with a project-management module. */}
+            {canSendEntitlement && (
+              <Button size="sm" variant="outline" onClick={handleSendEntitlement} disabled={sending}>
+                <Send className="h-4 w-4 mr-2" />
+                {sending ? "Sharing…" : "Share Project Progress"}
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={clearSelection}>
               Clear
             </Button>
@@ -552,20 +554,6 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
           onConfirmBom={handleAttachBom}
         />
       )}
-
-      <HandoverSettledDialog
-        open={settledPromptOpen}
-        onOpenChange={setSettledPromptOpen}
-        count={selectedCount}
-        onNo={() => {
-          setSettledPromptOpen(false);
-          handleSendEntitlement();
-        }}
-        onYes={() => {
-          setSettledPromptOpen(false);
-          setHandoverOpen(true);
-        }}
-      />
 
       <HandoverDateDialog
         open={handoverOpen}

@@ -132,6 +132,13 @@ export const projectDocumentsApi = api.injectEndpoints({
       invalidatesTags: (_r, _e, { projectId }) => [
         { type: "ProjectDocuments", id: `documents-${projectId}` },
         { type: "ProjectDocuments", id: `check-${projectId}` },
+        // The compliance tab lists these same uploaded documents via the
+        // ComplianceDocuments slice, so invalidate its tags too — otherwise the
+        // list stays stale (docs show "outstanding") until an unrelated status
+        // change happens to refetch it.
+        { type: "ComplianceDocuments", id: `project-${projectId}` },
+        { type: "ComplianceDocuments", id: `project-completeness-${projectId}` },
+        { type: "ComplianceDocuments", id: `registration-types-${projectId}` },
       ],
     }),
 

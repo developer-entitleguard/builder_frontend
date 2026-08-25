@@ -208,4 +208,50 @@ export const useGetDownloadActivityTemplate = () => {
   return { download, isLoading };
 };
 
+/**
+ * Builds a template-download hook. The four existing downloaders were
+ * copy-pasted variants of the same fifteen lines; the vendor and supplier
+ * templates use this factory instead of adding two more copies.
+ */
+const makeTemplateDownloadHook = (path: string, filename: string, label: string) => () => {
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
 
+  const download = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const authToken = getAuthToken();
+      const apiBaseUrl = getApiBaseUrl();
+      const url = import.meta.env.DEV ? path : `${apiBaseUrl}${path}`;
+      await createDownload(url, filename, authToken);
+      toast({
+        title: "Template downloaded",
+        description: `${label} template CSV file has been downloaded`,
+      });
+    } catch (error) {
+      console.error(`Error downloading ${label} template:`, error);
+      toast({
+        title: "Download failed",
+        description:
+          error instanceof Error ? error.message : "Failed to download template",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  return { download, isLoading };
+};
+
+export const useVendorTemplateDownload = makeTemplateDownloadHook(
+  "/api/builder/download/vendor-template",
+  "vendor-import-template.csv",
+  "Vendor"
+);
+
+export const useSupplierTemplateDownload = makeTemplateDownloadHook(
+  "/api/builder/download/supplier-template",
+  "supplier-import-template.csv",
+  "Supplier"
+);

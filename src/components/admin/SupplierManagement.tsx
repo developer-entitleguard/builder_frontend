@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Truck, Mail, Phone, Building2, FileDigit, Wallet } from "lucide-react";
+import { Plus, Edit, Trash2, Truck, Mail, Phone, Building2, FileDigit, Wallet, Upload } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,6 +20,13 @@ import {
   type SupplierResponseItem,
 } from "@/store/api";
 import { validateABN } from "@/utils/validation";
+import DirectoryImportDialog from "@/components/admin/DirectoryImportDialog";
+import {
+  useUploadSuppliersCsvMutation,
+  useRollbackSupplierImportMutation,
+  type DirectoryImportResult,
+} from "@/store/api/directoryImport";
+import { useSupplierTemplateDownload } from "@/lib/api/services/templateDownload";
 
 // Per PRD §6.4 enum.
 const supplierTypes = [
@@ -55,6 +62,12 @@ type SupplierFormData = z.infer<typeof supplierSchema>;
 const SupplierManagement = () => {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+
+  const [uploadSuppliersCsv, { isLoading: importing }] = useUploadSuppliersCsvMutation();
+  const [rollbackImport, { isLoading: rollingBack }] = useRollbackSupplierImportMutation();
+  const { download: downloadTemplate, isLoading: downloadingTemplate } =
+    useSupplierTemplateDownload();
   const [editing, setEditing] = useState<SupplierResponseItem | null>(null);
 
   const { data: page, isLoading: loading, refetch } = useGetBuilderSuppliersQuery({ page: 0, size: 100 });
@@ -158,6 +171,52 @@ const SupplierManagement = () => {
     );
   }
 
+  /** Preview or commit a supplier CSV; null on failure keeps the dialog open. */
+  const handleImportUpload = async (
+    file: File,
+    dryRun: boolean
+  ): Promise<DirectoryImportResult | null> => {
+    try {
+      const response = await uploadSuppliersCsv({ file, dryRun }).unwrap();
+      if (!response.success) {
+        toast({
+          title: "Import failed",
+          description: response.message,
+          variant: "destructive",
+        });
+        return null;
+      }
+      return response.data;
+    } catch (error: unknown) {
+      toast({
+        title: "Import failed",
+        description: error instanceof Error ? error.message : "Couldn't import the file",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  const handleImportRollback = async (batchId: string): Promise<boolean> => {
+    try {
+      const response = await rollbackImport({ batchId }).unwrap();
+      toast({
+        title: response.success ? "Import undone" : "Couldn't undo the import",
+        description: response.message,
+        variant: response.success ? undefined : "destructive",
+      });
+      if (response.success) refetch();
+      return !!response.success;
+    } catch (error: unknown) {
+      toast({
+        title: "Couldn't undo the import",
+        description: error instanceof Error ? error.message : "Rollback failed",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -171,6 +230,11 @@ const SupplierManagement = () => {
               Manage goods sellers (wholesalers, distributors, manufacturers, importers).
             </CardDescription>
           </div>
+          <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import CSV
+          </Button>
           <Dialog
             open={dialogOpen}
             onOpenChange={(open) => {
@@ -283,6 +347,7 @@ const SupplierManagement = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -371,6 +436,19 @@ const SupplierManagement = () => {
           </div>
         )}
       </CardContent>
+
+      <DirectoryImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        kind="supplier"
+        onDownloadTemplate={downloadTemplate}
+        downloadingTemplate={downloadingTemplate}
+        onUpload={handleImportUpload}
+        uploading={importing}
+        onRollback={handleImportRollback}
+        rollingBack={rollingBack}
+        onCompleted={refetch}
+      />
     </Card>
   );
 };

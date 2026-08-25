@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Users, Mail, Phone, Building2, Briefcase } from "lucide-react";
+import { Plus, Edit, Trash2, Users, Mail, Phone, Building2, Briefcase, Upload, Send } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -18,6 +18,14 @@ import {
   useCreateOrUpdateBuilderVendorMutation,
   useDeleteBuilderVendorMutation,
 } from "@/store/api";
+import DirectoryImportDialog from "@/components/admin/DirectoryImportDialog";
+import {
+  useUploadVendorsCsvMutation,
+  useRollbackVendorImportMutation,
+  useSendVendorInviteMutation,
+  type DirectoryImportResult,
+} from "@/store/api/directoryImport";
+import { useVendorTemplateDownload } from "@/lib/api/services/templateDownload";
 
 // Per PRD §9.2: 'Sellers' removed post-V7 migration. Goods sellers now live in
 // the Supplier Management tab. The backend still accepts 'Sellers' as a free-text
@@ -57,6 +65,13 @@ interface VendorManagementProps {
 const VendorManagement = ({ organizationId }: VendorManagementProps) => {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+
+  const [uploadVendorsCsv, { isLoading: importing }] = useUploadVendorsCsvMutation();
+  const [rollbackImport, { isLoading: rollingBack }] = useRollbackVendorImportMutation();
+  const [sendInvite, { isLoading: sendingInvite }] = useSendVendorInviteMutation();
+  const { download: downloadTemplate, isLoading: downloadingTemplate } =
+    useVendorTemplateDownload();
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
   const { toast } = useToast();
 
@@ -177,6 +192,76 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
     }
   };
 
+  /**
+   * Preview or commit a vendor CSV. Returns the result so the dialog can show
+   * the counts; a failure toasts and returns null so the dialog stays put.
+   */
+  const handleImportUpload = async (
+    file: File,
+    dryRun: boolean
+  ): Promise<DirectoryImportResult | null> => {
+    try {
+      const response = await uploadVendorsCsv({ file, dryRun }).unwrap();
+      if (!response.success) {
+        toast({
+          title: "Import failed",
+          description: response.message,
+          variant: "destructive",
+        });
+        return null;
+      }
+      return response.data;
+    } catch (error: unknown) {
+      toast({
+        title: "Import failed",
+        description: error instanceof Error ? error.message : "Couldn't import the file",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  const handleImportRollback = async (batchId: string): Promise<boolean> => {
+    try {
+      const response = await rollbackImport({ batchId }).unwrap();
+      toast({
+        title: response.success ? "Import undone" : "Couldn't undo the import",
+        description: response.message,
+        variant: response.success ? undefined : "destructive",
+      });
+      if (response.success) refetchVendors();
+      return !!response.success;
+    } catch (error: unknown) {
+      toast({
+        title: "Couldn't undo the import",
+        description: error instanceof Error ? error.message : "Rollback failed",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  /**
+   * Send an internal vendor their set-password email. Imported internal vendors
+   * get a login but no mail, so this is the step that gives them access.
+   */
+  const handleSendInvite = async (vendorId: string) => {
+    try {
+      const response = await sendInvite({ vendorId }).unwrap();
+      toast({
+        title: response.success ? "Invite sent" : "Couldn't send the invite",
+        description: response.message,
+        variant: response.success ? undefined : "destructive",
+      });
+    } catch (error: unknown) {
+      toast({
+        title: "Couldn't send the invite",
+        description: error instanceof Error ? error.message : "Invite failed",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getTypeIcon = (type: string) => {
     const iconMap: Record<string, React.ReactNode> = {
       'Tradesman': <Building2 className="h-4 w-4" />,
@@ -219,6 +304,11 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
               Manage your organization's vendors and suppliers
             </CardDescription>
           </div>
+          <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import CSV
+          </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => { setEditingVendor(null); reset(); }}>
@@ -360,6 +450,7 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -418,6 +509,17 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
                     </p>
                   </div>
                   <div className="flex items-center space-x-2 ml-4">
+                    {vendor.vendorType === 'INTERNAL' && vendor.contact_email && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        title="Send set-password invite"
+                        disabled={sendingInvite}
+                        onClick={() => handleSendInvite(vendor.id)}
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -453,6 +555,19 @@ const VendorManagement = ({ organizationId }: VendorManagementProps) => {
           </div>
         )}
       </CardContent>
+
+      <DirectoryImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        kind="vendor"
+        onDownloadTemplate={downloadTemplate}
+        downloadingTemplate={downloadingTemplate}
+        onUpload={handleImportUpload}
+        uploading={importing}
+        onRollback={handleImportRollback}
+        rollingBack={rollingBack}
+        onCompleted={refetchVendors}
+      />
     </Card>
   );
 };

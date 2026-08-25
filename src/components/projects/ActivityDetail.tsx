@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -117,6 +117,12 @@ export const ActivityDetail = ({
   };
 
   const handleAssignActivity = () => inviteContact(vendorName, vendorEmail);
+
+  /** The directory record this activity is actually linked to, when resolved. */
+  const linkedVendor = useMemo(
+    () => vendors.find((v) => v.id === activity.vendor_id) ?? null,
+    [vendors, activity.vendor_id]
+  );
 
   const [updates, setUpdates] = useState<ActivityUpdate[]>([]);
   const [loadingUpdates, setLoadingUpdates] = useState(true);
@@ -585,6 +591,24 @@ export const ActivityDetail = ({
               </div>
               {vendorPhone && (
                 <p className="text-xs text-muted-foreground">Phone: {vendorPhone}</p>
+              )}
+              {/*
+                Whether this contact is a real record in the org's vendor
+                directory. Imports and the picker both resolve one now, but rows
+                imported before that shipped still carry text only — say which,
+                so "why can't I schedule this vendor?" has a visible answer.
+              */}
+              {(vendorName || vendorEmail || vendorPhone) && (
+                <p className="text-xs text-muted-foreground">
+                  {linkedVendor ? (
+                    <>
+                      Linked to <span className="font-medium">{linkedVendor.name || "a vendor"}</span> in
+                      your vendor directory.
+                    </>
+                  ) : (
+                    "Not linked to your vendor directory — save this contact to add them."
+                  )}
+                </p>
               )}
               {isBuilder && (
                 <Button

@@ -41,6 +41,8 @@ export interface Activity {
   vendor_name?: string | null;
   vendor_email?: string | null;
   vendor_phone?: string | null;
+  /** Id of the linked vendor in the org directory, when one was resolved. */
+  vendor_id?: string | null;
 }
 
 export interface ActivityUpdate {
@@ -166,6 +168,7 @@ export const useActivities = (projectId: string | undefined) => {
         vendor_name: a.vendorName ?? null,
         vendor_email: a.vendorEmail ?? null,
         vendor_phone: a.vendorPhone ?? null,
+        vendor_id: a.vendorId ?? null,
       };
     });
 

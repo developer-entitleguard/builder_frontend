@@ -20,6 +20,30 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+/**
+ * The vendor half of an import's dry-run result. The backend resolves every
+ * vendor named in the CSV against the organisation's directory (email → phone →
+ * name) and creates the ones it can't find — so an import can quietly add a
+ * dozen vendor records. This is what lets us show that before it happens.
+ */
+interface VendorImportSummary {
+  vendorsMatched: number;
+  vendorsMatchedByEmail: number;
+  vendorsMatchedByPhone: number;
+  vendorsMatchedByName: number;
+  vendorsCreated: number;
+  activitiesLinked: number;
+  activitiesUnresolved: number;
+  warnings: { activity?: string; vendor?: string; warning?: string }[];
+}
+
+/** Human wording for the resolver's warning codes. */
+const VENDOR_WARNING_LABELS: Record<string, string> = {
+  INVALID_PHONE: "phone number isn't a valid Australian format",
+  AMBIGUOUS_NAME: "matched on name alone — more than one vendor answers to it",
+  DUPLICATE_EMAIL: "more than one vendor in your directory has this email",
+};
+
 export interface ActivityTypeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +71,8 @@ export const ActivityTypeDialog = ({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('none');
   const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState(false);
   const [duplicateCount, setDuplicateCount] = useState(0);
+  const [vendorConfirmOpen, setVendorConfirmOpen] = useState(false);
+  const [vendorSummary, setVendorSummary] = useState<VendorImportSummary | null>(null);
 
   const resetState = () => {
     setSelectedType(null);
@@ -54,6 +80,8 @@ export const ActivityTypeDialog = ({
     setSelectedCategoryId("none");
     setDuplicateConfirmOpen(false);
     setDuplicateCount(0);
+    setVendorConfirmOpen(false);
+    setVendorSummary(null);
   };
 
   const countDuplicatesFromResponse = (resp: unknown): number => {
@@ -82,6 +110,45 @@ export const ActivityTypeDialog = ({
       if (Array.isArray(anyData["duplicateActivities"])) return (anyData["duplicateActivities"] as unknown[]).length;
     }
     return 0;
+  };
+
+  const readVendorSummary = (resp: unknown): VendorImportSummary | null => {
+    if (!resp || typeof resp !== "object") return null;
+    const data = (resp as Record<string, unknown>)["data"];
+    if (!data || typeof data !== "object") return null;
+    const raw = (data as Record<string, unknown>)["vendorSummary"];
+    if (!raw || typeof raw !== "object") return null;
+    const s = raw as Record<string, unknown>;
+    const num = (key: string) =>
+      typeof s[key] === "number" && Number.isFinite(s[key]) ? Number(s[key]) : 0;
+    return {
+      vendorsMatched: num("vendorsMatched"),
+      vendorsMatchedByEmail: num("vendorsMatchedByEmail"),
+      vendorsMatchedByPhone: num("vendorsMatchedByPhone"),
+      vendorsMatchedByName: num("vendorsMatchedByName"),
+      vendorsCreated: num("vendorsCreated"),
+      activitiesLinked: num("activitiesLinked"),
+      activitiesUnresolved: num("activitiesUnresolved"),
+      warnings: Array.isArray(s["warnings"])
+        ? (s["warnings"] as VendorImportSummary["warnings"])
+        : [],
+    };
+  };
+
+  /** Only worth interrupting for when the import would change the directory. */
+  const needsVendorConfirmation = (summary: VendorImportSummary | null) =>
+    !!summary && (summary.vendorsCreated > 0 || vendorWarnings(summary).length > 0);
+
+  /** ENRICHED is an improvement, not something to warn about. */
+  const vendorWarnings = (summary: VendorImportSummary) =>
+    summary.warnings.filter((w) => w.warning && w.warning !== "ENRICHED");
+
+  const vendorMatchBreakdown = (summary: VendorImportSummary) => {
+    const parts: string[] = [];
+    if (summary.vendorsMatchedByEmail) parts.push(`${summary.vendorsMatchedByEmail} by email`);
+    if (summary.vendorsMatchedByPhone) parts.push(`${summary.vendorsMatchedByPhone} by phone`);
+    if (summary.vendorsMatchedByName) parts.push(`${summary.vendorsMatchedByName} by name`);
+    return parts.join(", ");
   };
 
   const duplicateMessage = useMemo(() => {
@@ -121,22 +188,65 @@ export const ActivityTypeDialog = ({
 
   const handleSave = async () => {
     if (!selectedFile) return;
-    // Dry run first: detect duplicates WITHOUT saving anything, so we never
-    // commit before the builder has decided.
+    // Dry run first: detect duplicates and preview the vendor impact WITHOUT
+    // saving anything, so we never commit before the builder has decided.
     const resp = await uploadActivitiesCsv(projectId, selectedFile, false, true);
     if (!resp) return;
 
     const dupCount = countDuplicatesFromResponse(resp);
+    const summary = readVendorSummary(resp);
+    setDuplicateCount(dupCount);
+    setVendorSummary(summary);
+
+    // Creating vendor records is a side effect on the whole organisation, not
+    // just this project — confirm it before the duplicate question.
+    if (needsVendorConfirmation(summary)) {
+      setVendorConfirmOpen(true);
+      return;
+    }
+    await continueAfterVendorReview(dupCount);
+  };
+
+  /** Duplicate question next (if any), otherwise commit. */
+  const continueAfterVendorReview = async (dupCount: number) => {
     if (dupCount > 0) {
-      setDuplicateCount(dupCount);
       setDuplicateConfirmOpen(true);
       return;
     }
-
-    // No duplicates → commit everything in a single save.
+    if (!selectedFile) return;
     const commit = await uploadActivitiesCsv(projectId, selectedFile, false, false);
     if (!commit) return;
-    finishImport("CSV file was uploaded successfully.");
+    finishImport(importSummaryText(readVendorSummary(commit)));
+  };
+
+  const handleVendorConfirm = async () => {
+    setVendorConfirmOpen(false);
+    await continueAfterVendorReview(duplicateCount);
+  };
+
+  /** Cancel before commit — the dry run wrote nothing, so there is nothing to undo. */
+  const handleVendorCancel = () => {
+    setVendorConfirmOpen(false);
+    resetState();
+    onOpenChange(false);
+  };
+
+  const importSummaryText = (summary: VendorImportSummary | null) => {
+    if (!summary || (!summary.vendorsCreated && !summary.activitiesLinked)) {
+      return "CSV file was uploaded successfully.";
+    }
+    const bits: string[] = [];
+    if (summary.activitiesLinked) {
+      bits.push(
+        `${summary.activitiesLinked} ${summary.activitiesLinked === 1 ? "activity" : "activities"} linked to vendors`
+      );
+    }
+    if (summary.vendorsCreated) {
+      bits.push(
+        `${summary.vendorsCreated} new ${summary.vendorsCreated === 1 ? "vendor" : "vendors"} added to your directory`
+      );
+    }
+    return `${bits.join("; ")}.`;
   };
 
   // Yes → import everything, including the rows flagged as duplicates.
@@ -144,7 +254,7 @@ export const ActivityTypeDialog = ({
     if (!selectedFile) return;
     const resp = await uploadActivitiesCsv(projectId, selectedFile, true, false);
     if (!resp) return;
-    finishImport("CSV file was uploaded successfully.");
+    finishImport(importSummaryText(readVendorSummary(resp)));
   };
 
   // No → import the non-duplicates only; skip the flagged duplicates.
@@ -162,7 +272,11 @@ export const ActivityTypeDialog = ({
       onOpenChange(false);
       return;
     }
-    finishImport("Duplicates were skipped; the remaining activities were imported.");
+    finishImport(
+      `Duplicates were skipped; the remaining activities were imported. ${importSummaryText(
+        readVendorSummary(resp)
+      )}`
+    );
   };
 
   const handleBack = () => {
@@ -284,6 +398,92 @@ export const ActivityTypeDialog = ({
           </div>
         )}
       </DialogContent>
+
+
+      <AlertDialog open={vendorConfirmOpen} onOpenChange={setVendorConfirmOpen}>
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Vendors in this file</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  Vendors named in the CSV are matched against your directory by
+                  email, then phone number, then name. Anything with no match is
+                  added as a new vendor.
+                </p>
+
+                {vendorSummary && (
+                  <ul className="space-y-1">
+                    {vendorSummary.vendorsMatched > 0 && (
+                      <li>
+                        <strong>{vendorSummary.vendorsMatched}</strong> existing{" "}
+                        {vendorSummary.vendorsMatched === 1 ? "vendor" : "vendors"} matched
+                        {vendorMatchBreakdown(vendorSummary)
+                          ? ` (${vendorMatchBreakdown(vendorSummary)})`
+                          : ""}
+                        .
+                      </li>
+                    )}
+                    {vendorSummary.vendorsCreated > 0 && (
+                      <li>
+                        <strong>{vendorSummary.vendorsCreated}</strong> new{" "}
+                        {vendorSummary.vendorsCreated === 1 ? "vendor" : "vendors"} will be
+                        created in your directory.
+                      </li>
+                    )}
+                    {vendorSummary.activitiesLinked > 0 && (
+                      <li>
+                        <strong>{vendorSummary.activitiesLinked}</strong>{" "}
+                        {vendorSummary.activitiesLinked === 1 ? "activity" : "activities"}{" "}
+                        will be linked to a vendor.
+                      </li>
+                    )}
+                    {vendorSummary.activitiesUnresolved > 0 && (
+                      <li>
+                        <strong>{vendorSummary.activitiesUnresolved}</strong>{" "}
+                        {vendorSummary.activitiesUnresolved === 1 ? "row names" : "rows name"}{" "}
+                        a vendor that couldn't be identified — the text is kept, but no
+                        link is made.
+                      </li>
+                    )}
+                  </ul>
+                )}
+
+                {vendorSummary && vendorWarnings(vendorSummary).length > 0 && (
+                  <div className="rounded-md border border-amber-300/60 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-950/30">
+                    <p className="font-medium">Worth checking</p>
+                    <ul className="mt-1 space-y-1">
+                      {vendorWarnings(vendorSummary)
+                        .slice(0, 8)
+                        .map((w, i) => (
+                          <li key={`${w.activity}-${w.warning}-${i}`}>
+                            <span className="font-medium">{w.vendor || "Vendor"}</span>
+                            {w.activity ? ` on "${w.activity}"` : ""} —{" "}
+                            {VENDOR_WARNING_LABELS[w.warning ?? ""] ?? w.warning}
+                          </li>
+                        ))}
+                    </ul>
+                    {vendorWarnings(vendorSummary).length > 8 && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        …and {vendorWarnings(vendorSummary).length - 8} more.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  New vendors are added as external contacts. No logins are created and
+                  nobody is emailed or messaged — assigning work stays a separate step.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleVendorCancel}>Cancel import</AlertDialogCancel>
+            <AlertDialogAction onClick={handleVendorConfirm}>Continue</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={duplicateConfirmOpen} onOpenChange={setDuplicateConfirmOpen}>
         <AlertDialogContent>

@@ -19,6 +19,12 @@ export interface BuilderActivityApi {
   vendorName?: string | null;
   vendorEmail?: string | null;
   vendorPhone?: string | null;
+  /**
+   * The resolved vendor from the organisation's directory. Set by the backend
+   * whenever a vendor identity could be matched or created; the three free-text
+   * fields above remain the display fallback for older, unresolved rows.
+   */
+  vendorId?: string | null;
   priority?: string | null;
   /** Phase B: the linked job (assignment) and its assignee, when assigned out. */
   jobId?: string | null;

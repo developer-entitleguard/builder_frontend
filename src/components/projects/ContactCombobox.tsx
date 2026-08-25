@@ -37,9 +37,16 @@ interface ContactComboboxProps {
 
 /**
  * Select-or-add contact picker. As the user types it filters the organisation's
- * saved vendors; if no match exists they can add a new contact (name + email)
- * inline. Returns the chosen/created contact via {@link onChange}; the parent
- * decides what to persist (and, per product spec, fires the trade invite).
+ * saved vendors; if no match exists they can add a new contact (name, email
+ * and/or phone) inline. Returns the chosen/created contact via {@link onChange};
+ * the parent decides what to persist (and, per product spec, fires the trade
+ * invite).
+ *
+ * <p>Saving the activity runs the contact through the backend's vendor
+ * resolution (email -> phone -> name), so adding someone here now puts them in
+ * the vendor directory instead of leaving three orphaned strings on the
+ * activity. Phone is collected because it is a match key in its own right —
+ * builder-supplied contacts frequently have a number and no email at all.
  */
 export const ContactCombobox = ({
   value,
@@ -55,12 +62,14 @@ export const ContactCombobox = ({
   const [query, setQuery] = useState("");
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [newPhone, setNewPhone] = useState("");
 
   const reset = () => {
     setMode("search");
     setQuery("");
     setNewName("");
     setNewEmail("");
+    setNewPhone("");
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -80,14 +89,16 @@ export const ContactCombobox = ({
   const startAdd = () => {
     setNewName(query.trim());
     setNewEmail("");
+    setNewPhone("");
     setMode("add");
   };
 
   const confirmAdd = () => {
     const name = newName.trim();
     const email = newEmail.trim();
-    if (!name && !email) return;
-    onChange({ name, email, phone: "" });
+    const phone = newPhone.trim();
+    if (!name && !email && !phone) return;
+    onChange({ name, email, phone });
     handleOpenChange(false);
   };
 
@@ -193,6 +204,24 @@ export const ContactCombobox = ({
                 }}
               />
             </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Contact phone</Label>
+              <Input
+                className="mt-1 h-8"
+                type="tel"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                placeholder="0400 000 000"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") confirmAdd();
+                }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Saving matches this contact to your vendor directory by email, then
+              phone, then name — and adds them if they're new. An email is needed
+              to assign work to them later.
+            </p>
             <div className="flex justify-end gap-2">
               <Button
                 type="button"
@@ -206,7 +235,7 @@ export const ContactCombobox = ({
                 type="button"
                 size="sm"
                 onClick={confirmAdd}
-                disabled={!newName.trim() && !newEmail.trim()}
+                disabled={!newName.trim() && !newEmail.trim() && !newPhone.trim()}
               >
                 Add
               </Button>

@@ -262,8 +262,28 @@ export const ActivityRow = ({
           <div className="hidden md:flex items-center gap-4 text-xs text-muted-foreground">
             <span>Quote {money(activity.quote)}</span>
             <span>Paid {money(activity.price_paid)}</span>
-            <span className="truncate max-w-[10rem]">
-              {activity.vendor_name || "—"}
+            <span className="truncate max-w-[10rem] flex items-center gap-1">
+              {/*
+                A filled dot means the vendor resolved to a real directory
+                record (so they can be assigned and scheduled); a hollow one
+                means the row still carries text only.
+              */}
+              {activity.vendor_name && (
+                <span
+                  aria-hidden
+                  title={
+                    activity.vendor_id
+                      ? "Linked to your vendor directory"
+                      : "Not linked to your vendor directory"
+                  }
+                  className={
+                    activity.vendor_id
+                      ? "h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                      : "h-1.5 w-1.5 shrink-0 rounded-full border border-muted-foreground/60"
+                  }
+                />
+              )}
+              <span className="truncate">{activity.vendor_name || "—"}</span>
             </span>
           </div>
           <Button

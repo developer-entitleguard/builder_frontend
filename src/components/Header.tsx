@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { USER_DATA_EVENT, useOrganization } from "@/hooks/useOrganization";
+import { clearSession, revokeSession } from "@/lib/auth/session";
 import { openWelcomeGuide } from "@/components/onboarding/welcomeGuide";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import OrganizationSelector from "@/components/OrganizationSelector";
@@ -120,7 +121,11 @@ const Header = () => {
 
   const handleSignOut = () => {
     if (hasBuilderAuth()) {
-      localStorage.removeItem("userData");
+      // Revoke server-side first: the refresh token outlives the browser's copy,
+      // so forgetting it locally would leave the session usable. Fire-and-forget
+      // — the local sign-out must not wait on the network.
+      void revokeSession();
+      clearSession();
       // Tell OrganizationProvider to reset its in-memory state. Otherwise a
       // re-login in the same tab would race against stale context state.
       window.dispatchEvent(new Event(USER_DATA_EVENT));

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { USER_DATA_EVENT } from '@/hooks/useOrganization';
+import { initSessionRefresh, setRefreshToken } from '@/lib/auth/session';
 import { useSignInMutation, useSendVerifyMailMutation } from '@/store/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,6 +46,11 @@ const Auth = () => {
   const [sendVerifyMailMutation, { isLoading: isSendingResetLink }] = useSendVerifyMailMutation();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  // Set when the app bounced the user here after a session it couldn't renew.
+  // Worth saying out loud — otherwise landing on the sign-in screen reads as
+  // "my password stopped working".
+  const sessionExpired = searchParams.get('expired') === '1';
 
   const [signInData, setSignInData] = useState({
     email: '',
@@ -93,6 +99,11 @@ const Auth = () => {
             builderOrganization: builderOrg,
           })
         );
+        // The long-lived half of the session, kept out of userData so it can
+        // never be picked up and sent as a bearer token. From here on the app
+        // renews itself instead of asking for the password again tomorrow.
+        setRefreshToken((response.data as { refreshToken?: string }).refreshToken);
+        initSessionRefresh();
         // Notify OrganizationProvider so it picks up the new role + org
         // before we navigate. Without this the provider's mount effect (which
         // already ran with an empty localStorage) leaves currentRole=null,
@@ -216,6 +227,11 @@ const Auth = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {sessionExpired && !showForgotPassword && (
+                <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  Your session timed out. This isn't a password problem — please sign in again.
+                </p>
+              )}
               {showForgotPassword ? (
                 <div className="space-y-4">
                   <div className="text-center">

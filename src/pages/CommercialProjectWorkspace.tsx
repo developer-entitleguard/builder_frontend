@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, Building2, Upload, UserPlus, Pencil, FileUp, FolderUp, ClipboardCheck, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Building2, Upload, UserPlus, Pencil, FileUp, FolderUp, ClipboardCheck, CheckCircle2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { getApiBaseUrl } from "@/lib/config";
@@ -66,6 +66,8 @@ const CommercialProjectWorkspace = () => {
   const navigate = useNavigate();
   const { segments, ready } = useEntitlements();
   const [editOpen, setEditOpen] = useState(false);
+  // Controlled so Setup's "Next" can advance the flow to Building Parts.
+  const [tab, setTab] = useState("setup");
 
   if (ready && !segments.commercial) {
     return (
@@ -95,7 +97,7 @@ const CommercialProjectWorkspace = () => {
         </div>
         <EditProjectDetailsDialog projectId={projectId} open={editOpen} onOpenChange={setEditOpen} />
 
-        <Tabs defaultValue="setup">
+        <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="mb-6 flex-wrap">
             <TabsTrigger value="setup">Setup</TabsTrigger>
             <TabsTrigger value="parts">Building Parts</TabsTrigger>
@@ -104,11 +106,25 @@ const CommercialProjectWorkspace = () => {
             <TabsTrigger value="handover">Handover</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="setup"><SetupTab projectId={projectId} /></TabsContent>
-          <TabsContent value="parts"><PartsTab projectId={projectId} /></TabsContent>
-          <TabsContent value="registrations"><RegistrationsTab projectId={projectId} /></TabsContent>
-          <TabsContent value="checklist"><ChecklistTab projectId={projectId} /></TabsContent>
-          <TabsContent value="handover"><HandoverTab projectId={projectId} /></TabsContent>
+          <TabsContent value="setup">
+            <SetupTab projectId={projectId} onNext={() => setTab("parts")} />
+          </TabsContent>
+          <TabsContent value="parts">
+            <PartsTab projectId={projectId} />
+            <FlowNav onBack={() => setTab("setup")} onNext={() => setTab("registrations")} nextLabel="Next: Registrations" />
+          </TabsContent>
+          <TabsContent value="registrations">
+            <RegistrationsTab projectId={projectId} />
+            <FlowNav onBack={() => setTab("parts")} onNext={() => setTab("checklist")} nextLabel="Next: Checklist" />
+          </TabsContent>
+          <TabsContent value="checklist">
+            <ChecklistTab projectId={projectId} />
+            <FlowNav onBack={() => setTab("registrations")} onNext={() => setTab("handover")} nextLabel="Next: Handover" />
+          </TabsContent>
+          <TabsContent value="handover">
+            <HandoverTab projectId={projectId} />
+            <FlowNav onBack={() => setTab("checklist")} />
+          </TabsContent>
         </Tabs>
       </main>
     </div>
@@ -125,7 +141,7 @@ const FACTOR_FIELDS: { key: keyof CommercialProjectDetail; label: string }[] = [
   { key: "heritageListed", label: "Heritage listed" },
 ];
 
-function SetupTab({ projectId }: { projectId: string }) {
+function SetupTab({ projectId, onNext }: { projectId: string; onNext: () => void }) {
   const { data } = useGetCommercialDetailQuery(projectId);
   const { data: projectResp } = useProjectByIdQuery({ id: projectId });
   const [save, { isLoading }] = useUpsertCommercialDetailMutation();
@@ -146,6 +162,7 @@ function SetupTab({ projectId }: { projectId: string }) {
       // Persist the effective PC date even if the seeded value wasn't touched.
       await save({ projectId, body: { ...merged, practicalCompletionDate: pcDate || null } }).unwrap();
       toast({ title: "Saved", description: "Commercial setup updated." });
+      onNext();
     } catch {
       toast({ title: "Error", description: "Could not save setup.", variant: "destructive" });
     }
@@ -196,7 +213,9 @@ function SetupTab({ projectId }: { projectId: string }) {
           </div>
         </div>
 
-        <Button onClick={onSave} disabled={isLoading}>{isLoading ? "Saving…" : "Save setup"}</Button>
+        <Button onClick={onSave} disabled={isLoading}>
+          {isLoading ? "Saving…" : <>Next: Building Parts <ChevronRight className="h-4 w-4 ml-1" /></>}
+        </Button>
       </CardContent>
     </Card>
   );
@@ -297,10 +316,14 @@ const NEW_TAG = "__new__";
 /** Normalises the inline new-business form into a create payload. */
 function cleanNewBusiness(nb: CommercialBusiness): CommercialBusiness {
   const c = nb.contacts?.[0];
-  const hasContact = !!(c && (c.name || c.email || c.phone));
-  const contacts: BusinessContact[] = hasContact
-    ? [{ role: "PRIMARY", name: c!.name || nb.legalEntityName, email: c!.email || null, phone: c!.phone || null }]
-    : [];
+  // The backend requires a PRIMARY contact on create; default the name to the
+  // legal entity when the (optional-looking) contact fields are left blank.
+  const contacts: BusinessContact[] = [{
+    role: "PRIMARY",
+    name: c?.name?.trim() || nb.legalEntityName.trim(),
+    email: c?.email?.trim() || null,
+    phone: c?.phone?.trim() || null,
+  }];
   return {
     legalEntityName: nb.legalEntityName.trim(),
     abn: (nb.abn ?? "").trim(),
@@ -420,14 +443,14 @@ function RegistrationsTab({ projectId }: { projectId: string }) {
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-start gap-4">
             <Field label="Scope">
-              <select className="border rounded-md h-10 px-2 text-sm" value={scope}
+              <select className="border rounded-md h-10 px-2 text-sm w-44" value={scope}
                 onChange={(e) => setScope(e.target.value as "BUILDING" | "TENANCY")}>
                 <option value="TENANCY">Tenancy</option>
                 <option value="BUILDING">Whole building</option>
               </select>
             </Field>
             {scope === "TENANCY" && (
-              <Field label="Tenancy identifier"><Input value={tenancyIdentifier} onChange={(e) => setTenancyIdentifier(e.target.value)} placeholder="Shop 1" /></Field>
+              <Field label="Tenancy identifier"><Input className="w-56" value={tenancyIdentifier} onChange={(e) => setTenancyIdentifier(e.target.value)} placeholder="Shop 1" /></Field>
             )}
             <Field label="Owning / occupying business">
               <BusinessForm businesses={businesses ?? []} value={sel} onChange={setSel} />
@@ -1139,9 +1162,31 @@ function EditProjectDetailsDialog({ projectId, open, onOpenChange }: { projectId
 }
 
 // ---- shared ----
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/** Back/Next footer that makes the workspace tabs read as one guided flow.
+ *  Tab content saves as it's entered, so these only navigate (Setup's own
+ *  Next saves first and advances via onNext). */
+function FlowNav({ onBack, onNext, nextLabel }: { onBack?: () => void; onNext?: () => void; nextLabel?: string }) {
   return (
-    <div className="space-y-1">
+    <div className="mt-6 flex items-center justify-between">
+      {onBack ? (
+        <Button variant="outline" onClick={onBack}>
+          <ChevronLeft className="h-4 w-4 mr-1" /> Back
+        </Button>
+      ) : <span />}
+      {onNext && (
+        <Button onClick={onNext}>
+          {nextLabel ?? "Next"} <ChevronRight className="h-4 w-4 ml-1" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  // flex-col (not space-y) so inline controls like <select> stack under the
+  // label instead of flowing beside it.
+  return (
+    <div className="flex flex-col gap-1">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
     </div>

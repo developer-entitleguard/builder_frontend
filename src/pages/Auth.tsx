@@ -1,15 +1,29 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { USER_DATA_EVENT } from '@/hooks/useOrganization';
-import { initSessionRefresh, setRefreshToken } from '@/lib/auth/session';
-import { useSignInMutation, useSendVerifyMailMutation } from '@/store/api';
+import { storeBuilderSession } from '@/lib/auth/storeSession';
+import { isNoSeatForPortal, type NoSeatForPortal, type SessionPayload } from '@/lib/auth/portalSession';
+import {
+  useSignInMutation,
+  useUnifiedSignInMutation,
+  useRequestLoginOtpMutation,
+  useVerifyLoginOtpMutation,
+  useSendVerifyMailMutation,
+} from '@/store/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Lock } from 'lucide-react';
+import { Mail, Lock, KeyRound, ExternalLink } from 'lucide-react';
 import { z } from 'zod';
+
+/**
+ * Unified sign-in is the default. `VITE_UNIFIED_AUTH=false` at build time keeps
+ * the legacy `/unsecure/builderlogin` call for one release of rollback safety.
+ * Both paths store the session through `storeBuilderSession`, so the browser
+ * ends up identical either way.
+ */
+const UNIFIED_AUTH = import.meta.env.VITE_UNIFIED_AUTH !== 'false';
 
 const handleRequestAccess = () => {
   const subject = encodeURIComponent("Builder Playground Access Request");
@@ -38,12 +52,39 @@ const forgotPasswordSchema = z.object({
   email: z.string().trim().email('Please enter a valid email address'),
 });
 
+const otpEmailSchema = z.object({
+  email: z.string().trim().email('Please enter a valid email address'),
+});
+
+const otpCodeSchema = z.object({
+  otp: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code from your email'),
+});
+
+/** Pulls a human message out of an RTK Query / fetch error. */
+const errorMessage = (error: unknown, fallback: string): string => {
+  const message =
+    error && typeof error === 'object' && 'data' in error
+      ? (error as { data?: { message?: string } }).data?.message
+      : error instanceof Error
+        ? error.message
+        : fallback;
+  return String(message ?? fallback);
+};
+
+type View = 'signin' | 'forgot' | 'otp';
+
 const Auth = () => {
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [view, setView] = useState<View>('signin');
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  const [signInMutation, { isLoading: isSigningIn }] = useSignInMutation();
+  // 403 NO_SEAT_FOR_PORTAL: the person is genuine but holds no Build seat.
+  const [noSeat, setNoSeat] = useState<NoSeatForPortal | null>(null);
+  const [signInMutation, { isLoading: isLegacySigningIn }] = useSignInMutation();
+  const [unifiedSignIn, { isLoading: isUnifiedSigningIn }] = useUnifiedSignInMutation();
+  const [requestLoginOtp, { isLoading: isSendingOtp }] = useRequestLoginOtpMutation();
+  const [verifyLoginOtp, { isLoading: isVerifyingOtp }] = useVerifyLoginOtpMutation();
   const [sendVerifyMailMutation, { isLoading: isSendingResetLink }] = useSendVerifyMailMutation();
+  const isSigningIn = isLegacySigningIn || isUnifiedSigningIn;
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
@@ -57,9 +98,52 @@ const Auth = () => {
     password: ''
   });
 
+  // "Email me a code instead" — two steps: email, then the 6-digit code.
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpCodeSent, setOtpCodeSent] = useState(false);
+
+  /**
+   * Shared tail of every successful login response (legacy, unified, OTP):
+   * store the session exactly as the app expects and go to the dashboard.
+   */
+  const completeSignIn = (response: { message?: string; data?: unknown } | undefined): void => {
+    // API returns { success, message, data: { jwt, userInfo, builderOrganization?, ... } }
+    const payload = response?.data as SessionPayload | undefined;
+    if (payload?.jwt) {
+      storeBuilderSession(payload);
+      toast({
+        title: "Welcome back!",
+        description: response?.message ?? "You have been signed in successfully."
+      });
+      navigate('/dashboard', { replace: true });
+    } else {
+      toast({
+        title: "Sign in failed",
+        description: response?.message ?? "Invalid response from server.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  /** Common failure handling for login + verify: NO_SEAT_FOR_PORTAL or a toast. */
+  const failSignIn = (error: unknown, fallback: string): void => {
+    const body = error && typeof error === 'object' && 'data' in error ? (error as { data?: unknown }).data : null;
+    if (isNoSeatForPortal(body)) {
+      setNoSeat(body);
+      return;
+    }
+    toast({
+      title: "Sign in failed",
+      description: errorMessage(error, fallback),
+      variant: "destructive"
+    });
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationErrors({});
+    setNoSeat(null);
 
     // Validate input
     const result = signInSchema.safeParse(signInData);
@@ -80,59 +164,81 @@ const Auth = () => {
     }
 
     try {
-      const response = await signInMutation({
-        email: result.data.email,
-        password: result.data.password,
-      }).unwrap();
-
-      // API returns { success, message, data: { jwt, userInfo, builderOrganization?, ... } }
-      if (response?.data?.jwt) {
-        const userInfo = response.data.userInfo ?? {};
-        const builderOrg =
-          response.data.userInfo?.builderOrganization ??
-          (response.data as { builderOrganization?: unknown }).builderOrganization;
-        localStorage.setItem(
-          "userData",
-          JSON.stringify({
-            jwt: response.data.jwt,
-            ...userInfo,
-            builderOrganization: builderOrg,
-          })
-        );
-        // The long-lived half of the session, kept out of userData so it can
-        // never be picked up and sent as a bearer token. From here on the app
-        // renews itself instead of asking for the password again tomorrow.
-        setRefreshToken((response.data as { refreshToken?: string }).refreshToken);
-        initSessionRefresh();
-        // Notify OrganizationProvider so it picks up the new role + org
-        // before we navigate. Without this the provider's mount effect (which
-        // already ran with an empty localStorage) leaves currentRole=null,
-        // and guarded pages like /admin briefly flash "Access denied".
-        window.dispatchEvent(new Event(USER_DATA_EVENT));
-        toast({
-          title: "Welcome back!",
-          description: response.message ?? "You have been signed in successfully."
-        });
-        navigate('/dashboard', { replace: true });
-      } else {
-        toast({
-          title: "Sign in failed",
-          description: response?.message ?? "Invalid response from server.",
-          variant: "destructive"
-        });
-      }
+      const response = UNIFIED_AUTH
+        ? await unifiedSignIn({
+            email: result.data.email,
+            password: result.data.password,
+            portal: 'BUILDER',
+          }).unwrap()
+        : await signInMutation({
+            email: result.data.email,
+            password: result.data.password,
+          }).unwrap();
+      completeSignIn(response);
     } catch (error: unknown) {
-      const message =
-        error && typeof error === 'object' && 'data' in error
-          ? (error as { data?: { message?: string } }).data?.message
-          : error instanceof Error
-            ? error.message
-            : "Sign in failed. Please check your email and password.";
+      failSignIn(error, "Sign in failed. Please check your email and password.");
+    }
+  };
+
+  const handleRequestOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setValidationErrors({});
+    setNoSeat(null);
+
+    const result = otpEmailSchema.safeParse({ email: otpEmail });
+    if (!result.success) {
+      setValidationErrors({ otpEmail: result.error.errors[0]?.message || 'Invalid email' });
       toast({
-        title: "Sign in failed",
-        description: String(message),
+        title: "Validation Error",
+        description: result.error.errors[0]?.message || "Please enter a valid email",
         variant: "destructive"
       });
+      return;
+    }
+
+    try {
+      await requestLoginOtp({ email: result.data.email }).unwrap();
+      setOtpEmail(result.data.email);
+      setOtpCode('');
+      setOtpCodeSent(true);
+      toast({
+        title: "Code sent",
+        description: "If that email has an account, a 6-digit code is on its way."
+      });
+    } catch (error: unknown) {
+      toast({
+        title: "Error",
+        description: errorMessage(error, "Failed to send the code. Please try again."),
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setValidationErrors({});
+    setNoSeat(null);
+
+    const result = otpCodeSchema.safeParse({ otp: otpCode });
+    if (!result.success) {
+      setValidationErrors({ otp: result.error.errors[0]?.message || 'Invalid code' });
+      toast({
+        title: "Validation Error",
+        description: result.error.errors[0]?.message || "Please enter the 6-digit code",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const response = await verifyLoginOtp({
+        email: otpEmail,
+        otp: result.data.otp,
+        portal: 'BUILDER',
+      }).unwrap();
+      completeSignIn(response);
+    } catch (error: unknown) {
+      failSignIn(error, "That code didn't work. Please check it or request a new one.");
     }
   };
 
@@ -157,23 +263,73 @@ const Auth = () => {
         title: "Reset link sent",
         description: "Check your email for password reset instructions."
       });
-      setShowForgotPassword(false);
+      setView('signin');
       setForgotPasswordEmail('');
     } catch (error: unknown) {
-      const message =
-        error && typeof error === 'object' && 'data' in error
-          ? (error as { data?: { message?: string } }).data?.message
-          : error instanceof Error
-            ? error.message
-            : "Failed to send reset link.";
       toast({
         title: "Error",
-        description: String(message),
+        description: errorMessage(error, "Failed to send reset link."),
         variant: "destructive"
       });
     }
   };
 
+  const openOtpView = () => {
+    setValidationErrors({});
+    setNoSeat(null);
+    setOtpEmail((current) => current || signInData.email);
+    setOtpCodeSent(false);
+    setOtpCode('');
+    setView('otp');
+  };
+
+  const backToSignIn = () => {
+    setValidationErrors({});
+    setNoSeat(null);
+    setView('signin');
+  };
+
+  // One "Open {portal}" link per portal the person can use; a person with two
+  // seats on the same portal gets one link, not two.
+  const otherPortalLinks = (() => {
+    if (!noSeat) return [];
+    const seen = new Set<string>();
+    const links: { portalUrl: string; portalLabel: string }[] = [];
+    for (const seat of noSeat.availableSeats ?? []) {
+      if (!seat.portalUrl || seen.has(seat.portalUrl)) continue;
+      seen.add(seat.portalUrl);
+      links.push({ portalUrl: seat.portalUrl, portalLabel: seat.portalLabel });
+    }
+    return links;
+  })();
+
+  const noSeatNotice = noSeat && (
+    <div
+      role="alert"
+      className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900 space-y-2"
+    >
+      <p className="font-medium">Your account doesn't have access to the Build portal.</p>
+      {otherPortalLinks.length > 0 ? (
+        <>
+          <p className="text-amber-800">You can sign in to the portal you do have access to:</p>
+          <div className="flex flex-col gap-1.5">
+            {otherPortalLinks.map((link) => (
+              <a
+                key={link.portalUrl}
+                href={link.portalUrl}
+                className="inline-flex items-center gap-1.5 font-medium underline underline-offset-2 hover:text-amber-950"
+              >
+                Open {link.portalLabel}
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              </a>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="text-amber-800">Contact your organization administrator if you need access.</p>
+      )}
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -200,8 +356,8 @@ const Auth = () => {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 onClick={handleRequestAccess}
                 className="text-white/90 hover:text-white hover:bg-white/10 bg-transparent"
               >
@@ -227,12 +383,12 @@ const Auth = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {sessionExpired && !showForgotPassword && (
+              {sessionExpired && view !== 'forgot' && (
                 <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                   Your session timed out. This isn't a password problem — please sign in again.
                 </p>
               )}
-              {showForgotPassword ? (
+              {view === 'forgot' && (
                 <div className="space-y-4">
                   <div className="text-center">
                     <h3 className="text-lg font-semibold">Reset Password</h3>
@@ -255,22 +411,141 @@ const Auth = () => {
                           required
                         />
                       </div>
+                      {validationErrors.forgotEmail && (
+                        <p className="text-sm text-destructive">{validationErrors.forgotEmail}</p>
+                      )}
                     </div>
                     <Button type="submit" className="w-full" disabled={isSendingResetLink}>
                       {isSendingResetLink ? "Sending..." : "Send Reset Link"}
                     </Button>
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      className="w-full" 
-                      onClick={() => setShowForgotPassword(false)}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full"
+                      onClick={backToSignIn}
                     >
                       Back to Sign In
                     </Button>
                   </form>
                 </div>
-              ) : (
+              )}
+              {view === 'otp' && !otpCodeSent && (
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold">Sign in with a code</h3>
+                    <p className="text-muted-foreground text-sm">
+                      Enter your email address and we'll send you a one-time code.
+                    </p>
+                  </div>
+                  {noSeatNotice}
+                  <form onSubmit={handleRequestOtp} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="otp-email">Email</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="otp-email"
+                          type="email"
+                          placeholder="your@email.com"
+                          className="pl-10"
+                          value={otpEmail}
+                          onChange={(e) => setOtpEmail(e.target.value)}
+                          autoFocus
+                          required
+                        />
+                      </div>
+                      {validationErrors.otpEmail && (
+                        <p className="text-sm text-destructive">{validationErrors.otpEmail}</p>
+                      )}
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isSendingOtp}>
+                      {isSendingOtp ? "Sending..." : "Send Code"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full"
+                      onClick={backToSignIn}
+                    >
+                      Back to Sign In
+                    </Button>
+                  </form>
+                </div>
+              )}
+              {view === 'otp' && otpCodeSent && (
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold">Check your email</h3>
+                    <p className="text-muted-foreground text-sm">
+                      We sent a 6-digit code to <span className="font-medium text-foreground">{otpEmail}</span>.
+                      It expires in a few minutes.
+                    </p>
+                  </div>
+                  {noSeatNotice}
+                  <form onSubmit={handleVerifyOtp} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="otp-code">Code</Label>
+                      <div className="relative">
+                        <KeyRound className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="otp-code"
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          pattern="[0-9]*"
+                          maxLength={6}
+                          placeholder="123456"
+                          className="pl-10 tracking-[0.3em]"
+                          value={otpCode}
+                          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          autoFocus
+                          required
+                        />
+                      </div>
+                      {validationErrors.otp && (
+                        <p className="text-sm text-destructive">{validationErrors.otp}</p>
+                      )}
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isVerifyingOtp}>
+                      {isVerifyingOtp ? "Signing in..." : "Verify and Sign In"}
+                    </Button>
+                    <div className="flex items-center justify-between">
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="px-0 text-sm text-muted-foreground"
+                        disabled={isSendingOtp}
+                        onClick={(e) => void handleRequestOtp(e)}
+                      >
+                        {isSendingOtp ? "Sending..." : "Resend code"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="px-0 text-sm text-muted-foreground"
+                        onClick={() => {
+                          setValidationErrors({});
+                          setNoSeat(null);
+                          setOtpCodeSent(false);
+                        }}
+                      >
+                        Use a different email
+                      </Button>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full"
+                      onClick={backToSignIn}
+                    >
+                      Use password instead
+                    </Button>
+                  </form>
+                </div>
+              )}
+              {view === 'signin' && (
                 <form onSubmit={handleSignIn} className="space-y-4">
+                  {noSeatNotice}
                   <div className="space-y-2">
                     <Label htmlFor="signin-email">Email</Label>
                     <div className="relative">
@@ -310,15 +585,29 @@ const Auth = () => {
                   <Button type="submit" className="w-full" disabled={isSigningIn}>
                     {isSigningIn ? "Signing in..." : "Sign In"}
                   </Button>
-                  <div className="text-center">
-                    <Button 
-                      type="button" 
-                      variant="link" 
+                  <div className="flex flex-col items-center gap-1 sm:flex-row sm:justify-between">
+                    <Button
+                      type="button"
+                      variant="link"
                       className="text-sm text-muted-foreground"
-                      onClick={() => setShowForgotPassword(true)}
+                      onClick={() => {
+                        setValidationErrors({});
+                        setNoSeat(null);
+                        setView('forgot');
+                      }}
                     >
                       Forgot your password?
                     </Button>
+                    {UNIFIED_AUTH && (
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="text-sm text-muted-foreground"
+                        onClick={openOtpView}
+                      >
+                        Email me a code instead
+                      </Button>
+                    )}
                   </div>
                 </form>
               )}
@@ -347,9 +636,9 @@ const Auth = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center">
-              <img 
-                src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png" 
-                alt="EG BuildOS Logo" 
+              <img
+                src="/lovable-uploads/ead1c60a-bfad-4629-8a2b-b9a96ad2a53d.png"
+                alt="EG BuildOS Logo"
                 className="h-8 w-8 rounded mr-3"
               />
               <div>
@@ -361,8 +650,8 @@ const Auth = () => {
               © {new Date().getFullYear()} Entitle Guard. All rights reserved.
             </p>
             <div className="flex items-center gap-6">
-              <a 
-                href="mailto:support@entitleguard.com" 
+              <a
+                href="mailto:support@entitleguard.com"
                 className="text-slate-400 hover:text-white transition-colors text-sm"
               >
                 support@entitleguard.com

@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { USER_DATA_EVENT, useOrganization } from "@/hooks/useOrganization";
 import { clearSession, revokeSession } from "@/lib/auth/session";
+import { builderSessionAdapter } from "@/lib/auth/portalAdapter";
+import { PortalSwitcher } from "@/components/PortalSwitcher";
 import { openWelcomeGuide } from "@/components/onboarding/welcomeGuide";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import OrganizationSelector from "@/components/OrganizationSelector";
@@ -134,6 +136,15 @@ const Header = () => {
     } else {
       signOut();
     }
+  };
+
+  // Unified sign-in — "Sign out of all portals" from the PortalSwitcher. By the
+  // time this runs the shared helper has already revoked every refresh session
+  // server-side and cleared this window's storage through the adapter, so only
+  // the local cleanup that Sign Out does after clearSession() remains.
+  const handleSignedOutEverywhere = () => {
+    window.dispatchEvent(new Event(USER_DATA_EVENT));
+    navigate("/auth", { replace: true });
   };
 
   // Flat list used for the mobile drawer — respects the same visibility flags.
@@ -447,6 +458,14 @@ const Header = () => {
                       )}
                     </Link>
                   </Button>
+                )}
+
+                {/* Unified sign-in — renders nothing for single-seat users. */}
+                {hasBuilderAuth() && (
+                  <PortalSwitcher
+                    adapter={builderSessionAdapter}
+                    onSignedOutEverywhere={handleSignedOutEverywhere}
+                  />
                 )}
 
                 <Button variant="outline" size="sm" onClick={handleSignOut}>

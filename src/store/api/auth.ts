@@ -9,6 +9,19 @@ import type {
   SendVerifyMailRequest,
   SetPasswordForUserRequest
 } from '@/lib/api/types.ts';
+import type { PortalKey, SessionEnvelope } from '@/lib/auth/portalSession';
+
+export interface UnifiedSignInRequest {
+  email: string;
+  password: string;
+  portal: PortalKey;
+}
+
+export interface VerifyLoginOtpRequest {
+  email: string;
+  otp: string;
+  portal: PortalKey;
+}
 
 export const authApi = api.injectEndpoints({
   endpoints: (build) => ({
@@ -31,10 +44,43 @@ export const authApi = api.injectEndpoints({
       invalidatesTags: ['Auth'],
     }),
 
-    // Sign in
+    // Sign in — legacy builder-only endpoint. Kept for VITE_UNIFIED_AUTH="false"
+    // (one release of rollback safety); the unified path below is the default.
     signIn: build.mutation<AuthResponse, SignInRequest>({
       query: (data) => ({
         url: '/unsecure/builderlogin',
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Auth'],
+    }),
+
+    // Unified sign-in (one set of credentials across portals). The response
+    // `data` is today's AuthTokenResponse plus additive `seat`, `org`, `seats`.
+    // 403 with `code: "NO_SEAT_FOR_PORTAL"` when the person is genuine but has
+    // no BUILDER seat.
+    unifiedSignIn: build.mutation<SessionEnvelope, UnifiedSignInRequest>({
+      query: (data) => ({
+        url: '/unsecure/auth/login',
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Auth'],
+    }),
+
+    // "Email me a code instead" — step 1: request a one-time code.
+    requestLoginOtp: build.mutation<{ success: boolean; message: string }, { email: string }>({
+      query: (data) => ({
+        url: '/unsecure/auth/otp',
+        method: 'POST',
+        body: data,
+      }),
+    }),
+
+    // "Email me a code instead" — step 2: exchange the code for a session.
+    verifyLoginOtp: build.mutation<SessionEnvelope, VerifyLoginOtpRequest>({
+      query: (data) => ({
+        url: '/unsecure/auth/verify',
         method: 'POST',
         body: data,
       }),
@@ -129,6 +175,9 @@ export const {
   useGetProfileQuery,
   useSignUpMutation,
   useSignInMutation,
+  useUnifiedSignInMutation,
+  useRequestLoginOtpMutation,
+  useVerifyLoginOtpMutation,
   useSignOutMutation,
   useResetPasswordWithTokenMutation,
   useUpdatePasswordMutation,

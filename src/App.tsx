@@ -11,6 +11,8 @@ import ModuleGate from "@/components/ModuleGate";
 import { BUILDER_ROLES } from "@/lib/roles";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import AuthCallback from "./pages/AuthCallback";
+import { builderSessionAdapter } from "@/lib/auth/portalAdapter";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/RoleDashboard";
 import Registrations from "./pages/Registrations";
@@ -167,6 +169,11 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
+              {/* Unified sign-in — portal-switcher handoff landing (public). */}
+              <Route
+                path="/auth/callback"
+                element={<AuthCallback adapter={builderSessionAdapter} home="/dashboard" loginPath="/auth" />}
+              />
               <Route path="/signup" element={<Signup />} />
               <Route path="/auth/resetPassword" element={<ResetPassword />} />
               <Route path="/dashboard" element={

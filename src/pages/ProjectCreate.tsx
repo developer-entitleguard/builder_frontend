@@ -237,8 +237,16 @@ const ProjectCreate = () => {
     // Commercial/mixed-use: the NCC class lives per building part, so send a
     // commercial property_type and no residential building_class; the commercial
     // workspace captures the rest.
+    // "commercial" is outside the residential PropertyType union on purpose: the
+    // backend accepts it for COMMERCIAL / MIXED_USE projects.
     const payload: CreateProjectData = isCommercial
-      ? { ...formData, property_type: 'commercial', building_class: null, dwelling_count: null, auto_generate: false }
+      ? ({
+          ...formData,
+          property_type: 'commercial',
+          building_class: null,
+          dwelling_count: null,
+          auto_generate: false,
+        } as unknown as CreateProjectData)
       : formData;
     const projectId = await createProject(payload);
 
@@ -264,7 +272,7 @@ const ProjectCreate = () => {
       setIsGenerating(true);
       // Only generate activities when the org actually has the Activities module;
       // compliance always generates. (Backend enforces the same gate.)
-      const tasks = [generateCompliance({ projectId, prompt }).unwrap()];
+      const tasks: Promise<unknown>[] = [generateCompliance({ projectId, prompt }).unwrap()];
       if (hasModule("ACTIVITIES")) {
         tasks.push(generateActivities({ projectId, prompt }).unwrap());
       }

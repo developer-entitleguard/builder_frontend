@@ -29,6 +29,14 @@ export interface RichTextEditorProps {
   disabled?: boolean;
   placeholder?: string;
   className?: string;
+  /**
+   * "full" (default) mirrors the org-T&C allowlist. "minimal" is for the
+   * builder handover message: bold, italic, underline, lists and links only —
+   * headings, quotes and rules are disabled in the schema, not just hidden.
+   */
+  variant?: "full" | "minimal";
+  /** Editor min-height class; defaults differ by variant. */
+  minHeightClassName?: string;
 }
 
 export function RichTextEditor({
@@ -37,10 +45,18 @@ export function RichTextEditor({
   disabled,
   placeholder,
   className,
+  variant = "full",
+  minHeightClassName,
 }: RichTextEditorProps) {
+  const minimal = variant === "minimal";
+  const minH = minHeightClassName ?? (minimal ? "min-h-[160px]" : "min-h-[280px]");
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3, 4] } }),
+      StarterKit.configure(
+        minimal
+          ? { heading: false, blockquote: false, horizontalRule: false, codeBlock: false, code: false, strike: false }
+          : { heading: { levels: [1, 2, 3, 4] } },
+      ),
       Underline,
       Link.configure({
         openOnClick: false,
@@ -52,8 +68,10 @@ export function RichTextEditor({
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
     editorProps: {
       attributes: {
-        class:
-          "prose prose-sm max-w-none min-h-[280px] p-3 focus:outline-none [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base",
+        class: cn(
+          "prose prose-sm max-w-none p-3 focus:outline-none [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base",
+          minH,
+        ),
       },
     },
   });
@@ -110,21 +128,25 @@ export function RichTextEditor({
   return (
     <div className={cn("rounded-md border bg-background", className)}>
       <div className="flex flex-wrap items-center gap-1 border-b p-1">
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-          active={editor.isActive("heading", { level: 1 })}
-          label="Heading 1"
-        >
-          <Heading1 className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          active={editor.isActive("heading", { level: 2 })}
-          label="Heading 2"
-        >
-          <Heading2 className="h-4 w-4" />
-        </ToolbarButton>
-        <span className="mx-1 h-5 w-px bg-border" />
+        {!minimal && (
+          <>
+            <ToolbarButton
+              onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+              active={editor.isActive("heading", { level: 1 })}
+              label="Heading 1"
+            >
+              <Heading1 className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+              active={editor.isActive("heading", { level: 2 })}
+              label="Heading 2"
+            >
+              <Heading2 className="h-4 w-4" />
+            </ToolbarButton>
+            <span className="mx-1 h-5 w-px bg-border" />
+          </>
+        )}
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           active={editor.isActive("bold")}
@@ -161,20 +183,24 @@ export function RichTextEditor({
         >
           <ListOrdered className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          active={editor.isActive("blockquote")}
-          label="Block quote"
-        >
-          <QuoteIcon className="h-4 w-4" />
-        </ToolbarButton>
+        {!minimal && (
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            active={editor.isActive("blockquote")}
+            label="Block quote"
+          >
+            <QuoteIcon className="h-4 w-4" />
+          </ToolbarButton>
+        )}
         <span className="mx-1 h-5 w-px bg-border" />
         <ToolbarButton onClick={promptForLink} active={editor.isActive("link")} label="Link">
           <Link2 className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton onClick={() => editor.chain().focus().setHorizontalRule().run()} label="Horizontal rule">
-          <Minus className="h-4 w-4" />
-        </ToolbarButton>
+        {!minimal && (
+          <ToolbarButton onClick={() => editor.chain().focus().setHorizontalRule().run()} label="Horizontal rule">
+            <Minus className="h-4 w-4" />
+          </ToolbarButton>
+        )}
       </div>
       <EditorContent editor={editor} placeholder={placeholder} />
     </div>

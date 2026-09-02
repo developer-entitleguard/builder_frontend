@@ -21,6 +21,8 @@ interface Organization {
   created_by?: string | null;
   status?: string | null;
   updated_at?: string;
+  /** Builder branding logo file id from the login payload (may be stale after an upload; Header prefers the branding query). */
+  brandingLogoFileId?: string | null;
 }
 
 interface UserOrganizationRole {
@@ -124,6 +126,7 @@ export const OrganizationProvider = ({ children }: { children: React.ReactNode }
           contact_phone: org.contact ?? org.contact_phone ?? "",
           abn: org.abn ?? null,
           description: org.description ?? null,
+          brandingLogoFileId: org.brandingLogoFileId ?? org.branding_logo_file_id ?? null,
         };
       } else {
         // JWT present but no org: use placeholder so dashboard still shows

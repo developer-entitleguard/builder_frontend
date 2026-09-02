@@ -46,11 +46,14 @@ const BASE = "/api/b/v1/customer";
 export const customersApi = api.injectEndpoints({
   endpoints: (build) => ({
     getCustomers: build.query<SalesCustomerDto[], { q?: string } | void>({
-      query: (arg) => ({
-        url: BASE,
-        method: "GET",
-        params: arg?.q ? { q: arg.q } : undefined,
-      }),
+      query: (arg) => {
+        const q = (arg as { q?: string } | undefined)?.q;
+        return {
+          url: BASE,
+          method: "GET",
+          params: q ? { q } : undefined,
+        };
+      },
       providesTags: ["Customer"],
     }),
     getCustomer: build.query<SalesCustomerDto, string>({

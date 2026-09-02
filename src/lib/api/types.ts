@@ -315,6 +315,33 @@ export interface BuilderOrganization {
   isActive: boolean;
   workingHoursStart?: string | null; // HH:mm:ss
   workingHoursEnd?: string | null;
+  /** Read-only. Render via viewPhotoUrl(id). Null = no logo. */
+  brandingLogoFileId?: string | null;
+}
+
+// EngineeringPlan_Builder_Branding_And_Handover_Email §2.7
+export interface BuilderBrandingLimits {
+  logoMaxBytes: number;
+  logoFormats: string[];
+  logoMinWidth: number;
+  logoMinHeight: number;
+  logoMaxDimension: number;
+  messageMaxChars: number;
+}
+
+export interface BuilderBranding {
+  logoFileId: string | null;
+  logoUrl: string | null;
+  /** Effective message HTML (custom or default). */
+  handoverMessageHtml: string;
+  isDefaultHandoverMessage: boolean;
+  defaultHandoverMessageHtml: string;
+  limits: BuilderBrandingLimits;
+}
+
+export interface HandoverEmailPreview {
+  subject: string;
+  html: string;
 }
 
 export interface UpdateBuilderOrganizationRequest {

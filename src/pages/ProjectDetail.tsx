@@ -225,10 +225,11 @@ const ProjectDetail = () => {
       } else {
         toast({ title: res.message || "Could not delete project", variant: "destructive" });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = (err as { data?: { message?: string } } | undefined)?.data?.message;
       toast({
         title: "Could not delete project",
-        description: err?.data?.message ?? "Please try again.",
+        description: message ?? "Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -325,7 +326,7 @@ const ProjectDetail = () => {
     const success = await updateProject(id, finalData);
 
     if (success) {
-      const newStatus = finalData.status ?? project.status ?? "";
+      const newStatus: ProjectStatus = finalData.status ?? project.status;
       const normalizedNew = newStatus.toLowerCase().replace(/[\s_]/g, "");
       const newStatusId = finalData.statusId ??
         (normalizedNew

@@ -8,6 +8,7 @@ import { clearSession, revokeSession } from "@/lib/auth/session";
 import { openWelcomeGuide } from "@/components/onboarding/welcomeGuide";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import OrganizationSelector from "@/components/OrganizationSelector";
+import { BuilderLogo } from "@/components/BuilderLogo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -225,8 +226,9 @@ const Header = () => {
                 {hasMultipleOrgs && <OrganizationSelector />}
 
                 {currentOrganization && !hasMultipleOrgs && (
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    {currentOrganization.name}
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <BuilderLogo skip={!isAuthenticated} />
+                    <span className="truncate max-w-[180px]">{currentOrganization.name}</span>
                   </div>
                 )}
 
@@ -466,7 +468,8 @@ const Header = () => {
                       <SheetTitle>Menu</SheetTitle>
                     </SheetHeader>
                     {currentOrganization && (
-                      <div className="text-sm text-muted-foreground py-2 border-b">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground py-2 border-b">
+                        <BuilderLogo skip={!isAuthenticated} className="h-7" />
                         <span className="truncate">{currentOrganization.name}</span>
                       </div>
                     )}

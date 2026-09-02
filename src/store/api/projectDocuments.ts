@@ -1,3 +1,4 @@
+import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { getApiBaseUrl } from "@/lib/config";
 import { api } from "./apiSlice";
 import type {
@@ -63,7 +64,7 @@ async function postFolder<T>(
   path: string,
   files: File[],
   relativePaths: string[],
-): Promise<{ data: T } | { error: { status: number | string; data?: string; error?: string } }> {
+): Promise<{ data: T } | { error: FetchBaseQueryError }> {
   try {
     const form = new FormData();
     files.forEach((file, i) => {
@@ -83,7 +84,7 @@ async function postFolder<T>(
     return { data: (await res.json()) as T };
   } catch (e) {
     return {
-      error: { status: "CUSTOM_ERROR", error: e instanceof Error ? e.message : "Unknown" },
+      error: { status: "CUSTOM_ERROR", error: e instanceof Error ? e.message : "Unknown" } as FetchBaseQueryError,
     };
   }
 }

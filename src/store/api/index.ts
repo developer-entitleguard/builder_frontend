@@ -136,5 +136,8 @@ export * from './quotes';
 export * from './invoices';
 export * from './customers';
 
+// Builder branding (logo + handover email message)
+export * from './builderBranding';
+
 // Re-export types
 export type * from '@/lib/api/types';

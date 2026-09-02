@@ -8,12 +8,13 @@ import { OrganizationDetails } from "@/components/admin/OrganizationDetails";
 import { UserManagement } from "@/components/admin/UserManagement";
 import VendorManagement from "@/components/admin/VendorManagement";
 import SupplierManagement from "@/components/admin/SupplierManagement";
+import { BrandingSettings } from "@/components/admin/BrandingSettings";
 import { Shield, ArrowLeft } from "lucide-react";
 // Terms & Conditions used to be a fifth tab here; it now lives at the
 // top-level Catalog → Terms & Conditions route. See PRD_Org_Terms_And_Conditions.
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-const ADMIN_TABS = ["organization", "users", "vendors", "suppliers"] as const;
+const ADMIN_TABS = ["organization", "branding", "users", "vendors", "suppliers"] as const;
 
 export default function Admin() {
   const { organization, userRole, loading, isAdmin } = useOrganization();
@@ -67,8 +68,9 @@ export default function Admin() {
       </div>
 
       <Tabs defaultValue={initialTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-4 h-auto">
+        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-5 h-auto">
           <TabsTrigger value="organization">Organization Details</TabsTrigger>
+          <TabsTrigger value="branding">Branding &amp; Handover</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>
           <TabsTrigger value="vendors">Vendor Management</TabsTrigger>
           <TabsTrigger value="suppliers">Supplier Management</TabsTrigger>
@@ -83,6 +85,10 @@ export default function Admin() {
               <OrganizationDetails organization={organization} />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="branding" className="space-y-4">
+          <BrandingSettings organizationName={organization?.name} />
         </TabsContent>
 
         <TabsContent value="users" className="space-y-4">

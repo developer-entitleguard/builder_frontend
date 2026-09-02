@@ -188,6 +188,7 @@ const ItemsManagement = () => {
       price: string | null;
       documentationUrl: string | null;
       purchaser: string | null;
+      supplierId?: string | null;
       warranty?: number | string | null;
       builderItemFiles?: Array<{
         id: string;
@@ -267,6 +268,7 @@ const ItemsManagement = () => {
       documentation_url: "",
       notes: "",
       purchaser: "",
+      supplierId: "",
       warranty_years: "",
       manual_url: ""
     });

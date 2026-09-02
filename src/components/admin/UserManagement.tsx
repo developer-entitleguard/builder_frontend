@@ -167,7 +167,11 @@ export function UserManagement({ organizationId }: UserManagementProps) {
       email: user.email,
       contact_person: user.contact_person || "",
       phone: user.phone || "",
-      role: user.role,
+      // Vendor roles are never listed here (filtered on load), but the form's
+      // enum is the 3 staff roles, so narrow defensively.
+      role: (BUILDER_ROLE_VALUES as readonly BuilderRole[]).includes(user.role)
+        ? (user.role as (typeof BUILDER_ROLE_VALUES)[number])
+        : BUILDER_ROLES.PROJECT_MANAGER,
     });
     setIsAddDialogOpen(true);
   };

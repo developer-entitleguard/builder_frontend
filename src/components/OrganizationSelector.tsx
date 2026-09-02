@@ -7,6 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Building2 } from "lucide-react";
+import { viewPhotoUrl } from "@/lib/api/services/files";
 
 const OrganizationSelector = () => {
   const { 
@@ -33,6 +34,13 @@ const OrganizationSelector = () => {
         {organizations.map((orgRole) => (
           <SelectItem key={orgRole.organization.id} value={orgRole.organization.id}>
             <div className="flex items-center gap-2">
+              {orgRole.organization.brandingLogoFileId && (
+                <img
+                  src={viewPhotoUrl(orgRole.organization.brandingLogoFileId)}
+                  alt=""
+                  className="h-5 w-auto max-w-[60px] object-contain"
+                />
+              )}
               <span>{orgRole.organization.name}</span>
               <span className="text-xs text-muted-foreground capitalize">
                 ({orgRole.role})

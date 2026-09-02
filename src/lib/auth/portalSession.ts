@@ -145,8 +145,13 @@ export async function signOutEverywhere(adapter: PortalSessionAdapter): Promise<
 /**
  * Opens a seat. Same portal → redeem in place and reload (storage is per
  * origin, so the two seats cannot coexist in one window). Other portal → a
- * new window. The blank window is opened synchronously in the click handler
- * so popup blockers allow it; its location is set once the handoff resolves.
+ * new window.
+ *
+ * The window is opened synchronously in the click handler so popup blockers
+ * allow it, and pointed at the handoff URL once the request resolves. It must
+ * NOT be opened with `noopener`: browsers then return no handle, so the page
+ * could never navigate it and the viewer was left staring at about:blank.
+ * The opener link is severed by hand instead, before the navigation.
  */
 export async function openSeat(adapter: PortalSessionAdapter, seat: Seat, returnTo?: string): Promise<void> {
   if (seatOpensHere(seat, adapter.portal)) {
@@ -157,13 +162,29 @@ export async function openSeat(adapter: PortalSessionAdapter, seat: Seat, return
     window.location.assign(returnTo && returnTo.startsWith("/") ? returnTo : "/");
     return;
   }
-  const popup = window.open("", "_blank", "noopener");
+  const popup = window.open("about:blank", "_blank");
+  if (popup) {
+    popup.opener = null;
+    try {
+      popup.document.title = `Opening ${seat.portalLabel}…`;
+      popup.document.body.innerHTML =
+        '<p style="font:15px system-ui,sans-serif;color:#555;padding:24px">Opening ' +
+        seat.portalLabel.replace(/[<>&]/g, "") +
+        "…</p>";
+    } catch {
+      // Cross-origin quirks on some browsers; the navigation below still works.
+    }
+  }
   try {
     const handoff = await requestHandoff(adapter, seat.seatId);
-    if (popup) {
-      popup.location.href = handoff.url;
+    if (popup && !popup.closed) {
+      popup.location.replace(handoff.url);
     } else {
-      window.open(handoff.url, "_blank", "noopener");
+      // The blocker ate the window: fall back to a plain open, which some
+      // browsers still allow shortly after a click.
+      const fallback = window.open(handoff.url, "_blank");
+      if (fallback) fallback.opener = null;
+      else window.location.assign(handoff.url);
     }
   } catch (e) {
     popup?.close();

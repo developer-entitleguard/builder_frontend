@@ -16,6 +16,7 @@ import { builderSessionAdapter } from "@/lib/auth/portalAdapter";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/RoleDashboard";
 import Registrations from "./pages/Registrations";
+import CommercialBusinesses from "./pages/CommercialBusinesses";
 import Onboarding from "./pages/Onboarding";
 import ItemsManagement from "./pages/ItemsManagement";
 import QueriesManagement from "./pages/QueriesManagement";
@@ -195,6 +196,18 @@ const App = () => (
                     BUILDER_ROLES.CUSTOMER_SUPPORT,
                   ]}>
                     <Registrations />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              {/* Commercial Business directory — the entities commercial projects hand
+                  over to. Gated on commercial segment access inside the page. */}
+              <Route path="/businesses" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[
+                    BUILDER_ROLES.ADMINISTRATOR,
+                    BUILDER_ROLES.PROJECT_MANAGER,
+                  ]}>
+                    <CommercialBusinesses />
                   </RoleGate>
                 </ProtectedRoute>
               } />

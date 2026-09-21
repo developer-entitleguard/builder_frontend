@@ -82,6 +82,7 @@ Use `useOrganization().builderRole` for the precise role; the legacy `currentRol
 ### New routes by role
 
 - `/dashboard` — role-routed via `pages/RoleDashboard.tsx`.
+- `/businesses` — Commercial Business directory (Project Manager + Admin; commercial-segment orgs only). Also embedded as the Businesses tab on `/registrations`, which shows Residential | Commercial | Businesses segment tabs for commercial orgs.
 - `/projects/import` — bulk project CSV upload (Project Manager + Admin).
 - `/tickets`, `/tickets/:id` — receptionist ticket triage / convert-to-query (Customer Support + Admin).
 - `/my-schedule` — internal vendor self-service calendar.

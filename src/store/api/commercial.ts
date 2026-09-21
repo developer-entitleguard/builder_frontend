@@ -91,8 +91,11 @@ export interface CommercialBusiness {
   registeredPostcode?: string | null;
   registeredCountry?: string | null;
   industryDivision?: string | null;
+  parentBrand?: string | null;
+  parentBusinessId?: string | null;
   origin?: string;
   isActive?: boolean;
+  createdAt?: string | null;
   contacts?: BusinessContact[];
 }
 
@@ -110,6 +113,12 @@ export interface CommercialRegistration {
   allowDuplicateBusiness?: boolean;
   businessName?: string | null;
   status?: string;
+  /** Handover lifecycle (HANDED_OVER | IN_DLP | DLP_COMPLETE | ARCHIVED); null until handed over. */
+  lifecycle?: string | null;
+  dlpEndDate?: string | null;
+  // Org-wide directory rows carry their project identity.
+  projectName?: string | null;
+  projectAddress?: string | null;
 }
 
 export interface CommercialAssetDocument {
@@ -201,6 +210,8 @@ interface ListEnvelope<T> {
 
 const projectTag = (projectId: string) => ({ type: 'Commercial' as const, id: `project:${projectId}` });
 const regTag = (id: string) => ({ type: 'Commercial' as const, id: `reg:${id}` });
+// Org-wide registrations directory (the Registrations page's Commercial tab).
+const orgRegsTag = { type: 'Commercial' as const, id: 'org-registrations' };
 // Per checklist-document tag — scopes the attachment list to one row.
 const docTag = (id: string) => ({ type: 'Commercial' as const, id: `cdoc:${id}` });
 
@@ -279,10 +290,16 @@ export const commercialApi = api.injectEndpoints({
       query: (projectId) => ({ url: `/api/builder/commercial/projects/${projectId}/registrations`, method: 'GET' }),
       providesTags: (_r, _e, projectId) => [projectTag(projectId)],
     }),
+    // Org-wide: every registration across the org's commercial projects, enriched
+    // with project identity, business name and handover state.
+    listOrgCommercialRegistrations: build.query<CommercialRegistration[], void>({
+      query: () => ({ url: `/api/builder/commercial/registrations`, method: 'GET' }),
+      providesTags: [orgRegsTag],
+    }),
     createCommercialRegistration: build.mutation<CommercialRegistration, { projectId: string; body: CommercialRegistration }>({
       query: ({ projectId, body }) => ({ url: `/api/builder/commercial/projects/${projectId}/registrations`, method: 'POST', body }),
       // A new registration may create a business inline (newBusiness) — refresh the business list too.
-      invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId), 'CommercialBusiness'],
+      invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId), 'CommercialBusiness', orgRegsTag],
     }),
     getCommercialRegistration: build.query<CommercialRegistration, string>({
       query: (id) => ({ url: `/api/builder/commercial/registrations/${id}`, method: 'GET' }),
@@ -292,7 +309,7 @@ export const commercialApi = api.injectEndpoints({
       query: ({ id, body }) => ({ url: `/api/builder/commercial/registrations/${id}`, method: 'PUT', body }),
       // Also refresh the project-scoped registrations list, not just this row.
       invalidatesTags: (result, _e, { id }) =>
-        result?.projectId ? [regTag(id), projectTag(result.projectId)] : [regTag(id)],
+        result?.projectId ? [regTag(id), projectTag(result.projectId), orgRegsTag] : [regTag(id), orgRegsTag],
     }),
     tagRegistrationBusiness: build.mutation<CommercialRegistration, { id: string; body: CommercialRegistration }>({
       query: ({ id, body }) => ({ url: `/api/builder/commercial/registrations/${id}/business`, method: 'PUT', body }),
@@ -300,8 +317,8 @@ export const commercialApi = api.injectEndpoints({
       // may have created a business inline — refresh all three.
       invalidatesTags: (result, _e, { id }) =>
         result?.projectId
-          ? [regTag(id), projectTag(result.projectId), 'CommercialBusiness']
-          : [regTag(id), 'CommercialBusiness'],
+          ? [regTag(id), projectTag(result.projectId), 'CommercialBusiness', orgRegsTag]
+          : [regTag(id), 'CommercialBusiness', orgRegsTag],
     }),
 
     // --- Assets (R10) ---
@@ -350,6 +367,38 @@ export const commercialApi = api.injectEndpoints({
       query: (q) => ({ url: `/api/builder/commercial/businesses/search?q=${encodeURIComponent(q)}`, method: 'GET' }),
       providesTags: ['CommercialBusiness'],
     }),
+    getCommercialBusiness: build.query<CommercialBusiness, string>({
+      query: (id) => ({ url: `/api/builder/commercial/businesses/${id}`, method: 'GET' }),
+      providesTags: ['CommercialBusiness'],
+    }),
+    // 409 with { message, duplicates } when the ABN already exists and allowDuplicate=false.
+    createCommercialBusiness: build.mutation<CommercialBusiness, { body: CommercialBusiness; allowDuplicate?: boolean }>({
+      query: ({ body, allowDuplicate }) => ({
+        url: `/api/builder/commercial/businesses${allowDuplicate ? '?allowDuplicate=true' : ''}`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['CommercialBusiness'],
+    }),
+    // Full-record replace of the scalars + upsert of any supplied contacts.
+    updateCommercialBusiness: build.mutation<CommercialBusiness, { id: string; body: CommercialBusiness }>({
+      query: ({ id, body }) => ({ url: `/api/builder/commercial/businesses/${id}`, method: 'PUT', body }),
+      invalidatesTags: ['CommercialBusiness'],
+    }),
+    // Soft archive — the business disappears from tagging but stays on handover records.
+    archiveCommercialBusiness: build.mutation<void, string>({
+      query: (id) => ({ url: `/api/builder/commercial/businesses/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['CommercialBusiness'],
+    }),
+    addBusinessContact: build.mutation<BusinessContact, { businessId: string; body: BusinessContact }>({
+      query: ({ businessId, body }) => ({ url: `/api/builder/commercial/businesses/${businessId}/contacts`, method: 'POST', body }),
+      invalidatesTags: ['CommercialBusiness'],
+    }),
+    // The PRIMARY contact cannot be removed (400) — edit it instead.
+    removeBusinessContact: build.mutation<void, { businessId: string; contactId: string }>({
+      query: ({ businessId, contactId }) => ({ url: `/api/builder/commercial/businesses/${businessId}/contacts/${contactId}`, method: 'DELETE' }),
+      invalidatesTags: ['CommercialBusiness'],
+    }),
 
     // --- Handover (R11/R12) ---
     // NOTE: must NOT be named `getHandoverReadiness` — a residential endpoint of
@@ -370,7 +419,9 @@ export const commercialApi = api.injectEndpoints({
     executeHandover: build.mutation<CommercialHandoverRecord, { registrationId: string; confirmAccuracy: boolean; sendEmail?: boolean }>({
       query: ({ registrationId, ...body }) => ({ url: `/api/builder/commercial/registrations/${registrationId}/handover`, method: 'POST', body }),
       invalidatesTags: (result, _e, { registrationId }) =>
-        result?.projectId ? [regTag(registrationId), projectTag(result.projectId)] : [regTag(registrationId)],
+        result?.projectId
+          ? [regTag(registrationId), projectTag(result.projectId), orgRegsTag]
+          : [regTag(registrationId), orgRegsTag],
     }),
 
     // --- Checklist document delivery: attachments + assign-to-trade ---
@@ -411,6 +462,7 @@ export const {
   useMarkChecklistStatusMutation,
   useGenerateCommercialActivitiesMutation,
   useListCommercialRegistrationsQuery,
+  useListOrgCommercialRegistrationsQuery,
   useCreateCommercialRegistrationMutation,
   useGetCommercialRegistrationQuery,
   useUpdateCommercialRegistrationMutation,
@@ -427,6 +479,12 @@ export const {
   useLazyGetCommercialComplianceCheckQuery,
   useListCommercialBusinessesQuery,
   useSearchCommercialBusinessesQuery,
+  useGetCommercialBusinessQuery,
+  useCreateCommercialBusinessMutation,
+  useUpdateCommercialBusinessMutation,
+  useArchiveCommercialBusinessMutation,
+  useAddBusinessContactMutation,
+  useRemoveBusinessContactMutation,
   useGetCommercialHandoverReadinessQuery,
   useGetHandoverRecordQuery,
   useExecuteHandoverMutation,

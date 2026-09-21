@@ -9,6 +9,9 @@ import {
 import Header from "@/components/Header";
 import { RegistrationTypeDialog } from "@/components/RegistrationTypeDialog";
 import { BulkActionsBar } from "@/components/BulkActionsBar";
+import { CommercialRegistrationsPanel } from "@/components/commercial/CommercialRegistrationsPanel";
+import { BusinessDirectoryContent } from "@/pages/CommercialBusinesses";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -107,6 +110,9 @@ const Registrations = () => {
   const { organization } = useOrganization();
   const navigate = useNavigate();
   const isAuthenticated = !!user || hasBuilderAuth();
+  // Commercial orgs get segment tabs: Residential | Commercial | Businesses.
+  const { segments } = useEntitlements();
+  const [segment, setSegment] = useState<string>("residential");
 
   const [registrations, setRegistrations] = useState<HomeownerRegistration[]>([]);
   const [projects, setProjects] = useState<ProjectRef[]>([]);
@@ -376,10 +382,32 @@ const Registrations = () => {
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-foreground">Registrations</h1>
           <p className="text-muted-foreground mt-1">
-            Manage and track homeowner warranty registrations across your projects.
+            {segment === "residential"
+              ? "Manage and track homeowner warranty registrations across your projects."
+              : "Track commercial handover units and the businesses they hand over to."}
           </p>
         </div>
 
+        {segments.commercial && (
+          <Tabs value={segment} onValueChange={setSegment} className="mb-6">
+            <TabsList>
+              <TabsTrigger value="residential" className="flex items-center gap-2">
+                <Home className="h-4 w-4" /> Residential
+              </TabsTrigger>
+              <TabsTrigger value="commercial" className="flex items-center gap-2">
+                <FolderKanban className="h-4 w-4" /> Commercial
+              </TabsTrigger>
+              <TabsTrigger value="businesses" className="flex items-center gap-2">
+                <Building2 className="h-4 w-4" /> Businesses
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
+
+        {segment === "commercial" && <CommercialRegistrationsPanel />}
+        {segment === "businesses" && <BusinessDirectoryContent />}
+
+        {segment === "residential" && (<>
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -703,6 +731,7 @@ const Registrations = () => {
             </Tabs>
           </CardContent>
         </Card>
+        </>)}
       </main>
 
       <RegistrationTypeDialog

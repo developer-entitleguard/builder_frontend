@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronLeft, ChevronRi
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { getApiBaseUrl } from "@/lib/config";
+import { ENTITY_TYPES } from "@/lib/commercialBusiness";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { useProjectByIdQuery, useUpdateProjectMutation } from "@/store/api/projects";
 import {
@@ -66,8 +67,13 @@ const CommercialProjectWorkspace = () => {
   const navigate = useNavigate();
   const { segments, ready } = useEntitlements();
   const [editOpen, setEditOpen] = useState(false);
-  // Controlled so Setup's "Next" can advance the flow to Building Parts.
-  const [tab, setTab] = useState("setup");
+  // Controlled so Setup's "Next" can advance the flow to Building Parts, and so
+  // deep links (e.g. /projects/:id/commercial?tab=registrations) can pre-select.
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab") ?? "";
+  const [tab, setTab] = useState(
+    ["setup", "parts", "registrations", "checklist", "handover"].includes(requestedTab) ? requestedTab : "setup",
+  );
 
   if (ready && !segments.commercial) {
     return (
@@ -300,15 +306,6 @@ function PartsTab({ projectId }: { projectId: string }) {
 }
 
 // ---- Business selection (R9) ----
-const ENTITY_TYPES: { value: string; label: string }[] = [
-  { value: "COMPANY", label: "Company (Pty Ltd)" },
-  { value: "SOLE_TRADER", label: "Sole trader" },
-  { value: "PARTNERSHIP", label: "Partnership" },
-  { value: "TRUST", label: "Trust" },
-  { value: "INCORPORATED_ASSOCIATION", label: "Incorporated association" },
-  { value: "GOVERNMENT", label: "Government" },
-];
-
 type BusinessSelection = { commercialBusinessId?: string | null; newBusiness?: CommercialBusiness | null };
 
 const NEW_TAG = "__new__";
@@ -401,6 +398,7 @@ function errMessage(e: unknown, fallback: string): string {
 
 // ---- Registrations (R6/R9/R10) ----
 function RegistrationsTab({ projectId }: { projectId: string }) {
+  const navigate = useNavigate();
   const { data: regs } = useListCommercialRegistrationsQuery(projectId);
   const { data: businesses } = useListCommercialBusinessesQuery();
   const [create, { isLoading }] = useCreateCommercialRegistrationMutation();
@@ -429,7 +427,13 @@ function RegistrationsTab({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Registrations (handover units)</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle>Registrations (handover units)</CardTitle>
+          {/* Full view/edit of the business entities lives in the directory. */}
+          <Button variant="outline" size="sm" onClick={() => navigate("/businesses")}>
+            <Building2 className="h-4 w-4 mr-1" /> Manage businesses
+          </Button>
+        </CardHeader>
         <CardContent className="space-y-2">
           {(regs ?? []).length === 0 && <p className="text-sm text-muted-foreground">No registrations yet.</p>}
           {(regs ?? []).map((r) => (
@@ -477,6 +481,9 @@ function RegistrationEditor({ reg, businesses }: { reg: CommercialRegistration; 
 
   const label = reg.scope === "TENANCY" ? reg.tenancyIdentifier || "Tenancy" : "Whole building";
   const taggedName = businesses.find((b) => b.id === reg.commercialBusinessId)?.legalEntityName;
+  // Post-handover lock — mirrors the backend 409 guard: details, business tag and
+  // assets are read-only once a handover record exists.
+  const handedOver = reg.status === "HANDED";
 
   const saveFields = async () => {
     try {
@@ -519,34 +526,59 @@ function RegistrationEditor({ reg, businesses }: { reg: CommercialRegistration; 
           ) : (
             <Badge variant="outline">Untagged</Badge>
           )}
+          {handedOver && <Badge>Handed over</Badge>}
         </span>
         <span className="text-muted-foreground">{reg.status ?? "DRAFT"}</span>
       </button>
 
       {open && (
         <div className="border-t p-3 space-y-4">
+          {handedOver && (
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>
+                Handed over — this registration is read-only.
+                {reg.dlpEndDate && ` In defects liability until ${reg.dlpEndDate}.`}
+              </span>
+            </div>
+          )}
+
           {/* Tenancy details */}
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Details</Label>
-            <div className="flex flex-wrap items-end gap-2">
-              {reg.scope === "TENANCY" && (
-                <Field label="Tenancy identifier"><Input value={tenancyIdentifier} onChange={(e) => setTenancyIdentifier(e.target.value)} placeholder="Shop 1" /></Field>
-              )}
-              <Field label="Level"><Input className="w-24" value={level} onChange={(e) => setLevel(e.target.value)} placeholder="G" /></Field>
-              <Field label="Area (m²)"><Input className="w-28" type="number" value={area} onChange={(e) => setArea(e.target.value)} /></Field>
-              <Button size="sm" onClick={saveFields} disabled={saving}>{saving ? "Saving…" : "Save details"}</Button>
-            </div>
+            {handedOver ? (
+              <p className="text-sm">
+                {reg.scope === "TENANCY" && <span>Tenancy: <span className="font-medium">{reg.tenancyIdentifier || "—"}</span> · </span>}
+                Level: <span className="font-medium">{reg.level || "—"}</span> ·{" "}
+                Area: <span className="font-medium">{reg.area != null ? `${reg.area} m²` : "—"}</span>
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-end gap-2">
+                {reg.scope === "TENANCY" && (
+                  <Field label="Tenancy identifier"><Input value={tenancyIdentifier} onChange={(e) => setTenancyIdentifier(e.target.value)} placeholder="Shop 1" /></Field>
+                )}
+                <Field label="Level"><Input className="w-24" value={level} onChange={(e) => setLevel(e.target.value)} placeholder="G" /></Field>
+                <Field label="Area (m²)"><Input className="w-28" type="number" value={area} onChange={(e) => setArea(e.target.value)} /></Field>
+                <Button size="sm" onClick={saveFields} disabled={saving}>{saving ? "Saving…" : "Save details"}</Button>
+              </div>
+            )}
           </div>
 
           {/* Business tagging */}
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Owning / occupying business</Label>
-            <BusinessForm businesses={businesses} value={sel} onChange={setSel} />
-            <Button size="sm" onClick={saveBusiness} disabled={tagging}>{tagging ? "Saving…" : "Save business"}</Button>
+            {handedOver ? (
+              <p className="text-sm">{taggedName ?? "—"}</p>
+            ) : (
+              <>
+                <BusinessForm businesses={businesses} value={sel} onChange={setSel} />
+                <Button size="sm" onClick={saveBusiness} disabled={tagging}>{tagging ? "Saving…" : "Save business"}</Button>
+              </>
+            )}
           </div>
 
           {/* Assets */}
-          <AssetsSection registrationId={reg.id!} />
+          <AssetsSection registrationId={reg.id!} readOnly={handedOver} />
         </div>
       )}
     </div>
@@ -603,7 +635,7 @@ const ASSET_DOC_CATEGORY_LABEL: Record<string, string> = {
 };
 
 // ---- Assets (R10) ----
-function AssetsSection({ registrationId }: { registrationId: string }) {
+function AssetsSection({ registrationId, readOnly = false }: { registrationId: string; readOnly?: boolean }) {
   const { data: assets } = useListCommercialAssetsQuery(registrationId);
   const [add, { isLoading }] = useAddCommercialAssetMutation();
   const [remove] = useRemoveCommercialAssetMutation();
@@ -654,18 +686,22 @@ function AssetsSection({ registrationId }: { registrationId: string }) {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Label className="text-xs uppercase tracking-wide text-muted-foreground">Assets & plant</Label>
-        <div className="flex items-center gap-1.5">
-          <input ref={csvRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onCsv} />
-          <Button variant="outline" size="sm" onClick={() => csvRef.current?.click()} disabled={importing}>
-            <FileUp className="h-4 w-4 mr-1" /> {importing ? "Importing…" : "Import BOM (CSV)"}
-          </Button>
-          <FolderButton label={uploadingWarranties ? "Uploading…" : "Upload warranties"} extensions={ASSET_DOC_EXTENSIONS} onPick={onWarranties} disabled={uploadingWarranties} />
-        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-1.5">
+            <input ref={csvRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onCsv} />
+            <Button variant="outline" size="sm" onClick={() => csvRef.current?.click()} disabled={importing}>
+              <FileUp className="h-4 w-4 mr-1" /> {importing ? "Importing…" : "Import BOM (CSV)"}
+            </Button>
+            <FolderButton label={uploadingWarranties ? "Uploading…" : "Upload warranties"} extensions={ASSET_DOC_EXTENSIONS} onPick={onWarranties} disabled={uploadingWarranties} />
+          </div>
+        )}
       </div>
-      <p className="text-xs text-muted-foreground">
-        CSV columns: Name, Make, Model, Serial, Location, Commissioning date, Warranty months, Registrable plant.
-        Folder documents are matched to assets by name and filed as Warranty or Manual.
-      </p>
+      {!readOnly && (
+        <p className="text-xs text-muted-foreground">
+          CSV columns: Name, Make, Model, Serial, Location, Commissioning date, Warranty months, Registrable plant.
+          Folder documents are matched to assets by name and filed as Warranty or Manual.
+        </p>
+      )}
       {(assets ?? []).length === 0 && <p className="text-xs text-muted-foreground">No assets yet.</p>}
       {(assets ?? []).map((a) => (
         <div key={a.id} className="border rounded-md px-3 py-2 text-sm">
@@ -676,17 +712,20 @@ function AssetsSection({ registrationId }: { registrationId: string }) {
               {a.registrablePlant && <Badge variant="secondary" className="ml-2">Registrable plant</Badge>}
               {a.warrantyExpiry && <span className="text-muted-foreground"> · warranty to {a.warrantyExpiry}</span>}
             </span>
-            <Button variant="ghost" size="icon" onClick={() => remove({ registrationId, assetId: a.id! })}><Trash2 className="h-4 w-4" /></Button>
+            {!readOnly && (
+              <Button variant="ghost" size="icon" onClick={() => remove({ registrationId, assetId: a.id! })}><Trash2 className="h-4 w-4" /></Button>
+            )}
           </div>
           {(a.documents ?? []).length > 0 && (
             <div className="mt-1.5 ml-1 flex flex-wrap gap-1.5">
               {(a.documents ?? []).map((doc) => (
-                <AssetDocChip key={doc.id} doc={doc} registrationId={registrationId} assetId={a.id!} />
+                <AssetDocChip key={doc.id} doc={doc} registrationId={registrationId} assetId={a.id!} readOnly={readOnly} />
               ))}
             </div>
           )}
         </div>
       ))}
+      {!readOnly && (
       <div className="rounded-md border bg-muted/30 p-3 grid sm:grid-cols-3 gap-2 items-end">
         <Field label="Name *"><Input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="Chiller unit" /></Field>
         <Field label="Make"><Input value={draft.make ?? ""} onChange={(e) => set({ make: e.target.value || null })} /></Field>
@@ -701,12 +740,13 @@ function AssetsSection({ registrationId }: { registrationId: string }) {
         </label>
         <Button size="sm" onClick={onAdd} disabled={isLoading}><Plus className="h-4 w-4 mr-1" /> {isLoading ? "Adding…" : "Add asset"}</Button>
       </div>
+      )}
     </div>
   );
 }
 
 /** A single asset document (warranty / manual / other) chip with download + delete. */
-function AssetDocChip({ doc, registrationId, assetId }: { doc: CommercialAssetDocument; registrationId: string; assetId: string }) {
+function AssetDocChip({ doc, registrationId, assetId, readOnly = false }: { doc: CommercialAssetDocument; registrationId: string; assetId: string; readOnly?: boolean }) {
   const [remove] = useDeleteCommercialAssetDocumentMutation();
   const isWarranty = doc.category === "WARRANTY";
   const chipClass = isWarranty
@@ -720,9 +760,11 @@ function AssetDocChip({ doc, registrationId, assetId }: { doc: CommercialAssetDo
       <a href={fileHref(doc.fileId)} target="_blank" rel="noreferrer" className="max-w-[10rem] truncate underline">
         {doc.fileName || doc.documentName || "file"}
       </a>
-      <button type="button" className="opacity-60 hover:opacity-100" onClick={() => remove({ registrationId, assetId, documentId: doc.id })}>
-        <Trash2 className="h-3 w-3" />
-      </button>
+      {!readOnly && (
+        <button type="button" className="opacity-60 hover:opacity-100" onClick={() => remove({ registrationId, assetId, documentId: doc.id })}>
+          <Trash2 className="h-3 w-3" />
+        </button>
+      )}
     </span>
   );
 }

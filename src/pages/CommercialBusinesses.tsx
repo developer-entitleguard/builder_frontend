@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Archive, Building2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlements } from "@/hooks/useEntitlements";
+import { BusinessAppLinks } from "@/components/commercial/BusinessAppLinks";
 import { CONTACT_ROLES, ENTITY_TYPES, entityTypeLabel } from "@/lib/commercialBusiness";
 import {
   BusinessContact,
@@ -118,6 +119,10 @@ export function BusinessDirectoryContent() {
             </Table>
           </CardContent>
         </Card>
+
+        <div className="mt-4">
+          <BusinessAppLinks />
+        </div>
 
         {editing && (
           <BusinessEditorDialog business={editing} onClose={() => setEditing(null)} />

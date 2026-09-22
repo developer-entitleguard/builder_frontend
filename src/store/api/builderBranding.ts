@@ -1,6 +1,6 @@
 import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 import { api } from './apiSlice';
-import type { BuilderBranding, HandoverEmailPreview } from '@/lib/api/types';
+import type { BuilderBranding, HandoverEmailPreview, HandoverEmailSegment } from '@/lib/api/types';
 import { getApiBaseUrl } from '@/lib/config';
 
 /**
@@ -57,11 +57,12 @@ export const builderBrandingApi = api.injectEndpoints({
       query: () => ({ url: '/api/builder/branding/logo', method: 'DELETE' }),
       invalidatesTags: ['BuilderBranding', 'BuilderOrganization'],
     }),
-    updateHandoverMessage: build.mutation<BuilderBranding, { html: string }>({
+    // segment omitted = RESIDENTIAL (back-compatible with the pre-segment API).
+    updateHandoverMessage: build.mutation<BuilderBranding, { html: string; segment?: HandoverEmailSegment }>({
       query: (body) => ({ url: '/api/builder/branding/handover-message', method: 'PUT', body }),
       invalidatesTags: ['BuilderBranding'],
     }),
-    previewHandoverEmail: build.mutation<HandoverEmailPreview, { html?: string | null }>({
+    previewHandoverEmail: build.mutation<HandoverEmailPreview, { html?: string | null; segment?: HandoverEmailSegment }>({
       query: (body) => ({ url: '/api/builder/branding/handover-email/preview', method: 'POST', body }),
     }),
   }),

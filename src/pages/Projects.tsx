@@ -82,7 +82,15 @@ const ProjectComplianceSummary = ({ projectId }: { projectId: string }) => {
 };
 
 const ProjectCard = ({ project }: { project: Project }) => {
-  const typeConfig = propertyTypeConfig[project.property_type];
+  // Commercial / mixed-use projects have no residential property type — label
+  // them by segment instead of the "Custom" fallback (matches the mobile app).
+  const segment = (project.project_type ?? "").toUpperCase();
+  const typeConfig =
+    segment === "COMMERCIAL"
+      ? { icon: Building2, color: "bg-indigo-100 text-indigo-700", label: "Commercial" }
+      : segment === "MIXED_USE"
+        ? { icon: Building2, color: "bg-indigo-100 text-indigo-700", label: "Hybrid" }
+        : propertyTypeConfig[project.property_type];
   const TypeIcon = typeConfig.icon;
   const status = statusConfig[project.status];
 

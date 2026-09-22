@@ -36,6 +36,8 @@ export interface Project {
   updated_at: string;
   /** Developer/Builder Decoupling: OPERATOR (owns) or SCOPED_BUILDER (delegated). */
   access_role?: "OPERATOR" | "SCOPED_BUILDER";
+  /** RESIDENTIAL | COMMERCIAL | MIXED_USE (immutable after creation). */
+  project_type?: string | null;
   // Property features that gate which compliance certificates apply.
   has_gas?: boolean | null;
   has_pool?: boolean | null;
@@ -169,6 +171,7 @@ export const useProjects = () => {
       created_at: p.createdAt,
       updated_at: p.createdAt,
       access_role: p.accessRole,
+      project_type: p.projectType ?? null,
     }));
     setProjects(mapped);
   }, [apiProjects]);
@@ -208,6 +211,7 @@ export const useProjects = () => {
         activities_visible_to_homeowner: apiProject.activitiesVisibleToHomeowner,
         created_at: apiProject.createdAt,
         updated_at: apiProject.createdAt,
+        project_type: apiProject.projectType ?? null,
       };
     } catch (error: unknown) {
       toast({

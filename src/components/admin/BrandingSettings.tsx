@@ -36,6 +36,9 @@ import {
   logoRulesText,
   validateLogoFile,
 } from "@/lib/logoValidation";
+import { viewPhotoUrl } from "@/lib/api/services/files";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import type { HandoverEmailSegment } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 import { AlertCircle, Eye, ImageIcon, Loader2, RotateCcw, Trash2, Upload } from "lucide-react";
 
@@ -61,6 +64,7 @@ interface BrandingSettingsProps {
 
 export function BrandingSettings({ organizationName }: BrandingSettingsProps) {
   const { data, isLoading, isError, refetch } = useGetBuilderBrandingQuery();
+  const { segments } = useEntitlements();
 
   if (isLoading) {
     return (
@@ -88,17 +92,32 @@ export function BrandingSettings({ organizationName }: BrandingSettingsProps) {
   return (
     <div className="space-y-6">
       <LogoCard
-        logoUrl={data.logoUrl}
+        logoFileId={data.logoFileId}
         limits={data.limits}
         organizationName={organizationName}
       />
       <HandoverMessageCard
+        segment="RESIDENTIAL"
+        title={segments.commercial ? "Residential handover email message" : "Handover email message"}
+        recipientNote="the handover email your homeowner customers receive"
         organizationName={organizationName}
         savedHtml={data.handoverMessageHtml}
         isDefault={data.isDefaultHandoverMessage}
         defaultHtml={data.defaultHandoverMessageHtml}
         maxChars={data.limits.messageMaxChars}
       />
+      {segments.commercial && (
+        <HandoverMessageCard
+          segment="COMMERCIAL"
+          title="Commercial handover email message"
+          recipientNote="the commercial handover email the business you hand over to receives (it links them to the Business portal, not the consumer app)"
+          organizationName={organizationName}
+          savedHtml={data.commercialHandoverMessageHtml}
+          isDefault={data.isDefaultCommercialHandoverMessage}
+          defaultHtml={data.defaultCommercialHandoverMessageHtml}
+          maxChars={data.limits.messageMaxChars}
+        />
+      )}
     </div>
   );
 }
@@ -108,12 +127,16 @@ export function BrandingSettings({ organizationName }: BrandingSettingsProps) {
 // ---------------------------------------------------------------------------
 
 interface LogoCardProps {
-  logoUrl: string | null;
+  logoFileId: string | null;
   limits: typeof DEFAULT_LOGO_LIMITS & { messageMaxChars: number };
   organizationName?: string;
 }
 
-function LogoCard({ logoUrl, limits, organizationName }: LogoCardProps) {
+function LogoCard({ logoFileId, limits, organizationName }: LogoCardProps) {
+  // Render via the same-origin file URL (Vite proxy in dev, SPA /api routing in
+  // prod) — NOT the DTO's absolute logoUrl, which is built for email clients
+  // from app.api.public-base-url and breaks wherever that isn't configured.
+  const logoUrl = logoFileId ? viewPhotoUrl(logoFileId) : null;
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<File | null>(null);
@@ -288,6 +311,10 @@ function LogoSwatch({ label, dark, url, name }: { label: string; dark: boolean; 
 // ---------------------------------------------------------------------------
 
 interface HandoverMessageCardProps {
+  segment: HandoverEmailSegment;
+  title: string;
+  /** Completes "This block appears in the middle of …". */
+  recipientNote: string;
   organizationName?: string;
   savedHtml: string;
   isDefault: boolean;
@@ -295,7 +322,7 @@ interface HandoverMessageCardProps {
   maxChars: number;
 }
 
-function HandoverMessageCard({ organizationName, savedHtml, isDefault, defaultHtml, maxChars }: HandoverMessageCardProps) {
+function HandoverMessageCard({ segment, title, recipientNote, organizationName, savedHtml, isDefault, defaultHtml, maxChars }: HandoverMessageCardProps) {
   const { toast } = useToast();
   // Editing the default in place is the natural way to start a custom message.
   const [html, setHtml] = useState<string>(savedHtml);
@@ -330,7 +357,7 @@ function HandoverMessageCard({ organizationName, savedHtml, isDefault, defaultHt
   const onSave = async () => {
     try {
       // Saving the default (or nothing) clears the custom message on the server.
-      await save({ html: usingDefault ? "" : html }).unwrap();
+      await save({ html: usingDefault ? "" : html, segment }).unwrap();
       toast({
         title: usingDefault ? "Default message restored" : "Handover message saved",
         description: "New handover emails will use this message.",
@@ -347,7 +374,7 @@ function HandoverMessageCard({ organizationName, savedHtml, isDefault, defaultHt
 
   const onPreview = async () => {
     try {
-      const res = await preview({ html: usingDefault ? null : html }).unwrap();
+      const res = await preview({ html: usingDefault ? null : html, segment }).unwrap();
       setPreviewHtml(res.html);
       setPreviewSubject(res.subject);
       setPreviewOpen(true);
@@ -359,9 +386,9 @@ function HandoverMessageCard({ organizationName, savedHtml, isDefault, defaultHt
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Handover email message</CardTitle>
+        <CardTitle>{title}</CardTitle>
         <CardDescription>
-          This block appears in the middle of the handover email your customers receive, headed
+          This block appears in the middle of {recipientNote}, headed
           {" "}
           <span className="font-medium text-foreground">A message from {organizationName || "your organisation"}</span>.
           Write it in your own voice. Bold, italic, lists and links are supported.

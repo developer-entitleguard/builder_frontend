@@ -336,8 +336,15 @@ export interface BuilderBranding {
   handoverMessageHtml: string;
   isDefaultHandoverMessage: boolean;
   defaultHandoverMessageHtml: string;
+  /** Commercial handover email counterparts (segment-specific message). */
+  commercialHandoverMessageHtml: string;
+  isDefaultCommercialHandoverMessage: boolean;
+  defaultCommercialHandoverMessageHtml: string;
   limits: BuilderBrandingLimits;
 }
+
+/** Which handover email a message write / preview targets. */
+export type HandoverEmailSegment = "RESIDENTIAL" | "COMMERCIAL";
 
 export interface HandoverEmailPreview {
   subject: string;

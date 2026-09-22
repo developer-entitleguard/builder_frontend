@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { getApiBaseUrl } from "@/lib/config";
 import { ENTITY_TYPES } from "@/lib/commercialBusiness";
+import { BusinessAppLinks } from "@/components/commercial/BusinessAppLinks";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { useProjectByIdQuery, useUpdateProjectMutation } from "@/store/api/projects";
 import {
@@ -1035,6 +1036,7 @@ function HandoverTab({ projectId }: { projectId: string }) {
     <div className="space-y-3">
       {(regs ?? []).length === 0 && <p className="text-sm text-muted-foreground">Add registrations first.</p>}
       {(regs ?? []).map((r) => <HandoverRow key={r.id} registrationId={r.id!} label={r.scope === "TENANCY" ? r.tenancyIdentifier || "Tenancy" : "Whole building"} />)}
+      <BusinessAppLinks />
     </div>
   );
 }

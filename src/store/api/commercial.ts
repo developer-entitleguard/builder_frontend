@@ -65,6 +65,8 @@ export interface CommercialComplianceDocument {
   tier: 'BUILDING' | 'TENANCY';
   status: string;
   egCreatable?: boolean | null;
+  /** Documents-tab section: CONTACT_LIST | DRAWING | COMPLIANCE | WARRANTY | MANUAL | AS_BUILT. Null = COMPLIANCE. */
+  section?: string | null;
   /** Current assignee display label (name / org / email), or null if unassigned. */
   assigneeLabel?: string | null;
 }
@@ -254,8 +256,8 @@ export const commercialApi = api.injectEndpoints({
       query: ({ documentId, status }) => ({ url: `/api/builder/commercial/checklist-documents/${documentId}/status`, method: 'PUT', body: { status } }),
       invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId)],
     }),
-    // Add an ad-hoc (MANUAL) checklist row the rulebook didn't generate.
-    addChecklistDocument: build.mutation<CommercialComplianceDocument, { projectId: string; body: { documentName: string; tier: string; mandatory: string; commercialRegistrationId?: string | null } }>({
+    // Add an ad-hoc (MANUAL) document row the rulebook didn't generate.
+    addChecklistDocument: build.mutation<CommercialComplianceDocument, { projectId: string; body: { documentName: string; tier: string; mandatory: string; commercialRegistrationId?: string | null; section?: string } }>({
       query: ({ projectId, body }) => ({ url: `/api/builder/commercial/projects/${projectId}/checklist/documents`, method: 'POST', body }),
       invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId)],
     }),
@@ -263,12 +265,15 @@ export const commercialApi = api.injectEndpoints({
       query: ({ documentId }) => ({ url: `/api/builder/commercial/checklist-documents/${documentId}`, method: 'DELETE' }),
       invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId)],
     }),
-    // Bulk-attach a folder of delivered certificates; classify + match + mark received.
-    uploadChecklistFolder: build.mutation<ListEnvelope<{ matched: unknown[]; unmatched: string[] }>, { projectId: string; files: File[]; relativePaths: string[] }>({
-      query: ({ projectId, files, relativePaths }) => {
+    // Bulk-add a folder of documents to one Documents-tab section. COMPLIANCE (the
+    // default) classifies + matches to checklist rows, creating a row when none
+    // matches; other sections create one row per file (WARRANTY also feeds assets).
+    uploadChecklistFolder: build.mutation<ListEnvelope<{ matched: unknown[]; unmatched: string[] }>, { projectId: string; files: File[]; relativePaths: string[]; section?: string }>({
+      query: ({ projectId, files, relativePaths, section }) => {
         const form = new FormData();
         files.forEach((f) => form.append('files', f));
         relativePaths.forEach((p) => form.append('relativePaths', p));
+        if (section) form.append('section', section);
         return { url: `/api/builder/commercial/projects/${projectId}/checklist/folder`, method: 'POST', body: form };
       },
       invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId)],

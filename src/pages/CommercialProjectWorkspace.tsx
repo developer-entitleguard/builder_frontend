@@ -70,6 +70,11 @@ const CommercialProjectWorkspace = () => {
   const navigate = useNavigate();
   const { segments, ready } = useEntitlements();
   const [editOpen, setEditOpen] = useState(false);
+  // Pure COMMERCIAL projects get the sectioned Documents tab (Marque feedback);
+  // MIXED_USE keeps the plain checklist until the hybrid phase.
+  const { data: projectResp } = useProjectByIdQuery({ id: projectId });
+  const isMixed = projectResp?.data?.projectType === "MIXED_USE";
+  const docsLabel = isMixed ? "Checklist" : "Documents";
   // Controlled so Setup's "Next" can advance the flow to Building Parts, and so
   // deep links (e.g. /projects/:id/commercial?tab=registrations) can pre-select.
   const [searchParams] = useSearchParams();
@@ -111,7 +116,7 @@ const CommercialProjectWorkspace = () => {
             <TabsTrigger value="setup">Setup</TabsTrigger>
             <TabsTrigger value="parts">Building Parts</TabsTrigger>
             <TabsTrigger value="registrations">Registrations</TabsTrigger>
-            <TabsTrigger value="checklist">Checklist</TabsTrigger>
+            <TabsTrigger value="checklist">{docsLabel}</TabsTrigger>
             <TabsTrigger value="handover">Handover</TabsTrigger>
           </TabsList>
 
@@ -124,10 +129,10 @@ const CommercialProjectWorkspace = () => {
           </TabsContent>
           <TabsContent value="registrations">
             <RegistrationsTab projectId={projectId} />
-            <FlowNav onBack={() => setTab("parts")} onNext={() => setTab("checklist")} nextLabel="Next: Checklist" />
+            <FlowNav onBack={() => setTab("parts")} onNext={() => setTab("checklist")} nextLabel={`Next: ${docsLabel}`} />
           </TabsContent>
           <TabsContent value="checklist">
-            <ChecklistTab projectId={projectId} />
+            {isMixed ? <ChecklistTab projectId={projectId} /> : <DocumentsTab projectId={projectId} />}
             <FlowNav onBack={() => setTab("registrations")} onNext={() => setTab("handover")} nextLabel="Next: Handover" />
           </TabsContent>
           <TabsContent value="handover">
@@ -456,7 +461,7 @@ function RegistrationsTab({ projectId }: { projectId: string }) {
         <CardContent className="space-y-2">
           {commercialRegs.length === 0 && <p className="text-sm text-muted-foreground">No registrations yet.</p>}
           {commercialRegs.map((r) => (
-            <RegistrationEditor key={r.id} reg={r} businesses={businesses ?? []} />
+            <RegistrationEditor key={r.id} reg={r} businesses={businesses ?? []} showAssets={isMixed} />
           ))}
         </CardContent>
       </Card>
@@ -577,7 +582,7 @@ function ResidentialUnitsCard({ projectId }: { projectId: string }) {
 }
 
 /** A single registration row that expands into an editor: tenancy fields, business tagging, assets. */
-function RegistrationEditor({ reg, businesses }: { reg: CommercialRegistration; businesses: CommercialBusiness[] }) {
+function RegistrationEditor({ reg, businesses, showAssets = true }: { reg: CommercialRegistration; businesses: CommercialBusiness[]; showAssets?: boolean }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [update, { isLoading: saving }] = useUpdateCommercialRegistrationMutation();
@@ -686,8 +691,9 @@ function RegistrationEditor({ reg, businesses }: { reg: CommercialRegistration; 
             )}
           </div>
 
-          {/* Assets */}
-          <AssetsSection registrationId={reg.id!} readOnly={handedOver} />
+          {/* Assets — hidden on pure-commercial projects, where warranty intake
+              lives in the Documents tab (Marque feedback). */}
+          {showAssets && <AssetsSection registrationId={reg.id!} readOnly={handedOver} />}
         </div>
       )}
     </div>
@@ -888,7 +894,10 @@ function AssetDocChip({ doc, registrationId, assetId, readOnly = false }: { doc:
 const fileHref = (fileId?: string | null): string | undefined =>
   fileId ? `${getApiBaseUrl()}/unsecure/download/${fileId}` : undefined;
 
-function ChecklistTab({ projectId }: { projectId: string }) {
+/** A row's Documents-tab section, treating legacy null as the compliance checklist. */
+const sectionOf = (d: CommercialComplianceDocument): string => d.section ?? "COMPLIANCE";
+
+function ChecklistTab({ projectId, title = "Document checklist" }: { projectId: string; title?: string }) {
   const { data: docs } = useGetChecklistDocumentsQuery(projectId);
   const { data: regs } = useListCommercialRegistrationsQuery(projectId);
   const [regenerate, { isLoading }] = useRegenerateChecklistMutation();
@@ -899,7 +908,10 @@ function ChecklistTab({ projectId }: { projectId: string }) {
 
   const grouped = useMemo(() => {
     const g: Record<string, typeof docs> = { BUILDING: [], TENANCY: [] };
-    (docs ?? []).forEach((d) => { (g[d.tier] = g[d.tier] || []).push(d); });
+    // Only the compliance checklist — the other Documents-tab sections render
+    // in their own cards.
+    (docs ?? []).filter((d) => sectionOf(d) === "COMPLIANCE")
+      .forEach((d) => { (g[d.tier] = g[d.tier] || []).push(d); });
     return g;
   }, [docs]);
 
@@ -913,7 +925,7 @@ function ChecklistTab({ projectId }: { projectId: string }) {
     try {
       const res = await uploadFolder({ projectId, files: accepted, relativePaths: acceptedPaths }).unwrap();
       const data = res?.data as { matched?: unknown[]; unmatched?: string[] } | undefined;
-      toast({ title: res?.message || "Folder processed", description: data?.unmatched?.length ? `${data.unmatched.length} file(s) didn't match a row.` : undefined });
+      toast({ title: res?.message || "Folder processed", description: data?.unmatched?.length ? `${data.unmatched.length} file(s) could not be filed.` : undefined });
     } catch (err) {
       toast({ title: "Upload failed", description: errMessage(err, "Could not process the folder."), variant: "destructive" });
     }
@@ -923,7 +935,7 @@ function ChecklistTab({ projectId }: { projectId: string }) {
     <Card>
       <CardHeader className="flex-row items-start justify-between">
         <div>
-          <CardTitle>Document checklist</CardTitle>
+          <CardTitle>{title}</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
             The compliance documents this building must hand over. Regenerate rebuilds it from the
             building's classes and factors. Attach each delivered document, or assign it to a trade to produce.
@@ -944,7 +956,9 @@ function ChecklistTab({ projectId }: { projectId: string }) {
       </CardHeader>
       <CardContent className="space-y-6">
         {checkResult && <ComplianceCheckCard result={checkResult} />}
-        {(["BUILDING", "TENANCY"] as const).map((tier) => (
+        {(["BUILDING", "TENANCY"] as const)
+          .filter((tier) => tier === "BUILDING" || (grouped[tier] ?? []).length > 0)
+          .map((tier) => (
           <div key={tier}>
             <h3 className="text-sm font-semibold mb-2">{tier === "BUILDING" ? "Whole building" : "Per tenancy"}</h3>
             {(grouped[tier] ?? []).length === 0 && <p className="text-sm text-muted-foreground">No documents — press Regenerate.</p>}
@@ -953,6 +967,94 @@ function ChecklistTab({ projectId }: { projectId: string }) {
         ))}
       </CardContent>
       <AddChecklistDocumentDialog projectId={projectId} regs={regs ?? []} open={addOpen} onOpenChange={setAddOpen} />
+    </Card>
+  );
+}
+
+// ---- Documents tab (pure commercial): sectioned handover collateral ----
+
+const DOCUMENT_SECTIONS: Array<{ key: string; title: string; blurb: string }> = [
+  { key: "CONTACT_LIST", title: "Contact list", blurb: "Who to call — trades, suppliers, consultants and emergency contacts for the building." },
+  { key: "DRAWING", title: "Project drawings", blurb: "Design and construction drawings for the project." },
+  { key: "WARRANTY", title: "Warranties", blurb: "Product and workmanship warranties. Uploading a folder also creates an asset for each warranty." },
+  { key: "MANUAL", title: "Service manuals", blurb: "Operation and maintenance manuals for the building's equipment." },
+  { key: "AS_BUILT", title: "As-built drawings", blurb: "Final as-built drawings reflecting what was actually constructed." },
+];
+
+/**
+ * Pure-commercial Documents tab (Marque feedback): the compliance checklist is
+ * one section among the handover collateral — contact lists, drawings,
+ * warranties, manuals and as-builts, each with folder upload + add document.
+ */
+function DocumentsTab({ projectId }: { projectId: string }) {
+  const { data: docs } = useGetChecklistDocumentsQuery(projectId);
+  const bySection = (key: string) => (docs ?? []).filter((d) => sectionOf(d) === key);
+  const section = (key: string) => {
+    const meta = DOCUMENT_SECTIONS.find((s) => s.key === key)!;
+    return <DocumentsSection projectId={projectId} sectionKey={key} title={meta.title} blurb={meta.blurb} rows={bySection(key)} />;
+  };
+  return (
+    <div className="space-y-4">
+      {section("CONTACT_LIST")}
+      {section("DRAWING")}
+      <ChecklistTab projectId={projectId} title="Certificates / compliance documents" />
+      {section("WARRANTY")}
+      {section("MANUAL")}
+      {section("AS_BUILT")}
+    </div>
+  );
+}
+
+/** One non-compliance Documents section: its rows plus folder upload and add-document. */
+function DocumentsSection({ projectId, sectionKey, title, blurb, rows }: {
+  projectId: string;
+  sectionKey: string;
+  title: string;
+  blurb: string;
+  rows: CommercialComplianceDocument[];
+}) {
+  const { toast } = useToast();
+  const [uploadFolder, { isLoading: uploading }] = useUploadChecklistFolderMutation();
+  const [addOpen, setAddOpen] = useState(false);
+
+  const onFolder = async (files: File[], relativePaths: string[]) => {
+    const { accepted, rejectedMessage } = partitionBySize(files);
+    if (rejectedMessage) {
+      toast({ title: "File too large", description: rejectedMessage, variant: "destructive" });
+    }
+    if (accepted.length === 0) return;
+    const acceptedPaths = relativePaths.filter((_, i) => accepted.includes(files[i]));
+    try {
+      const res = await uploadFolder({ projectId, files: accepted, relativePaths: acceptedPaths, section: sectionKey }).unwrap();
+      const data = res?.data as { matched?: unknown[]; unmatched?: string[] } | undefined;
+      toast({ title: res?.message || "Folder processed", description: data?.unmatched?.length ? `${data.unmatched.length} file(s) could not be filed.` : undefined });
+    } catch (err) {
+      toast({ title: "Upload failed", description: errMessage(err, "Could not process the folder."), variant: "destructive" });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-start justify-between">
+        <div>
+          <CardTitle className="text-base">{title}</CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">{blurb}</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <FolderButton label={uploading ? "Uploading…" : "Upload folder"} extensions={DOC_EXTENSIONS} onPick={onFolder} disabled={uploading} />
+          <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> Add document
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No documents yet — upload a folder or add one.</p>
+        ) : (
+          rows.map((d) => <DocRow key={d.id} doc={d} projectId={projectId} />)
+        )}
+      </CardContent>
+      <AddChecklistDocumentDialog projectId={projectId} regs={[]} open={addOpen} onOpenChange={setAddOpen} section={sectionKey} />
     </Card>
   );
 }
@@ -980,8 +1082,13 @@ function ComplianceCheckCard({ result }: { result: CommercialComplianceCheck }) 
   );
 }
 
-/** Dialog to add an ad-hoc (MANUAL) checklist row the rulebook didn't generate. */
-function AddChecklistDocumentDialog({ projectId, regs, open, onOpenChange }: { projectId: string; regs: CommercialRegistration[]; open: boolean; onOpenChange: (v: boolean) => void }) {
+/**
+ * Dialog to add an ad-hoc (MANUAL) document row. For the compliance checklist
+ * (the default) it offers scope + requirement; for the other Documents-tab
+ * sections a name is all that's needed (they're project-level and never gate
+ * handover).
+ */
+function AddChecklistDocumentDialog({ projectId, regs, open, onOpenChange, section = "COMPLIANCE" }: { projectId: string; regs: CommercialRegistration[]; open: boolean; onOpenChange: (v: boolean) => void; section?: string }) {
   const [add, { isLoading }] = useAddChecklistDocumentMutation();
   const { toast } = useToast();
   const [name, setName] = useState("");
@@ -989,18 +1096,24 @@ function AddChecklistDocumentDialog({ projectId, regs, open, onOpenChange }: { p
   const [mandatory, setMandatory] = useState<"REQUIRED" | "OPTIONAL">("OPTIONAL");
   const [registrationId, setRegistrationId] = useState<string>("");
   const tenancies = regs.filter((r) => r.scope === "TENANCY");
+  const compliance = section === "COMPLIANCE";
 
   const onSave = async () => {
     if (!name.trim()) {
       toast({ title: "Document name is required", variant: "destructive" });
       return;
     }
-    if (tier === "TENANCY" && !registrationId) {
+    if (compliance && tier === "TENANCY" && !registrationId) {
       toast({ title: "Pick a tenancy for a tenancy document", variant: "destructive" });
       return;
     }
     try {
-      await add({ projectId, body: { documentName: name.trim(), tier, mandatory, commercialRegistrationId: tier === "TENANCY" ? registrationId : null } }).unwrap();
+      await add({
+        projectId,
+        body: compliance
+          ? { documentName: name.trim(), tier, mandatory, commercialRegistrationId: tier === "TENANCY" ? registrationId : null }
+          : { documentName: name.trim(), tier: "BUILDING", mandatory: "OPTIONAL", section },
+      }).unwrap();
       toast({ title: "Document added" });
       setName(""); setTier("BUILDING"); setMandatory("OPTIONAL"); setRegistrationId("");
       onOpenChange(false);
@@ -1015,26 +1128,30 @@ function AddChecklistDocumentDialog({ projectId, regs, open, onOpenChange }: { p
         <DialogHeader><DialogTitle>Add a document</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <Field label="Document name *"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Fire safety statement" /></Field>
-          <Field label="Scope">
-            <select className="border rounded-md h-10 px-2 text-sm w-full" value={tier} onChange={(e) => setTier(e.target.value as "BUILDING" | "TENANCY")}>
-              <option value="BUILDING">Whole building</option>
-              <option value="TENANCY">Per tenancy</option>
-            </select>
-          </Field>
-          {tier === "TENANCY" && (
-            <Field label="Tenancy">
-              <select className="border rounded-md h-10 px-2 text-sm w-full" value={registrationId} onChange={(e) => setRegistrationId(e.target.value)}>
-                <option value="">— Select tenancy —</option>
-                {tenancies.map((r) => <option key={r.id} value={r.id!}>{r.tenancyIdentifier || "Tenancy"}</option>)}
-              </select>
-            </Field>
+          {compliance && (
+            <>
+              <Field label="Scope">
+                <select className="border rounded-md h-10 px-2 text-sm w-full" value={tier} onChange={(e) => setTier(e.target.value as "BUILDING" | "TENANCY")}>
+                  <option value="BUILDING">Whole building</option>
+                  <option value="TENANCY">Per tenancy</option>
+                </select>
+              </Field>
+              {tier === "TENANCY" && (
+                <Field label="Tenancy">
+                  <select className="border rounded-md h-10 px-2 text-sm w-full" value={registrationId} onChange={(e) => setRegistrationId(e.target.value)}>
+                    <option value="">— Select tenancy —</option>
+                    {tenancies.map((r) => <option key={r.id} value={r.id!}>{r.tenancyIdentifier || "Tenancy"}</option>)}
+                  </select>
+                </Field>
+              )}
+              <Field label="Requirement">
+                <select className="border rounded-md h-10 px-2 text-sm w-full" value={mandatory} onChange={(e) => setMandatory(e.target.value as "REQUIRED" | "OPTIONAL")}>
+                  <option value="OPTIONAL">Optional</option>
+                  <option value="REQUIRED">Mandatory (gates handover)</option>
+                </select>
+              </Field>
+            </>
           )}
-          <Field label="Requirement">
-            <select className="border rounded-md h-10 px-2 text-sm w-full" value={mandatory} onChange={(e) => setMandatory(e.target.value as "REQUIRED" | "OPTIONAL")}>
-              <option value="OPTIONAL">Optional</option>
-              <option value="REQUIRED">Mandatory (gates handover)</option>
-            </select>
-          </Field>
           <div className="flex justify-end">
             <Button onClick={onSave} disabled={isLoading}>{isLoading ? "Adding…" : "Add document"}</Button>
           </div>

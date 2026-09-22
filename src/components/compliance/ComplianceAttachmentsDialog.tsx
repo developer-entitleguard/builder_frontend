@@ -13,6 +13,7 @@ import {
 import { Loader2, Upload, Link2, Trash2, FileText, ExternalLink, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getApiBaseUrl } from "@/lib/config";
+import { isOversizeUpload, oversizeUploadMessage, MAX_UPLOAD_LABEL } from "@/lib/uploadLimits";
 import {
   useGetComplianceAttachmentsQuery,
   useUploadComplianceAttachmentMutation,
@@ -95,6 +96,15 @@ export const ComplianceAttachmentsDialog = ({
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
+    if (isOversizeUpload(file)) {
+      toast({
+        title: "File too large",
+        description: oversizeUploadMessage(file),
+        variant: "destructive",
+      });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     try {
       const res = await uploadAttachment({
         ownerType,
@@ -191,7 +201,7 @@ export const ComplianceAttachmentsDialog = ({
                 Upload file
               </Button>
               <p className="text-xs text-muted-foreground">
-                Allowed: PDF, PNG, JPG, JPEG, HEIC · max 10 MB
+                Allowed: PDF, PNG, JPG, JPEG, HEIC · max {MAX_UPLOAD_LABEL}
               </p>
 
               <div className="flex items-center gap-2">

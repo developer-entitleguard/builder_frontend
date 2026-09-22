@@ -13,10 +13,11 @@ import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronLeft, ChevronRi
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { getApiBaseUrl } from "@/lib/config";
+import { isOversizeUpload, oversizeUploadMessage, partitionBySize } from "@/lib/uploadLimits";
 import { ENTITY_TYPES } from "@/lib/commercialBusiness";
 import { BusinessAppLinks } from "@/components/commercial/BusinessAppLinks";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
-import { useProjectByIdQuery, useUpdateProjectMutation } from "@/store/api/projects";
+import { useGetProjectRegistrationsQuery, useProjectByIdQuery, useUpdateProjectMutation } from "@/store/api/projects";
 import {
   BuildingPart,
   BusinessContact,
@@ -29,6 +30,7 @@ import {
   CommercialRegistration,
   useAddChecklistDocumentMutation,
   useAddCommercialAssetMutation,
+  useAddResidentialUnitsMutation,
   useAssignCommercialDocumentMutation,
   useCreateCommercialRegistrationMutation,
   useDeleteChecklistDocumentMutation,
@@ -402,17 +404,33 @@ function RegistrationsTab({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
   const { data: regs } = useListCommercialRegistrationsQuery(projectId);
   const { data: businesses } = useListCommercialBusinessesQuery();
+  const { data: projectResp } = useProjectByIdQuery({ id: projectId });
   const [create, { isLoading }] = useCreateCommercialRegistrationMutation();
   const { toast } = useToast();
   const [scope, setScope] = useState<"BUILDING" | "TENANCY">("TENANCY");
   const [tenancyIdentifier, setTenancyIdentifier] = useState("");
   const [sel, setSel] = useState<BusinessSelection>({ commercialBusinessId: null });
 
+  // Registration rules (mirrored by the backend): a building is registered either
+  // as ONE whole-building registration or as individual tenancies — never both.
+  // A pure COMMERCIAL project supports only the whole-building form for now;
+  // tenancies (and the residential units card) are for MIXED_USE.
+  const isMixed = projectResp?.data?.projectType === "MIXED_USE";
+  const commercialRegs = regs ?? [];
+  const hasBuildingReg = commercialRegs.some((r) => r.scope === "BUILDING");
+  const canAdd = !hasBuildingReg && (isMixed || commercialRegs.length === 0);
+  const scopeOptions: Array<"BUILDING" | "TENANCY"> = !isMixed
+    ? ["BUILDING"]
+    : commercialRegs.some((r) => r.scope === "TENANCY")
+      ? ["TENANCY"]
+      : ["TENANCY", "BUILDING"];
+  const effectiveScope = scopeOptions.includes(scope) ? scope : scopeOptions[0];
+
   const onCreate = async () => {
     try {
       const body: CommercialRegistration = {
-        scope,
-        tenancyIdentifier: scope === "TENANCY" ? tenancyIdentifier || null : null,
+        scope: effectiveScope,
+        tenancyIdentifier: effectiveScope === "TENANCY" ? tenancyIdentifier || null : null,
         ...selectionToBody(sel),
       };
       await create({ projectId, body }).unwrap();
@@ -436,35 +454,125 @@ function RegistrationsTab({ projectId }: { projectId: string }) {
           </Button>
         </CardHeader>
         <CardContent className="space-y-2">
-          {(regs ?? []).length === 0 && <p className="text-sm text-muted-foreground">No registrations yet.</p>}
-          {(regs ?? []).map((r) => (
+          {commercialRegs.length === 0 && <p className="text-sm text-muted-foreground">No registrations yet.</p>}
+          {commercialRegs.map((r) => (
             <RegistrationEditor key={r.id} reg={r} businesses={businesses ?? []} />
           ))}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle>Add registration</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap items-start gap-4">
-            <Field label="Scope">
-              <select className="border rounded-md h-10 px-2 text-sm w-44" value={scope}
-                onChange={(e) => setScope(e.target.value as "BUILDING" | "TENANCY")}>
-                <option value="TENANCY">Tenancy</option>
-                <option value="BUILDING">Whole building</option>
-              </select>
-            </Field>
-            {scope === "TENANCY" && (
-              <Field label="Tenancy identifier"><Input className="w-56" value={tenancyIdentifier} onChange={(e) => setTenancyIdentifier(e.target.value)} placeholder="Shop 1" /></Field>
+      {canAdd ? (
+        <Card>
+          <CardHeader><CardTitle>Add registration</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap items-start gap-4">
+              <Field label="Scope">
+                <select className="border rounded-md h-10 px-2 text-sm w-44" value={effectiveScope}
+                  disabled={scopeOptions.length === 1}
+                  onChange={(e) => setScope(e.target.value as "BUILDING" | "TENANCY")}>
+                  {scopeOptions.map((s) => (
+                    <option key={s} value={s}>{s === "BUILDING" ? "Whole building" : "Tenancy"}</option>
+                  ))}
+                </select>
+              </Field>
+              {effectiveScope === "TENANCY" && (
+                <Field label="Tenancy identifier"><Input className="w-56" value={tenancyIdentifier} onChange={(e) => setTenancyIdentifier(e.target.value)} placeholder="Shop 1" /></Field>
+              )}
+              <Field label="Owning / occupying business">
+                <BusinessForm businesses={businesses ?? []} value={sel} onChange={setSel} />
+              </Field>
+            </div>
+            {!isMixed && (
+              <p className="text-xs text-muted-foreground">
+                A commercial project is registered as a single whole building.
+              </p>
             )}
-            <Field label="Owning / occupying business">
-              <BusinessForm businesses={businesses ?? []} value={sel} onChange={setSel} />
-            </Field>
-          </div>
-          <Button onClick={onCreate} disabled={isLoading}>{isLoading ? "Adding…" : "Add registration"}</Button>
-        </CardContent>
-      </Card>
+            {isMixed && scopeOptions.length === 1 && (
+              <p className="text-xs text-muted-foreground">
+                This project already has tenancy registrations, so a whole-building registration can no
+                longer be added — it's one or the other.
+              </p>
+            )}
+            <Button onClick={onCreate} disabled={isLoading}>{isLoading ? "Adding…" : "Add registration"}</Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {hasBuildingReg
+            ? "The whole-building registration covers the entire building, so no further registrations can be added."
+            : "A commercial project has a single registration. To register individual tenancies or residential units, the project must be mixed use."}
+        </p>
+      )}
+
+      {isMixed && <ResidentialUnitsCard projectId={projectId} />}
     </div>
+  );
+}
+
+/**
+ * Mixed-use only: the residential part's unit registrations. Bulk-adds N draft
+ * units (numbered like residential projects); they are then managed alongside
+ * the org's residential registrations.
+ */
+function ResidentialUnitsCard({ projectId }: { projectId: string }) {
+  const { toast } = useToast();
+  const { data: resResp, refetch } = useGetProjectRegistrationsQuery({ projectId });
+  const [addUnits, { isLoading }] = useAddResidentialUnitsMutation();
+  const [count, setCount] = useState("");
+
+  const existing = resResp?.data ?? [];
+
+  const onAdd = async () => {
+    const n = Number(count);
+    if (!Number.isInteger(n) || n < 1) {
+      toast({ title: "Enter how many units to add", variant: "destructive" });
+      return;
+    }
+    try {
+      await addUnits({ projectId, count: n }).unwrap();
+      toast({ title: `${n} residential unit registration(s) added` });
+      setCount("");
+      refetch();
+    } catch (e) {
+      toast({ title: "Error", description: errMessage(e, "Could not add the units."), variant: "destructive" });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Residential units</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          The residential part of this mixed-use building. Each unit gets its own registration,
+          managed with your residential registrations.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm">
+          {existing.length === 0
+            ? "No residential unit registrations yet."
+            : `${existing.length} residential unit registration(s) on this project.`}
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Number of units to add">
+            <Input
+              className="w-44"
+              type="number"
+              min={1}
+              value={count}
+              onChange={(e) => setCount(e.target.value)}
+              placeholder="e.g. 12"
+            />
+          </Field>
+          <Button onClick={onAdd} disabled={isLoading}>
+            <Plus className="h-4 w-4 mr-1" /> {isLoading ? "Adding…" : "Add units"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          One registration is created per unit (numbered on from any existing units).
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -675,8 +783,14 @@ function AssetsSection({ registrationId, readOnly = false }: { registrationId: s
   };
 
   const onWarranties = async (files: File[], relativePaths: string[]) => {
+    const { accepted, rejectedMessage } = partitionBySize(files);
+    if (rejectedMessage) {
+      toast({ title: "File too large", description: rejectedMessage, variant: "destructive" });
+    }
+    if (accepted.length === 0) return;
+    const acceptedPaths = relativePaths.filter((_, i) => accepted.includes(files[i]));
     try {
-      const res = await uploadWarranties({ registrationId, files, relativePaths }).unwrap();
+      const res = await uploadWarranties({ registrationId, files: accepted, relativePaths: acceptedPaths }).unwrap();
       toast({ title: `Attached ${res.created?.length ?? 0} document(s)`, description: res.skipped?.length ? `${res.skipped.length} file(s) skipped.` : undefined });
     } catch (err) {
       toast({ title: "Upload failed", description: errMessage(err, "Could not attach the warranties."), variant: "destructive" });
@@ -790,8 +904,14 @@ function ChecklistTab({ projectId }: { projectId: string }) {
   }, [docs]);
 
   const onFolder = async (files: File[], relativePaths: string[]) => {
+    const { accepted, rejectedMessage } = partitionBySize(files);
+    if (rejectedMessage) {
+      toast({ title: "File too large", description: rejectedMessage, variant: "destructive" });
+    }
+    if (accepted.length === 0) return;
+    const acceptedPaths = relativePaths.filter((_, i) => accepted.includes(files[i]));
     try {
-      const res = await uploadFolder({ projectId, files, relativePaths }).unwrap();
+      const res = await uploadFolder({ projectId, files: accepted, relativePaths: acceptedPaths }).unwrap();
       const data = res?.data as { matched?: unknown[]; unmatched?: string[] } | undefined;
       toast({ title: res?.message || "Folder processed", description: data?.unmatched?.length ? `${data.unmatched.length} file(s) didn't match a row.` : undefined });
     } catch (err) {
@@ -944,6 +1064,10 @@ function DocRow({ doc, projectId }: { doc: CommercialComplianceDocument; project
     const file = e.target.files?.[0];
     if (fileRef.current) fileRef.current.value = "";
     if (!file) return;
+    if (isOversizeUpload(file)) {
+      toast({ title: "File too large", description: oversizeUploadMessage(file), variant: "destructive" });
+      return;
+    }
     try {
       await upload({ documentId: doc.id, projectId, file }).unwrap();
       toast({ title: "Document attached" });

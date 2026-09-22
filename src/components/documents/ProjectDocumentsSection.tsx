@@ -27,6 +27,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { isOversizeUpload, oversizeUploadMessage, partitionBySize } from "@/lib/uploadLimits";
 import {
   useGetProjectDocumentsQuery,
   useLazyGetProjectDocumentsCheckQuery,
@@ -125,6 +126,10 @@ const DocumentRow = ({
 
   const onReplace = async (f: File | undefined) => {
     if (!f) return;
+    if (isOversizeUpload(f)) {
+      toast({ title: "File too large", description: oversizeUploadMessage(f), variant: "destructive" });
+      return;
+    }
     try {
       await replace({ ownerType: "PROJECT", ownerId: projectId, documentId: doc.id, file: f }).unwrap();
       toast({ title: "Document replaced", description: doc.documentName });
@@ -204,8 +209,14 @@ export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionPr
       });
       return;
     }
+    const { accepted, rejectedMessage } = partitionBySize(pdfs);
+    if (rejectedMessage) {
+      toast({ title: "File too large", description: rejectedMessage, variant: "destructive" });
+    }
+    if (accepted.length === 0) return;
+    const acceptedPaths = relativePaths.filter((_, i) => accepted.includes(pdfs[i]));
     try {
-      const res = await uploadDocs({ projectId, files: pdfs, relativePaths }).unwrap();
+      const res = await uploadDocs({ projectId, files: accepted, relativePaths: acceptedPaths }).unwrap();
       const d = res.data;
       toast({
         title: res.message || "Upload complete",

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Upload, CheckCircle2, FileWarning, Building2 } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/config";
+import { isOversizeUpload, oversizeUploadMessage, MAX_UPLOAD_LABEL } from "@/lib/uploadLimits";
 
 interface ComplianceUploadView {
   documentName: string | null;
@@ -63,6 +64,11 @@ const ComplianceUpload = () => {
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
+    if (isOversizeUpload(file)) {
+      setError(oversizeUploadMessage(file));
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setUploading(true);
     setError(null);
     try {
@@ -72,9 +78,10 @@ const ComplianceUpload = () => {
         `${getApiBaseUrl()}/unsecure/compliance/document/upload?token=${encodeURIComponent(token)}`,
         { method: "POST", body: form }
       );
-      const body = await res.json();
-      if (!res.ok || !body.success) {
-        setError(body.message || "Upload failed. Please try again.");
+      // A proxy/server error page may not be JSON — don't let parsing mask the failure.
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.success) {
+        setError(body?.message || "Upload failed. Please try again.");
       } else {
         setDone(true);
       }
@@ -158,7 +165,7 @@ const ComplianceUpload = () => {
                   Choose a file to upload
                 </Button>
                 <p className="text-xs text-muted-foreground text-center">
-                  Allowed: PDF, PNG, JPG, JPEG, HEIC · max 10 MB
+                  Allowed: PDF, PNG, JPG, JPEG, HEIC · max {MAX_UPLOAD_LABEL}
                 </p>
                 {error && <p className="text-sm text-destructive text-center">{error}</p>}
               </>

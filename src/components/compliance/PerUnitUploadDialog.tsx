@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { isOversizeUpload, oversizeUploadMessage } from "@/lib/uploadLimits";
 import { useGetProjectRegistrationsQuery } from "@/store/api/projects";
 import { useAttachComplianceByNameMutation } from "@/store/api/complianceDocuments";
 
@@ -64,6 +65,14 @@ export function PerUnitUploadDialog({
     }
     if (!file) {
       toast({ title: "Choose a file to upload", variant: "destructive" });
+      return;
+    }
+    if (isOversizeUpload(file)) {
+      toast({
+        title: "File too large",
+        description: oversizeUploadMessage(file),
+        variant: "destructive",
+      });
       return;
     }
     try {

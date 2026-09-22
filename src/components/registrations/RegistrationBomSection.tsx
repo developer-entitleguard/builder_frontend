@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { FileText, FolderUp, Loader2, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { partitionBySize } from "@/lib/uploadLimits";
 import { useUploadRegistrationManualsFolderMutation } from "@/store/api/projectDocuments";
 import {
   useAssignBomToProjectMutation,
@@ -69,8 +70,14 @@ export const RegistrationBomSection = ({ registrationId, projectId }: Props) => 
       });
       return;
     }
+    const { accepted, rejectedMessage } = partitionBySize(pdfs);
+    if (rejectedMessage) {
+      toast({ title: "File too large", description: rejectedMessage, variant: "destructive" });
+    }
+    if (accepted.length === 0) return;
+    const acceptedPaths = relativePaths.filter((_, i) => accepted.includes(pdfs[i]));
     try {
-      const res = await uploadManuals({ registrationId, files: pdfs, relativePaths }).unwrap();
+      const res = await uploadManuals({ registrationId, files: accepted, relativePaths: acceptedPaths }).unwrap();
       const d = res.data;
       toast({
         title: res.message || "Manuals imported",

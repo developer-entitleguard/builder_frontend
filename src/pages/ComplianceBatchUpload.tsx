@@ -13,6 +13,7 @@ import {
   Layers,
 } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/config";
+import { isOversizeUpload, oversizeUploadMessage, MAX_UPLOAD_LABEL } from "@/lib/uploadLimits";
 
 interface BatchItem {
   itemId: string;
@@ -110,6 +111,12 @@ const ComplianceBatchUpload = () => {
       setBusyKey(null);
       return;
     }
+    if (isOversizeUpload(file)) {
+      setError(oversizeUploadMessage(file));
+      setBanner(null);
+      setBusyKey(null);
+      return;
+    }
     setError(null);
     setBanner(null);
     try {
@@ -124,9 +131,10 @@ const ComplianceBatchUpload = () => {
         url = `${getApiBaseUrl()}/unsecure/compliance/batch/upload-many?token=${encodeURIComponent(token)}`;
       }
       const res = await fetch(url, { method: "POST", body: form });
-      const body = await res.json();
-      if (!res.ok || !body.success) {
-        setError(body.message || "Upload failed. Please try again.");
+      // A proxy/server error page may not be JSON — don't let parsing mask the failure.
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.success) {
+        setError(body?.message || "Upload failed. Please try again.");
       } else {
         setBanner(body.message || "Uploaded — the builder will review it.");
         await load();
@@ -204,7 +212,7 @@ const ComplianceBatchUpload = () => {
                   </div>
 
                   <p className="text-xs text-muted-foreground">
-                    Allowed: PDF, PNG, JPG, JPEG, HEIC · max 10 MB per file · no login required
+                    Allowed: PDF, PNG, JPG, JPEG, HEIC · max {MAX_UPLOAD_LABEL} per file · no login required
                   </p>
                   {banner && (
                     <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">

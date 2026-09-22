@@ -301,6 +301,10 @@ export const commercialApi = api.injectEndpoints({
       // A new registration may create a business inline (newBusiness) — refresh the business list too.
       invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId), 'CommercialBusiness', orgRegsTag],
     }),
+    // Mixed-use only: bulk-add residential unit registrations for the residential part.
+    addResidentialUnits: build.mutation<ListEnvelope<number>, { projectId: string; count: number }>({
+      query: ({ projectId, count }) => ({ url: `/api/builder/commercial/projects/${projectId}/residential-units`, method: 'POST', body: { count } }),
+    }),
     getCommercialRegistration: build.query<CommercialRegistration, string>({
       query: (id) => ({ url: `/api/builder/commercial/registrations/${id}`, method: 'GET' }),
       providesTags: (_r, _e, id) => [regTag(id)],
@@ -464,6 +468,7 @@ export const {
   useListCommercialRegistrationsQuery,
   useListOrgCommercialRegistrationsQuery,
   useCreateCommercialRegistrationMutation,
+  useAddResidentialUnitsMutation,
   useGetCommercialRegistrationQuery,
   useUpdateCommercialRegistrationMutation,
   useTagRegistrationBusinessMutation,

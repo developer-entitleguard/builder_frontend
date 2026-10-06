@@ -8,6 +8,11 @@ export interface BuilderProjectApi {
   state: string;
   postcode: string;
   propertyType: string;
+  /**
+   * Commercial Segment: RESIDENTIAL | COMMERCIAL | MIXED_USE. The backend sends
+   * RESIDENTIAL for rows created before the column existed; absent on older responses.
+   */
+  projectType?: string | null;
   /** NCC building classification code (e.g. CLASS_1A). */
   buildingClass: string | null;
   startDate: string | null;

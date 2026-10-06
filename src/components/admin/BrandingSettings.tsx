@@ -388,9 +388,7 @@ function HandoverMessageCard({ segment, title, recipientNote, organizationName, 
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>
-          This block appears in the middle of {recipientNote}, headed
-          {" "}
-          <span className="font-medium text-foreground">A message from {organizationName || "your organisation"}</span>.
+          This block appears in the middle of {recipientNote}, in a highlighted box.
           Write it in your own voice. Bold, italic, lists and links are supported.
         </CardDescription>
       </CardHeader>

@@ -133,11 +133,29 @@ const ComplianceUpload = () => {
                 {view.description && (
                   <p className="text-sm text-muted-foreground">{view.description}</p>
                 )}
-                {view.status === "SUBMITTED" && (
-                  <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">
-                    Awaiting builder review
-                  </Badge>
-                )}
+                {/* One file per request: once submitted (awaiting review) or
+                    accepted, there is nothing more to upload. A rejection reverts
+                    the request, which brings the upload back. */}
+                {view.status === "SUBMITTED" || view.status === "RECEIVED" ? (
+                  <div className="flex flex-col items-center gap-2 rounded-md border bg-muted/40 py-6 text-center">
+                    <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+                    {view.status === "RECEIVED" ? (
+                      <>
+                        <p className="font-medium">This document has been accepted.</p>
+                        <p className="text-sm text-muted-foreground">There's nothing more to do. You can close this page.</p>
+                      </>
+                    ) : (
+                      <>
+                        <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Awaiting builder review</Badge>
+                        <p className="text-sm text-muted-foreground px-4">
+                          You've already uploaded this document. If the builder needs a different file,
+                          they'll ask you again and this link will reopen.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                <>
                 {view.rejectionReason && (
                   <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
                     A previous submission was rejected: {view.rejectionReason}. Please upload a corrected
@@ -168,6 +186,8 @@ const ComplianceUpload = () => {
                   Allowed: PDF, PNG, JPG, JPEG, HEIC · max {MAX_UPLOAD_LABEL}
                 </p>
                 {error && <p className="text-sm text-destructive text-center">{error}</p>}
+                </>
+                )}
               </>
             )
           )}

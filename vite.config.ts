@@ -33,16 +33,6 @@ export default defineConfig(({ mode }) => ({
           });
         },
       },
-      "/profile": {
-        target: proxyTarget,
-        changeOrigin: true,
-        secure: false,
-        configure: (proxy) => {
-          proxy.on("proxyReq", (proxyReq) => {
-            proxyReq.removeHeader("Origin");
-          });
-        },
-      },
       "/signup": {
         target: proxyTarget,
         changeOrigin: true,

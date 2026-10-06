@@ -4,7 +4,6 @@ import type {
   SignInRequest, 
   AuthResponse, 
   ResetPasswordRequest, 
-  UpdatePasswordRequest,
   ResetPasswordWithTokenRequest,
   SendVerifyMailRequest,
   SetPasswordForUserRequest
@@ -25,15 +24,6 @@ export interface VerifyLoginOtpRequest {
 
 export const authApi = api.injectEndpoints({
   endpoints: (build) => ({
-    // Get current user profile
-    getProfile: build.query<AuthResponse['data']['userInfo'], void>({
-      query: () => ({
-        url: '/profile',
-        method: 'GET',
-      }),
-      providesTags: ['Auth'],
-    }),
-
     // Sign up
     signUp: build.mutation<AuthResponse, SignUpRequest>({
       query: (data) => ({
@@ -114,15 +104,6 @@ export const authApi = api.injectEndpoints({
       }),
     }),
 
-    // Update password
-    updatePassword: build.mutation<{ message: string }, UpdatePasswordRequest>({
-      query: (data) => ({
-        url: '/update-password',
-        method: 'PATCH',
-        body: data,
-      }),
-    }),
-
     // Verify email
     verifyEmail: build.mutation<{ message: string }, { token: string }>({
       query: (data) => ({
@@ -158,21 +139,10 @@ export const authApi = api.injectEndpoints({
         body: data,
       }),
     }),
-
-    // Update profile
-    updateProfile: build.mutation<AuthResponse['data']['userInfo'], Partial<AuthResponse['data']['userInfo']>>({
-      query: (data) => ({
-        url: '/profile',
-        method: 'PATCH',
-        body: data,
-      }),
-      invalidatesTags: ['Auth'],
-    }),
   }),
 });
 
 export const {
-  useGetProfileQuery,
   useSignUpMutation,
   useSignInMutation,
   useUnifiedSignInMutation,
@@ -180,11 +150,9 @@ export const {
   useVerifyLoginOtpMutation,
   useSignOutMutation,
   useResetPasswordWithTokenMutation,
-  useUpdatePasswordMutation,
   useVerifyEmailMutation,
   useResendVerificationMutation,
   useSendVerifyMailMutation,
   useSetPasswordForUserMutation,
-  useUpdateProfileMutation,
   useValidateTokenQuery,
 } = authApi;

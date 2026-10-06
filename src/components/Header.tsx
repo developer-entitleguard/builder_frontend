@@ -15,6 +15,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -35,7 +37,7 @@ import {
   readBuilderRoleFromStorage,
 } from "@/lib/roles";
 import { useUnreadNotificationCountQuery } from "@/lib/api/services/notifications";
-import { Menu, ChevronDown, Bell, HelpCircle } from "lucide-react";
+import { Menu, ChevronDown, Bell, HelpCircle, UserCircle, LogOut } from "lucide-react";
 import { AnnouncementCenter } from "@/components/announcements/AnnouncementCenter";
 
 const hasBuilderAuth = (): boolean => {
@@ -121,6 +123,19 @@ const Header = () => {
     pollingInterval: 60000,
   });
   const unreadCount = unreadData?.data ?? 0;
+
+  // Who is signed in, for the account menu header (kept fresh by the profile page).
+  const accountName = (() => {
+    try {
+      const raw = localStorage.getItem("userData");
+      if (!raw) return null;
+      const u = JSON.parse(raw) as { firstName?: string; lastName?: string; email?: string };
+      const name = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
+      return u.email ? { name: name || u.email, email: u.email } : null;
+    } catch {
+      return null;
+    }
+  })();
 
   const handleSignOut = () => {
     if (hasBuilderAuth()) {
@@ -468,9 +483,38 @@ const Header = () => {
                   />
                 )}
 
-                <Button variant="outline" size="sm" onClick={handleSignOut}>
-                  Sign Out
-                </Button>
+                {/* Account menu: own profile + sign out (narrower than a Sign Out button). */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant={location.pathname === "/profile" ? "default" : "ghost"}
+                      size="icon"
+                      aria-label="Account"
+                      title="Account"
+                    >
+                      <UserCircle className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    {accountName && (
+                      <DropdownMenuLabel className="font-normal">
+                        <div className="truncate text-sm font-medium">{accountName.name}</div>
+                        <div className="truncate text-xs text-muted-foreground">{accountName.email}</div>
+                      </DropdownMenuLabel>
+                    )}
+                    {accountName && <DropdownMenuSeparator />}
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile">
+                        <UserCircle className="mr-2 h-4 w-4" />
+                        Profile
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={handleSignOut}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               {/* ── Mobile nav trigger ── */}
@@ -511,6 +555,15 @@ const Header = () => {
                         );
                       })}
                     </nav>
+                    <Link
+                      to="/profile"
+                      onClick={() => setMobileOpen(false)}
+                      className={`rounded-md px-3 py-2 text-sm transition-colors ${
+                        location.pathname === "/profile" ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+                      }`}
+                    >
+                      Profile
+                    </Link>
                     <Button
                       variant="outline"
                       onClick={() => {

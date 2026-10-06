@@ -75,6 +75,7 @@ export const api = createApi({
     'Document',
     'Dashboard',
     'Auth',
+    'Profile',
     'BuilderUser',
     'BuilderOrganization',
     // Builder branding — logo + handover email message.

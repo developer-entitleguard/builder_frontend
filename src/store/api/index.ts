@@ -1,5 +1,7 @@
 // Register all API modules (side-effect: inject endpoints into api)
 import './auth';
+// Shared profile page (/api/me/profile, /api/me/password).
+import './profile';
 import './dashboard';
 import './items';
 import './registrations';
@@ -46,6 +48,7 @@ export { api } from './apiSlice';
 
 // Auth
 export * from './auth';
+export * from './profile';
 
 // Registrations, items, users
 export * from './registrations';

@@ -55,6 +55,7 @@ import MyAssignments from "./pages/MyAssignments";
 import MyAssignmentDetail from "./pages/MyAssignmentDetail";
 import TicketDetail from "./pages/TicketDetail";
 import Notifications from "./pages/Notifications";
+import Profile from "./pages/Profile";
 import AdminProtectedRoute from "@/components/admin-portal/AdminProtectedRoute";
 import AdminLogin from "./pages/admin-portal/AdminLogin";
 import AdminOrgList from "./pages/admin-portal/AdminOrgList";
@@ -412,6 +413,12 @@ const App = () => (
                   <RoleGate roles={[BUILDER_ROLES.EXTERNAL_VENDOR, BUILDER_ROLES.INTERNAL_VENDOR, BUILDER_ROLES.ADMINISTRATOR]}>
                     <MyAssignmentDetail />
                   </RoleGate>
+                </ProtectedRoute>
+              } />
+              {/* Own profile: name, mobile, set/change password — every signed-in role. */}
+              <Route path="/profile" element={
+                <ProtectedRoute>
+                  <Profile />
                 </ProtectedRoute>
               } />
               <Route path="/notifications" element={

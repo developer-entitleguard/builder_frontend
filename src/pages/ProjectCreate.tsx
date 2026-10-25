@@ -31,7 +31,8 @@ import {
   Settings,
   MapPin,
   Calendar,
-  Sparkles
+  Sparkles,
+  FileCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -139,6 +140,7 @@ const ProjectCreate = () => {
     bal_rating: null,
     topography_type: null,
     auto_generate: true,
+    auto_generate_compliance: true,
     dwelling_count: null
   });
 
@@ -246,6 +248,9 @@ const ProjectCreate = () => {
           building_class: null,
           dwelling_count: null,
           auto_generate: false,
+          // The backend always stores compliance on for commercial / mixed use and
+          // generates the commercial checklist itself after create.
+          auto_generate_compliance: true,
         } as unknown as CreateProjectData)
       : formData;
     const projectId = await createProject(payload);
@@ -263,22 +268,43 @@ const ProjectCreate = () => {
       return;
     }
 
-    // Auto-generate activities + compliance using the SAME foreground endpoints
+    // Auto-generate compliance and activities using the SAME foreground endpoints
     // the manual "Generate" buttons use, passing the project description as the
-    // prompt. This is reliable (unlike a background job) and lets the builder's
-    // description drive generation. Best-effort: a failure never blocks the flow.
-    const prompt = formData.description?.trim();
-    if (formData.auto_generate && prompt) {
+    // prompt. Each has its own switch, and neither needs a description (the
+    // backend and AI accept an empty one). Best-effort: a failure never blocks the flow.
+    const prompt = formData.description?.trim() ?? '';
+    const runCompliance = formData.auto_generate_compliance ?? true;
+    // Only generate activities when the org actually has the Activities module.
+    // (Backend enforces the same gate.)
+    const runActivities = (formData.auto_generate ?? true) && hasModule("ACTIVITIES");
+    if (runCompliance || runActivities) {
       setIsGenerating(true);
-      // Only generate activities when the org actually has the Activities module;
-      // compliance always generates. (Backend enforces the same gate.)
-      const tasks: Promise<unknown>[] = [generateCompliance({ projectId, prompt }).unwrap()];
-      if (hasModule("ACTIVITIES")) {
-        tasks.push(generateActivities({ projectId, prompt }).unwrap());
-      }
-      const results = await Promise.allSettled(tasks);
+      const [complianceResult, activitiesResult] = await Promise.allSettled([
+        runCompliance
+          ? generateCompliance({ projectId, prompt: prompt || undefined }).unwrap()
+          : Promise.resolve(null),
+        runActivities ? generateActivities({ projectId, prompt }).unwrap() : Promise.resolve(null),
+      ]);
       setIsGenerating(false);
-      if (results.some((r) => r.status === "rejected")) {
+
+      // Not enough to go on (no property type, location or description): show the
+      // AI's guidance rather than the generic message.
+      const complianceData =
+        complianceResult.status === "fulfilled" ? complianceResult.value : null;
+      const insufficient =
+        !!complianceData &&
+        complianceData.success === false &&
+        !Array.isArray(complianceData.data) &&
+        complianceData.data?.reason === "INSUFFICIENT_INPUT";
+
+      if (insufficient) {
+        toast({
+          title: "Compliance documents not generated",
+          description:
+            complianceData?.message ||
+            "Add more project detail, then use Generate on the project's Compliance tab.",
+        });
+      } else if (complianceResult.status === "rejected" || activitiesResult.status === "rejected") {
         toast({
           title: "Project created",
           description:
@@ -591,13 +617,13 @@ const ProjectCreate = () => {
         </div>
       </div>
 
-      {/* Auto-generate switch (single control for all three) */}
+      {/* Auto-generate switches: activities & registrations, and compliance documents */}
       <div className="flex items-start gap-3 rounded-lg border p-4">
         <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
         <div className="flex-1">
           <div className="flex items-center justify-between gap-3">
             <Label htmlFor="auto-generate" className="text-sm font-medium cursor-pointer">
-              Auto-generate activities, compliance documents &amp; registrations
+              Auto-generate activities &amp; registrations
             </Label>
             <Switch
               id="auto-generate"
@@ -606,12 +632,34 @@ const ProjectCreate = () => {
             />
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Uses your project description to draft activities and the NSW compliance checklist.
+            Uses your project description to draft the project's activities.
             {MULTI_DWELLING.includes(formData.property_type) &&
               ' Unit registrations are created automatically for each dwelling.'}
           </p>
         </div>
       </div>
+
+      {!isCommercial && (
+        <div className="flex items-start gap-3 rounded-lg border p-4">
+          <FileCheck className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="auto-generate-compliance" className="text-sm font-medium cursor-pointer">
+                Generate compliance documents
+              </Label>
+              <Switch
+                id="auto-generate-compliance"
+                checked={formData.auto_generate_compliance ?? true}
+                onCheckedChange={v => updateField('auto_generate_compliance', v)}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Drafts the NSW compliance checklist for the project (and each unit), with or without a
+              description. This can't be changed after the project is created.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Summary */}
       <Card className="bg-muted/50">

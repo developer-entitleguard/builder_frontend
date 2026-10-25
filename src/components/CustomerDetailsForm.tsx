@@ -289,6 +289,17 @@ const CustomerDetailsForm = forwardRef<CustomerDetailsFormRef, CustomerDetailsFo
       builderOrganizationId,
     }).unwrap();
 
+    // Business-rule rejections come back as success=false (e.g. a second unit on a
+    // single-house project): show the backend's message rather than failing silently.
+    if (result && result.success === false) {
+      toast({
+        title: "Couldn't save customer details",
+        description: result.message || "Failed to create customer",
+        variant: "destructive"
+      });
+      return undefined;
+    }
+
     const customerId = result?.data?.id || registrationId;
     return customerId ? String(customerId) : undefined;
   };

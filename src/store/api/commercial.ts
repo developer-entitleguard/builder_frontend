@@ -1,4 +1,5 @@
 import { api } from './apiSlice';
+import type { GroupedFolderUploadResult } from './projectDocuments';
 
 /**
  * Commercial Segment PRD 1. RTK Query slice for the commercial builder flow —
@@ -203,6 +204,15 @@ export interface ComplianceAssignRequest {
   assigneeEmail?: string | null;
 }
 
+/**
+ * Commercial checklist folder upload. The compliance section returns the grouped
+ * shape; other Documents-tab sections only return the legacy keys.
+ */
+export interface CommercialFolderUploadResult extends GroupedFolderUploadResult {
+  matched?: unknown[];
+  unmatched?: string[];
+}
+
 /** Backend DefaultListResponse envelope. */
 interface ListEnvelope<T> {
   success: boolean;
@@ -268,7 +278,9 @@ export const commercialApi = api.injectEndpoints({
     // Bulk-add a folder of documents to one Documents-tab section. COMPLIANCE (the
     // default) classifies + matches to checklist rows, creating a row when none
     // matches; other sections create one row per file (WARRANTY also feeds assets).
-    uploadChecklistFolder: build.mutation<ListEnvelope<{ matched: unknown[]; unmatched: string[] }>, { projectId: string; files: File[]; relativePaths: string[]; section?: string }>({
+    // For the compliance section the response is grouped by destination (commercial
+    // checklist; for mixed use also the residential project tier and units).
+    uploadChecklistFolder: build.mutation<ListEnvelope<CommercialFolderUploadResult>, { projectId: string; files: File[]; relativePaths: string[]; section?: string }>({
       query: ({ projectId, files, relativePaths, section }) => {
         const form = new FormData();
         files.forEach((f) => form.append('files', f));
@@ -276,7 +288,9 @@ export const commercialApi = api.injectEndpoints({
         if (section) form.append('section', section);
         return { url: `/api/builder/commercial/projects/${projectId}/checklist/folder`, method: 'POST', body: form };
       },
-      invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId)],
+      // Mixed use: `Residential/…` files land on the residential project tier and
+      // units, which live in the ComplianceDocuments cache.
+      invalidatesTags: (_r, _e, { projectId }) => [projectTag(projectId), 'ComplianceDocuments', 'HandoverReadiness'],
     }),
     // Assessment-only compliance check (generates nothing). Lazy — run on demand.
     getCommercialComplianceCheck: build.query<CommercialComplianceCheck, string>({

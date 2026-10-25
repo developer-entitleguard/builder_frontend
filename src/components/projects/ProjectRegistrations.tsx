@@ -54,7 +54,12 @@ interface Registration {
 
 interface ProjectRegistrationsProps {
   projectId: string;
+  /** Project property type (e.g. "house"); a single house holds one registration (Q4). */
+  propertyType?: string | null;
 }
+
+const SINGLE_HOUSE_MESSAGE =
+  "A single house project has one dwelling. Change the project type to add more units.";
 
 const statusConfig: Record<string, { color: string; label: string }> = {
   draft: { color: "bg-gray-100 text-gray-700", label: "Draft" },
@@ -79,7 +84,7 @@ const getBuilderId = (): string | null => {
   }
 };
 
-export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) => {
+export const ProjectRegistrations = ({ projectId, propertyType }: ProjectRegistrationsProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { hasModule, ready } = useEntitlements();
@@ -427,6 +432,11 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
     );
   }
 
+  // Q4: a single house has exactly one dwelling, so no more registrations once it
+  // has one (the backend rejects it too).
+  const singleHouseFull =
+    (propertyType ?? "").toLowerCase() === "house" && registrations.length >= 1;
+
   const selectedCount = selectedIds.size;
   const allSelected = registrations.length > 0 && selectedCount === registrations.length;
   const handedCount = registrations.filter(
@@ -490,16 +500,29 @@ export const ProjectRegistrations = ({ projectId }: ProjectRegistrationsProps) =
               </Label>
             </div>
             <div className="h-5 w-px bg-border" />
-            <Button variant="outline" onClick={() => setLinkDialogOpen(true)}>
+            <Button
+              variant="outline"
+              onClick={() => setLinkDialogOpen(true)}
+              disabled={singleHouseFull}
+              title={singleHouseFull ? SINGLE_HOUSE_MESSAGE : undefined}
+            >
               <LinkIcon className="h-4 w-4 mr-2" />
               Link existing
             </Button>
-            <Button onClick={handleCreateRegistration}>
+            <Button
+              onClick={handleCreateRegistration}
+              disabled={singleHouseFull}
+              title={singleHouseFull ? SINGLE_HOUSE_MESSAGE : undefined}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Create registration
             </Button>
           </div>
         </div>
+      )}
+
+      {singleHouseFull && selectedCount === 0 && (
+        <p className="text-xs text-muted-foreground mb-3">{SINGLE_HOUSE_MESSAGE}</p>
       )}
 
       {/* Lightweight select-all header — only when nothing is selected yet. */}

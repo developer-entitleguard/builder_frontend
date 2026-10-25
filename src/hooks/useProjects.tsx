@@ -70,8 +70,14 @@ export interface CreateProjectData {
   bal_rating?: string | null;
   topography_type?: string | null;
   activities_visible_to_homeowner?: boolean;
-  /** When true (default), auto-generate activities, compliance docs & unit registrations on create. */
+  /** When true (default), auto-generate activities & unit registrations on create. */
   auto_generate?: boolean;
+  /**
+   * When true (default), generate the compliance checklist on create. Set once at
+   * creation and never sent on update (the backend ignores it there). Commercial /
+   * mixed-use projects always store it on.
+   */
+  auto_generate_compliance?: boolean;
   /** Number of units for multi-dwelling types (townhouse/apartment); duplex is always 2. */
   dwelling_count?: number | null;
   // Property features that gate which compliance certificates apply.
@@ -241,6 +247,7 @@ export const useProjects = () => {
         targetEndDate: data.target_end_date ?? "",
         topographyTypeId: data.topography_type ?? null,
         autoGenerate: data.auto_generate ?? true,
+        autoGenerateCompliance: data.auto_generate_compliance ?? true,
         dwellingCount: data.dwelling_count ?? null,
         hasGas: data.has_gas ?? null,
         hasPool: data.has_pool ?? null,

@@ -89,7 +89,10 @@ export interface CreateBuilderProjectBody {
   statusId: string;
   targetEndDate: string;
   topographyTypeId?: string | null;
+  /** Activities & unit registrations only (compliance has its own flag). */
   autoGenerate?: boolean;
+  /** Create only (null = on); ignored by the backend on update. */
+  autoGenerateCompliance?: boolean | null;
   dwellingCount?: number | null;
   // Property features that gate which compliance certificates apply.
   hasGas?: boolean | null;

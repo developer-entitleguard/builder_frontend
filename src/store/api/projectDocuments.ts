@@ -22,8 +22,46 @@ interface DefaultListResponse<T> {
   data: T;
 }
 
-export interface FolderUploadResult {
-  matched: Array<{ fileName: string; documentId: string; documentName: string }>;
+/** Where a routed folder-upload file landed. */
+export type FolderUploadLevel = "PROJECT" | "UNIT" | "COMMERCIAL";
+
+/** One filed document from a folder upload. */
+export interface FolderUploadEntry {
+  fileName: string;
+  documentId: string;
+  documentName: string;
+  /** Residential project / unit entries: matched an empty slot, added a new line, or a new version. */
+  disposition?: "matched" | "added" | "updated";
+  level?: FolderUploadLevel;
+}
+
+/** A file the router couldn't place, e.g. a `Unit 9/` folder when there's no unit 9. */
+export interface FolderUploadUnrouted {
+  fileName: string;
+  relativePath: string | null;
+  reason: string;
+}
+
+/**
+ * Folder-upload result grouped by destination. Subfolders route files:
+ * `Project/` or root → project, `Unit 3/` / `3/` → that unit; commercial and
+ * mixed-use projects add `Commercial/` and `Residential/…` (see the commercial
+ * checklist folder endpoint, which returns the same shape).
+ */
+export interface GroupedFolderUploadResult {
+  project?: FolderUploadEntry[];
+  /** Keyed by unit number. */
+  units?: Record<string, FolderUploadEntry[]>;
+  commercial?: FolderUploadEntry[];
+  unrouted?: FolderUploadUnrouted[];
+  /** Files that couldn't be stored, as "name (reason)". */
+  failed?: string[];
+}
+
+export interface FolderUploadResult extends GroupedFolderUploadResult {
+  /** Legacy: every filed entry, across all levels. */
+  matched: FolderUploadEntry[];
+  /** Legacy: same as `failed`. */
   unmatched: string[];
   documents: ComplianceDocumentApi[];
   completeness: ComplianceCompleteness;
@@ -140,6 +178,10 @@ export const projectDocumentsApi = api.injectEndpoints({
         { type: "ComplianceDocuments", id: `project-${projectId}` },
         { type: "ComplianceDocuments", id: `project-completeness-${projectId}` },
         { type: "ComplianceDocuments", id: `registration-types-${projectId}` },
+        // Files in `Unit N/` subfolders land on that unit's registration checklist,
+        // whose ids aren't known here — refresh every registration view.
+        "ComplianceDocuments",
+        "HandoverReadiness",
       ],
     }),
 

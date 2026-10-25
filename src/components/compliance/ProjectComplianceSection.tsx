@@ -13,10 +13,12 @@ import {
 import { Loader2, Plus, RotateCcw, Sparkles, Upload, Home, UserPlus, Send, X, FolderUp, ClipboardCheck, CheckCircle2, AlertCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { partitionBySize } from "@/lib/uploadLimits";
 import {
   useUploadDocumentsFolderMutation,
   useLazyGetProjectDocumentsCheckQuery,
   type ComplianceCheckResult,
+  type FolderUploadResult,
 } from "@/store/api/projectDocuments";
 import {
   useGetProjectComplianceDocumentsQuery,
@@ -42,6 +44,7 @@ import { ComplianceCompletenessBar } from "./ComplianceCompletenessBar";
 import { ComplianceDocumentDialog } from "./ComplianceDocumentDialog";
 import { AssignComplianceDialog } from "./AssignComplianceDialog";
 import { GenerateComplianceDialog, type ComplianceFeatureFlags } from "./GenerateComplianceDialog";
+import { FolderRoutingHint, FolderUploadSummary } from "./FolderUploadSummary";
 
 interface ProjectComplianceSectionProps {
   projectId: string;
@@ -111,21 +114,30 @@ export const ProjectComplianceSection = ({
   const [uploadFolder, { isLoading: uploadingFolder }] = useUploadDocumentsFolderMutation();
   const [runCheck, { data: checkResult, isFetching: checking }] = useLazyGetProjectDocumentsCheckQuery();
 
+  const [folderResult, setFolderResult] = useState<FolderUploadResult | null>(null);
+
   const onFolder = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    const all = Array.from(fileList) as (File & { webkitRelativePath?: string })[];
-    const files = all.filter((f) => f.name.toLowerCase().endsWith(".pdf"));
-    if (files.length === 0) {
+    const pdfs = Array.from(fileList).filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+    if (pdfs.length === 0) {
       toast({ title: "No PDFs found in that folder", variant: "destructive" });
       return;
     }
-    const relativePaths = files.map((f) => f.webkitRelativePath || f.name);
+    // 30 MB per-file limit, checked before the request starts.
+    const { accepted, rejectedMessage } = partitionBySize(pdfs);
+    if (rejectedMessage) {
+      toast({ title: "File too large", description: rejectedMessage, variant: "destructive" });
+    }
+    if (accepted.length === 0) return;
+    const relativePaths = accepted.map((f) => f.webkitRelativePath || f.name);
     try {
-      const res = await uploadFolder({ projectId, files, relativePaths }).unwrap();
+      const res = await uploadFolder({ projectId, files: accepted, relativePaths }).unwrap();
       const data = res?.data;
+      setFolderResult(data ?? null);
+      const problems = (data?.unrouted?.length ?? 0) + (data?.failed?.length ?? data?.unmatched?.length ?? 0);
       toast({
-        title: res?.message || `Processed ${files.length} document(s)`,
-        description: data?.unmatched?.length ? `${data.unmatched.length} file(s) didn't match a row.` : undefined,
+        title: res?.message || `Processed ${accepted.length} document(s)`,
+        description: problems ? "Some files weren't filed — see the summary." : undefined,
       });
     } catch {
       toast({ title: "Folder upload failed", description: "Please try again.", variant: "destructive" });
@@ -353,6 +365,7 @@ export const ProjectComplianceSection = ({
               variant="outline"
               onClick={() => document.getElementById("project-compliance-folder")?.click()}
               disabled={uploadingFolder}
+              title="Use subfolders Project, Unit 1, Unit 2… to file per unit"
             >
               <FolderUp className="h-4 w-4 mr-2" />
               {uploadingFolder ? "Uploading…" : "Upload folder"}
@@ -376,6 +389,16 @@ export const ProjectComplianceSection = ({
           </div>
         )}
       </div>
+
+      {!isScopedBuilder && (
+        <div className="flex justify-end">
+          <FolderRoutingHint kind="residential" />
+        </div>
+      )}
+
+      {folderResult && (
+        <FolderUploadSummary result={folderResult} onDismiss={() => setFolderResult(null)} />
+      )}
 
       {checkResult?.data && <ComplianceCheckCard result={checkResult.data} />}
 

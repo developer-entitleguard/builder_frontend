@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,7 +32,9 @@ import {
   useGetProjectDocumentsQuery,
   useLazyGetProjectDocumentsCheckQuery,
   useUploadDocumentsFolderMutation,
+  type FolderUploadResult,
 } from "@/store/api/projectDocuments";
+import { FolderRoutingHint, FolderUploadSummary } from "@/components/compliance/FolderUploadSummary";
 import {
   useDeleteProjectComplianceDocumentMutation,
   useUploadComplianceAttachmentMutation,
@@ -196,7 +198,8 @@ export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionPr
   const [runCheck, checkState] = useLazyGetProjectDocumentsCheckQuery();
 
   const documents = docsResp?.data ?? [];
-  const lastDocsUpload = docsUploadState.data?.data;
+  // Grouped result of the last folder upload (dismissable).
+  const [lastDocsUpload, setLastDocsUpload] = useState<FolderUploadResult | null>(null);
   const check = checkState.data?.data;
 
   const handleDocsFolder = async (fileList: FileList | null) => {
@@ -218,11 +221,14 @@ export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionPr
     try {
       const res = await uploadDocs({ projectId, files: accepted, relativePaths: acceptedPaths }).unwrap();
       const d = res.data;
+      setLastDocsUpload(d ?? null);
+      const failedCount = d?.failed?.length ?? d?.unmatched?.length ?? 0;
+      const unroutedCount = d?.unrouted?.length ?? 0;
       toast({
         title: res.message || "Upload complete",
-        description: `${d.matched.length} document(s) filed${
-          d.unmatched.length ? `, ${d.unmatched.length} failed` : ""
-        }${skipped ? `, ${skipped} non-PDF skipped` : ""}.`,
+        description: `${d?.matched?.length ?? 0} document(s) filed${
+          unroutedCount ? `, ${unroutedCount} not filed` : ""
+        }${failedCount ? `, ${failedCount} failed` : ""}${skipped ? `, ${skipped} non-PDF skipped` : ""}.`,
       });
     } catch {
       toast({
@@ -256,7 +262,7 @@ export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionPr
             Everything here is sent to the homeowner at handover.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
+        <CardContent className="flex flex-wrap items-center gap-3">
           <FolderPickerButton
             label="Upload documents folder"
             busy={docsUploadState.isLoading}
@@ -270,14 +276,12 @@ export const ProjectDocumentsSection = ({ projectId }: ProjectDocumentsSectionPr
             )}
             Run compliance check
           </Button>
+          <FolderRoutingHint kind="residential" />
         </CardContent>
       </Card>
 
-      {(lastDocsUpload?.unmatched?.length ?? 0) > 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-700">
-          {lastDocsUpload!.unmatched.length} file(s) couldn&apos;t be stored:{" "}
-          {lastDocsUpload!.unmatched.join(", ")}. Please retry these files.
-        </div>
+      {lastDocsUpload && (
+        <FolderUploadSummary result={lastDocsUpload} onDismiss={() => setLastDocsUpload(null)} />
       )}
 
       {/* Advisory compliance check result (nothing stored) */}

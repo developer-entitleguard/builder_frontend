@@ -16,6 +16,7 @@ import { getApiBaseUrl } from "@/lib/config";
 import { isOversizeUpload, oversizeUploadMessage, partitionBySize } from "@/lib/uploadLimits";
 import { ENTITY_TYPES } from "@/lib/commercialBusiness";
 import { BusinessAppLinks } from "@/components/commercial/BusinessAppLinks";
+import { FolderRoutingHint, FolderUploadSummary } from "@/components/compliance/FolderUploadSummary";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { useGetProjectRegistrationsQuery, useProjectByIdQuery, useUpdateProjectMutation } from "@/store/api/projects";
 import {
@@ -26,6 +27,7 @@ import {
   CommercialBusiness,
   CommercialComplianceCheck,
   CommercialComplianceDocument,
+  CommercialFolderUploadResult,
   CommercialProjectDetail,
   CommercialRegistration,
   useAddChecklistDocumentMutation,
@@ -132,7 +134,7 @@ const CommercialProjectWorkspace = () => {
             <FlowNav onBack={() => setTab("parts")} onNext={() => setTab("checklist")} nextLabel={`Next: ${docsLabel}`} />
           </TabsContent>
           <TabsContent value="checklist">
-            {isMixed ? <ChecklistTab projectId={projectId} /> : <DocumentsTab projectId={projectId} />}
+            {isMixed ? <ChecklistTab projectId={projectId} isMixed /> : <DocumentsTab projectId={projectId} />}
             <FlowNav onBack={() => setTab("registrations")} onNext={() => setTab("handover")} nextLabel="Next: Handover" />
           </TabsContent>
           <TabsContent value="handover">
@@ -897,14 +899,15 @@ const fileHref = (fileId?: string | null): string | undefined =>
 /** A row's Documents-tab section, treating legacy null as the compliance checklist. */
 const sectionOf = (d: CommercialComplianceDocument): string => d.section ?? "COMPLIANCE";
 
-function ChecklistTab({ projectId, title = "Document checklist" }: { projectId: string; title?: string }) {
-  const { data: docs } = useGetChecklistDocumentsQuery(projectId);
+function ChecklistTab({ projectId, title = "Document checklist", isMixed = false }: { projectId: string; title?: string; isMixed?: boolean }) {
+  const { data: docs, isLoading: docsLoading } = useGetChecklistDocumentsQuery(projectId);
   const { data: regs } = useListCommercialRegistrationsQuery(projectId);
   const [regenerate, { isLoading }] = useRegenerateChecklistMutation();
   const [uploadFolder, { isLoading: uploadingFolder }] = useUploadChecklistFolderMutation();
   const [runCheck, { data: checkResult, isFetching: checking }] = useLazyGetCommercialComplianceCheckQuery();
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
+  const [folderResult, setFolderResult] = useState<CommercialFolderUploadResult | null>(null);
 
   const grouped = useMemo(() => {
     const g: Record<string, typeof docs> = { BUILDING: [], TENANCY: [] };
@@ -924,8 +927,10 @@ function ChecklistTab({ projectId, title = "Document checklist" }: { projectId: 
     const acceptedPaths = relativePaths.filter((_, i) => accepted.includes(files[i]));
     try {
       const res = await uploadFolder({ projectId, files: accepted, relativePaths: acceptedPaths }).unwrap();
-      const data = res?.data as { matched?: unknown[]; unmatched?: string[] } | undefined;
-      toast({ title: res?.message || "Folder processed", description: data?.unmatched?.length ? `${data.unmatched.length} file(s) could not be filed.` : undefined });
+      const data = res?.data;
+      setFolderResult(data ?? null);
+      const problems = (data?.unrouted?.length ?? 0) + (data?.failed?.length ?? data?.unmatched?.length ?? 0);
+      toast({ title: res?.message || "Folder processed", description: problems ? "Some files weren't filed — see the summary." : undefined });
     } catch (err) {
       toast({ title: "Upload failed", description: errMessage(err, "Could not process the folder."), variant: "destructive" });
     }
@@ -955,13 +960,23 @@ function ChecklistTab({ projectId, title = "Document checklist" }: { projectId: 
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="-mt-2 flex justify-end">
+          <FolderRoutingHint kind={isMixed ? "mixed" : "commercial"} />
+        </div>
+        {folderResult && <FolderUploadSummary result={folderResult} onDismiss={() => setFolderResult(null)} />}
         {checkResult && <ComplianceCheckCard result={checkResult} />}
+        {/* The checklist is generated when the project is created (and refreshed as
+            setup changes), so an empty list means no rules genuinely applied. */}
+        {!docsLoading && !isLoading && (grouped.BUILDING ?? []).length === 0 && (grouped.TENANCY ?? []).length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            No compliance documents apply to this building yet. Complete Setup and Building Parts, then press Regenerate — or add a document manually.
+          </p>
+        )}
         {(["BUILDING", "TENANCY"] as const)
-          .filter((tier) => tier === "BUILDING" || (grouped[tier] ?? []).length > 0)
+          .filter((tier) => (grouped[tier] ?? []).length > 0)
           .map((tier) => (
           <div key={tier}>
             <h3 className="text-sm font-semibold mb-2">{tier === "BUILDING" ? "Whole building" : "Per tenancy"}</h3>
-            {(grouped[tier] ?? []).length === 0 && <p className="text-sm text-muted-foreground">No documents — press Regenerate.</p>}
             {(grouped[tier] ?? []).map((d) => <DocRow key={d.id} doc={d} projectId={projectId} />)}
           </div>
         ))}

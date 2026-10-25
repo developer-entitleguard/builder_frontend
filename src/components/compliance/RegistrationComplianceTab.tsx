@@ -189,10 +189,14 @@ export const RegistrationComplianceTab = ({
           </div>
           {!readOnly && (
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setGenerateOpen(true)}>
-                <Sparkles className="h-4 w-4 mr-2" />
-                Generate
-              </Button>
+              {/* Q3: a unit that already has its checklist can't be regenerated
+                  (the backend treats it as a no-op), so only offer Generate when empty. */}
+              {registrationDocuments.length === 0 && (
+                <Button variant="outline" size="sm" onClick={() => setGenerateOpen(true)}>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Generate
+                </Button>
+              )}
               <Button size="sm" onClick={openCreate}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add document

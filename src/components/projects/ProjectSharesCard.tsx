@@ -220,6 +220,13 @@ export function ProjectSharesCard({ projectId }: { projectId: string }) {
               <Label htmlFor="org-email">
                 {inviteNew ? "Admin email (they’ll be invited to set a password)" : "User email to grant"}
               </Label>
+              {!inviteNew && (
+                <p className="text-xs text-muted-foreground">
+                  We’ll email them about this project. If they aren’t in that organisation yet, they’re
+                  added as a Project Manager and invited to set a password. With whole-organisation
+                  access, the organisation’s admins are emailed instead.
+                </p>
+              )}
               <Input
                 id="org-email"
                 type="email"

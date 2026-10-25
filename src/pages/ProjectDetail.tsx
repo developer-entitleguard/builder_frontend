@@ -544,7 +544,10 @@ const ProjectDetail = () => {
 
           {showRegistrationsTab && (
           <TabsContent value="registrations">
-            <ProjectRegistrations projectId={id!} />
+            <ProjectRegistrations
+              projectId={id!}
+              propertyType={projectResponse?.data?.propertyType ?? null}
+            />
           </TabsContent>
           )}
 

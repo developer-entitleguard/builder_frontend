@@ -1191,6 +1191,8 @@ function DocRow({ doc, projectId }: { doc: CommercialComplianceDocument; project
   const [assignEmail, setAssignEmail] = useState("");
 
   const received = doc.status === "RECEIVED";
+  // N/A satisfies a mandatory row server-side (isOutstandingMandatory), so it no longer needs the badge.
+  const outstandingMandatory = doc.mandatory === "REQUIRED" && !received && doc.status !== "NOT_APPLICABLE";
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1235,7 +1237,7 @@ function DocRow({ doc, projectId }: { doc: CommercialComplianceDocument; project
         <div className="min-w-0">
           {doc.documentName}
           {received && <Badge className="ml-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Received</Badge>}
-          {doc.mandatory === "REQUIRED" && !received && <Badge variant="destructive" className="ml-2">Mandatory</Badge>}
+          {outstandingMandatory && <Badge variant="destructive" className="ml-2">Mandatory</Badge>}
           {doc.assigneeLabel && !received && <Badge variant="secondary" className="ml-2">Assigned · {doc.assigneeLabel}</Badge>}
           {atts.length > 0 && <Badge variant="outline" className="ml-2">{atts.length} file{atts.length > 1 ? "s" : ""}</Badge>}
         </div>

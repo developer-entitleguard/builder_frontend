@@ -117,6 +117,9 @@ export const api = createApi({
     'CommercialBusiness',
     // Platform Announcements — builder-staff CLIENT consume side (banner/modal + ack).
     'Announcement',
+    // Templates/SWMS PRD SW10/SW13 — builder SWMS register + received SWMS.
+    'SwmsRegister',
+    'Swms',
   ],
   endpoints: () => ({}),
 });

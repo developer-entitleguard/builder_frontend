@@ -320,6 +320,8 @@ export interface BuilderBrandingLimits {
   logoFormats: string[];
   logoMinWidth: number;
   logoMinHeight: number;
+  /** PRD BR5: raster logos need this many pixels on their long edge. */
+  logoMinLongEdge?: number;
   logoMaxDimension: number;
   messageMaxChars: number;
 }

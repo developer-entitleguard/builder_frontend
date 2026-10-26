@@ -9,25 +9,36 @@ export interface LogoLimits {
   logoFormats: string[];
   logoMinWidth: number;
   logoMinHeight: number;
+  /** PRD BR5: raster logos need this many pixels on their long edge (SVG is exempt). */
+  logoMinLongEdge?: number;
   logoMaxDimension: number;
 }
 
 export const DEFAULT_LOGO_LIMITS: LogoLimits = {
   logoMaxBytes: 2 * 1024 * 1024,
-  logoFormats: ["image/png", "image/jpeg"],
-  logoMinWidth: 80,
+  logoFormats: ["image/png", "image/jpeg", "image/svg+xml"],
+  logoMinWidth: 40,
   logoMinHeight: 40,
+  logoMinLongEdge: 300,
   logoMaxDimension: 4000,
 };
 
-export const LOGO_ACCEPT = "image/png,image/jpeg,.png,.jpg,.jpeg";
+export const LOGO_ACCEPT = "image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg";
+
+/** PRD BR5 floor for a raster logo's long edge, used for the low-resolution hint too. */
+export const minLongEdge = (limits: LogoLimits = DEFAULT_LOGO_LIMITS): number =>
+  limits.logoMinLongEdge ?? DEFAULT_LOGO_LIMITS.logoMinLongEdge ?? 300;
+
+const isSvg = (file: File): boolean =>
+  file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
 
 export const formatBytes = (bytes: number): string =>
   bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(bytes % (1024 * 1024) === 0 ? 0 : 1)} MB` : `${Math.round(bytes / 1024)} KB`;
 
 export const logoRulesText = (limits: LogoLimits = DEFAULT_LOGO_LIMITS): string =>
-  `PNG or JPEG, up to ${formatBytes(limits.logoMaxBytes)}. At least ${limits.logoMinWidth} × ${limits.logoMinHeight} px, ` +
-  `no larger than ${limits.logoMaxDimension} px on either side. We resize it to fit 600 × 200 px for the portal and emails.`;
+  `PNG, JPEG or SVG, up to ${formatBytes(limits.logoMaxBytes)}. Raster images need at least ${minLongEdge(limits)} px on ` +
+  `the long edge and no more than ${limits.logoMaxDimension} px on either side. We resize it to fit 600 × 200 px for the ` +
+  `portal, emails and document headers.`;
 
 const readDimensions = (file: File): Promise<{ width: number; height: number }> =>
   new Promise((resolve, reject) => {
@@ -52,23 +63,30 @@ export async function validateLogoFile(
   const ext = file.name.toLowerCase().split(".").pop() ?? "";
   const typeOk =
     limits.logoFormats.includes(file.type) ||
+    (isSvg(file) && limits.logoFormats.includes("image/svg+xml")) ||
     (file.type === "" && ["png", "jpg", "jpeg"].includes(ext));
   if (!typeOk) {
-    return "Logo must be a PNG or JPEG image.";
+    return "Logo must be a PNG, JPEG or SVG image.";
   }
   if (file.size > limits.logoMaxBytes) {
     return `Logo must be ${formatBytes(limits.logoMaxBytes)} or smaller.`;
   }
+  // SVG scales to any size; the server rasterises it, so there is no pixel check.
+  if (isSvg(file)) return null;
   try {
     const { width, height } = await readDimensions(file);
     if (width > limits.logoMaxDimension || height > limits.logoMaxDimension) {
       return `Logo must be no larger than ${limits.logoMaxDimension} × ${limits.logoMaxDimension} px.`;
     }
+    const longEdge = minLongEdge(limits);
+    if (Math.max(width, height) < longEdge) {
+      return `Logo must be at least ${longEdge} px on its long edge (this one is ${width} × ${height} px). Use a larger export or an SVG.`;
+    }
     if (width < limits.logoMinWidth || height < limits.logoMinHeight) {
       return `Logo must be at least ${limits.logoMinWidth} × ${limits.logoMinHeight} px.`;
     }
   } catch {
-    return "The image could not be read. Try exporting it again as PNG or JPEG.";
+    return "The image could not be read. Try exporting it again as PNG, JPEG or SVG.";
   }
   return null;
 }

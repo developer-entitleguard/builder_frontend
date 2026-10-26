@@ -39,6 +39,7 @@ import Payments from "./pages/Payments";
 import PublicQuote from "./pages/PublicQuote";
 import BuilderOnboarding from "./pages/BuilderOnboarding";
 import ProjectDetail from "./pages/ProjectDetail";
+import SwmsDetail from "./pages/SwmsDetail";
 import CommercialProjectWorkspace from "./pages/CommercialProjectWorkspace";
 import ProjectReport from "./pages/ProjectReport";
 import OrgReport from "./pages/OrgReport";
@@ -360,6 +361,12 @@ const App = () => (
               <Route path="/projects/:id" element={
                 <ProtectedRoute>
                   <ProjectDetail />
+                </ProtectedRoute>
+              } />
+              {/* Templates/SWMS PRD SW10 — a SWMS received from a trade (from the project Safety tab). */}
+              <Route path="/swms/:id" element={
+                <ProtectedRoute>
+                  <SwmsDetail />
                 </ProtectedRoute>
               } />
               {/* Commercial Segment PRD 1 — commercial project workspace (setup, parts,

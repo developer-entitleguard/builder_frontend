@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ import { ProjectRegistrations } from "@/components/projects/ProjectRegistrations
 import { ProjectPricing } from "@/components/projects/ProjectPricing";
 import { ProjectComplianceSection } from "@/components/compliance/ProjectComplianceSection";
 import { ProjectDocumentsSection } from "@/components/documents/ProjectDocumentsSection";
+import { ProjectSafetySection } from "@/components/swms/ProjectSafetySection";
 import { ProjectSharesCard } from "@/components/projects/ProjectSharesCard";
 import { EditProjectDialog } from "@/components/projects/EditProjectDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -50,7 +51,8 @@ import {
   Trash2,
   DollarSign,
   FileBarChart,
-  MoreHorizontal
+  MoreHorizontal,
+  ShieldCheck
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -138,7 +140,7 @@ const ProjectDetail = () => {
   const isAdmin = readBuilderRoleFromStorage() === BUILDER_ROLES.ADMINISTRATOR;
   // Developer/Builder Decoupling PRD (Req 2): the "Builders" tab (delegate the
   // build to a separate builder org) is only meaningful for developer-capable orgs.
-  const { hasCapability, hasModule } = useEntitlements();
+  const { hasCapability, hasModule, hasPermission } = useEntitlements();
   const canDevelop = hasCapability("DEVELOP");
   const { user, loading: authLoading } = useAuth();
   const { updateProject } = useProjects();
@@ -191,6 +193,9 @@ const ProjectDetail = () => {
   // full Compliance tab for Lite orgs (they get DOCUMENTS, not COMPLIANCE_DOCS).
   const showDocumentsTab = hasModule("DOCUMENTS");
   const showPricingTab = pricingVisible && hasModule("PRICING");
+  // Templates/SWMS PRD SW13: every builder gets the register (D6, no module);
+  // it is gated on the role permission the API checks.
+  const showSafetyTab = hasPermission("SWMS_VIEW");
   const defaultProjectTab = showActivitiesTab
     ? "activities"
     : showRegistrationsTab
@@ -203,7 +208,27 @@ const ProjectDetail = () => {
     ? "documents"
     : showPricingTab
     ? "pricing"
+    : showSafetyTab
+    ? "safety"
     : "activities";
+  // ?tab=<value> deep-links a tab (emailed SWMS links use ?tab=safety).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
+  const visibleTabs: Record<string, boolean> = {
+    activities: showActivitiesTab,
+    registrations: showRegistrationsTab,
+    approvals: showApprovalsTab,
+    compliance: showComplianceTab,
+    documents: showDocumentsTab,
+    pricing: showPricingTab,
+    safety: showSafetyTab,
+  };
+  const activeTab = tabFromUrl && visibleTabs[tabFromUrl] ? tabFromUrl : defaultProjectTab;
+  const onTabChange = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", value);
+    setSearchParams(next, { replace: true });
+  };
   // Delete is an operator action and only while the project is still in flight
   // (not completed). The server additionally blocks it once any unit is handed over.
   const isOperatorRole = projectResponse?.data?.accessRole !== "SCOPED_BUILDER";
@@ -469,7 +494,7 @@ const ProjectDetail = () => {
 
       {/* Main Content with Tabs */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <Tabs defaultValue={defaultProjectTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
           <TabsList className="mb-6">
             {showActivitiesTab && (
               <TabsTrigger value="activities">
@@ -500,6 +525,12 @@ const ProjectDetail = () => {
               <TabsTrigger value="pricing" className="flex items-center gap-1">
                 <DollarSign className="h-4 w-4" />
                 Pricing
+              </TabsTrigger>
+            )}
+            {showSafetyTab && (
+              <TabsTrigger value="safety" className="flex items-center gap-1">
+                <ShieldCheck className="h-4 w-4" />
+                Safety
               </TabsTrigger>
             )}
           </TabsList>
@@ -592,6 +623,12 @@ const ProjectDetail = () => {
                 project={project}
                 activities={activities}
               />
+            </TabsContent>
+          )}
+
+          {showSafetyTab && (
+            <TabsContent value="safety">
+              <ProjectSafetySection projectId={id!} />
             </TabsContent>
           )}
         </Tabs>

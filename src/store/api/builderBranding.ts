@@ -19,6 +19,37 @@ const authHeader = (): Record<string, string> => {
   }
 };
 
+export type LogoPreviewKind = 'QUOTE' | 'SWMS';
+
+/**
+ * Templates PRD BR5. Server-rendered document-header PNG for `kind`, using
+ * `file` when given (an unsaved pick) or the saved logo otherwise. Plain fetch,
+ * not RTK Query: the result is a Blob, which does not belong in the store.
+ * Throws an Error carrying the server's message on failure.
+ */
+export async function fetchLogoPreview(kind: LogoPreviewKind, file?: File | null): Promise<Blob> {
+  const fd = new FormData();
+  if (file) fd.append('file', file, file.name);
+  // kind goes on the query string only: sending it as a form field as well
+  // would bind as "QUOTE,QUOTE" on the server.
+  const res = await fetch(`${getApiBaseUrl()}/api/builder/branding/logo/preview?kind=${kind}`, {
+    method: 'POST',
+    headers: authHeader(),
+    body: fd,
+  });
+  if (!res.ok) {
+    let message = `Preview failed (HTTP ${res.status}).`;
+    try {
+      const data = (await res.json()) as { message?: string; error?: string };
+      message = data?.message || data?.error || message;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(message);
+  }
+  return res.blob();
+}
+
 export const builderBrandingApi = api.injectEndpoints({
   endpoints: (build) => ({
     getBuilderBranding: build.query<BuilderBranding, void>({

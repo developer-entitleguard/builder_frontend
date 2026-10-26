@@ -28,12 +28,15 @@ import {
   useRemoveBuilderLogoMutation,
   useUpdateHandoverMessageMutation,
   usePreviewHandoverEmailMutation,
+  fetchLogoPreview,
+  type LogoPreviewKind,
 } from "@/store/api/builderBranding";
 import {
   DEFAULT_LOGO_LIMITS,
   LOGO_ACCEPT,
   logoErrorMessage,
   logoRulesText,
+  minLongEdge,
   validateLogoFile,
 } from "@/lib/logoValidation";
 import { viewPhotoUrl } from "@/lib/api/services/files";
@@ -220,7 +223,11 @@ function LogoCard({ logoFileId, limits, organizationName }: LogoCardProps) {
           <LogoSwatch label="On dark" dark url={shownUrl} name={organizationName} />
         </div>
 
+        <LowResolutionHint url={selected ? null : logoUrl} minEdge={minLongEdge(limits)} />
+
         <p className="text-sm text-muted-foreground">{logoRulesText(limits)}</p>
+
+        <DocumentHeaderPreviews file={selected} savedLogoFileId={logoFileId} />
 
         <input
           ref={inputRef}
@@ -285,6 +292,108 @@ function LogoCard({ logoFileId, limits, organizationName }: LogoCardProps) {
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+  );
+}
+
+/**
+ * PRD BR5: the saved logo is small enough to look soft on printed documents.
+ * The server stores a normalised copy that fits 600 × 200, so a logo that was
+ * scaled down to fit (height at the 200 px cap) is not flagged — only one whose
+ * stored size is its source size and still under the long-edge floor.
+ */
+function LowResolutionHint({ url, minEdge }: { url: string | null; minEdge: number }) {
+  const [low, setLow] = useState(false);
+  useEffect(() => {
+    setLow(false);
+    if (!url) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      setLow(w > 0 && Math.max(w, h) < minEdge && h < 200);
+    };
+    img.src = url;
+    return () => {
+      cancelled = true;
+    };
+  }, [url, minEdge]);
+  if (!low) return null;
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-amber-700" data-testid="logo-low-res-hint">
+      <AlertCircle className="h-3.5 w-3.5" />
+      Low resolution: your saved logo is under {minEdge} px on its long edge and may look blurry on quotes and SWMS.
+      Upload a larger PNG/JPEG or an SVG.
+    </p>
+  );
+}
+
+const PREVIEW_KINDS: { kind: LogoPreviewKind; label: string }[] = [
+  { kind: "QUOTE", label: "Quote header" },
+  { kind: "SWMS", label: "SWMS header" },
+];
+
+/**
+ * PRD BR5: server-rendered document-header previews. Uses the picked file
+ * before it is saved, else the saved logo; refreshes when either changes.
+ */
+function DocumentHeaderPreviews({ file, savedLogoFileId }: { file: File | null; savedLogoFileId: string | null }) {
+  const [urls, setUrls] = useState<Partial<Record<LogoPreviewKind, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<LogoPreviewKind, string>>>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const created: string[] = [];
+    setLoading(true);
+    setErrors({});
+    Promise.allSettled(PREVIEW_KINDS.map(({ kind }) => fetchLogoPreview(kind, file))).then((results) => {
+      if (cancelled) return;
+      const nextUrls: Partial<Record<LogoPreviewKind, string>> = {};
+      const nextErrors: Partial<Record<LogoPreviewKind, string>> = {};
+      results.forEach((r, i) => {
+        const kind = PREVIEW_KINDS[i].kind;
+        if (r.status === "fulfilled") {
+          const u = URL.createObjectURL(r.value);
+          created.push(u);
+          nextUrls[kind] = u;
+        } else {
+          nextErrors[kind] = r.reason instanceof Error ? r.reason.message : "Preview unavailable.";
+        }
+      });
+      setUrls(nextUrls);
+      setErrors(nextErrors);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+      created.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [file, savedLogoFileId]);
+
+  return (
+    <div className="space-y-2">
+      <div className="text-sm font-medium">
+        Document header preview{file ? " (unsaved logo)" : ""}
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {PREVIEW_KINDS.map(({ kind, label }) => (
+          <div key={kind} className="rounded-md border bg-white p-2">
+            <div className="flex min-h-[90px] items-center justify-center">
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : urls[kind] ? (
+                <img src={urls[kind]} alt={`${label} preview`} className="w-full object-contain" />
+              ) : (
+                <span className="text-xs text-destructive">{errors[kind] ?? "Preview unavailable."}</span>
+              )}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">{label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -9,13 +9,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Building2, Upload, UserPlus, Pencil, FileUp, FolderUp, ClipboardCheck, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Building2, Upload, UserPlus, Pencil, FileUp, FolderUp, ClipboardCheck, CheckCircle2, AlertCircle, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { getApiBaseUrl } from "@/lib/config";
 import { isOversizeUpload, oversizeUploadMessage, partitionBySize } from "@/lib/uploadLimits";
 import { ENTITY_TYPES } from "@/lib/commercialBusiness";
 import { BusinessAppLinks } from "@/components/commercial/BusinessAppLinks";
+import { EmailSectionDocumentsDialog } from "@/components/commercial/EmailSectionDocumentsDialog";
+import { lastEmailedBySection } from "@/lib/documentEmail";
 import { FolderRoutingHint, FolderUploadSummary } from "@/components/compliance/FolderUploadSummary";
 import { useGetStatusesByModuleQuery } from "@/lib/api/services/status";
 import { useGetProjectRegistrationsQuery, useProjectByIdQuery, useUpdateProjectMutation } from "@/store/api/projects";
@@ -50,6 +52,7 @@ import {
   useListCommercialAttachmentsQuery,
   useListCommercialBusinessesQuery,
   useListCommercialRegistrationsQuery,
+  useListDocumentEmailBatchesQuery,
   useMarkChecklistStatusMutation,
   useRegenerateChecklistMutation,
   useRemoveCommercialAssetMutation,
@@ -899,7 +902,14 @@ const fileHref = (fileId?: string | null): string | undefined =>
 /** A row's Documents-tab section, treating legacy null as the compliance checklist. */
 const sectionOf = (d: CommercialComplianceDocument): string => d.section ?? "COMPLIANCE";
 
-function ChecklistTab({ projectId, title = "Document checklist", isMixed = false }: { projectId: string; title?: string; isMixed?: boolean }) {
+function ChecklistTab({ projectId, title = "Document checklist", isMixed = false, onEmail, emailed }: {
+  projectId: string;
+  title?: string;
+  isMixed?: boolean;
+  /** Documents tab only: email this section to the customer. */
+  onEmail?: () => void;
+  emailed?: { label: string; failed: boolean };
+}) {
   const { data: docs, isLoading: docsLoading } = useGetChecklistDocumentsQuery(projectId);
   const { data: regs } = useListCommercialRegistrationsQuery(projectId);
   const [regenerate, { isLoading }] = useRegenerateChecklistMutation();
@@ -945,8 +955,10 @@ function ChecklistTab({ projectId, title = "Document checklist", isMixed = false
             The compliance documents this building must hand over. Regenerate rebuilds it from the
             building's classes and factors. Attach each delivered document, or assign it to a trade to produce.
           </p>
+          {emailed && <EmailedNote emailed={emailed} />}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5">
+          {onEmail && <EmailSectionButton onClick={onEmail} />}
           <Button variant="outline" size="sm" onClick={() => runCheck(projectId)} disabled={checking}>
             <ClipboardCheck className="h-4 w-4 mr-1" /> {checking ? "Checking…" : "Run compliance check"}
           </Button>
@@ -1003,30 +1015,84 @@ const DOCUMENT_SECTIONS: Array<{ key: string; title: string; blurb: string }> = 
  */
 function DocumentsTab({ projectId }: { projectId: string }) {
   const { data: docs } = useGetChecklistDocumentsQuery(projectId);
+  const { data: batches } = useListDocumentEmailBatchesQuery(projectId);
+  const emailed = useMemo(() => lastEmailedBySection(batches), [batches]);
+  // undefined = closed; [] = all sections; [key] = one section's envelope.
+  const [emailSections, setEmailSections] = useState<string[] | undefined>(undefined);
   const bySection = (key: string) => (docs ?? []).filter((d) => sectionOf(d) === key);
   const section = (key: string) => {
     const meta = DOCUMENT_SECTIONS.find((s) => s.key === key)!;
-    return <DocumentsSection projectId={projectId} sectionKey={key} title={meta.title} blurb={meta.blurb} rows={bySection(key)} />;
+    return (
+      <DocumentsSection
+        projectId={projectId}
+        sectionKey={key}
+        title={meta.title}
+        blurb={meta.blurb}
+        rows={bySection(key)}
+        onEmail={() => setEmailSections([key])}
+        emailed={emailed[key]}
+      />
+    );
   };
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-4 py-3">
+        <p className="text-sm text-muted-foreground">
+          Customer can't download from EntitleGuard? Email the documents instead, one email per section.
+        </p>
+        <Button size="sm" variant="outline" onClick={() => setEmailSections([])}>
+          <Mail className="h-4 w-4 mr-1" /> Email documents
+        </Button>
+      </div>
       {section("CONTACT_LIST")}
       {section("DRAWING")}
-      <ChecklistTab projectId={projectId} title="Certificates / compliance documents" />
+      <ChecklistTab
+        projectId={projectId}
+        title="Certificates / compliance documents"
+        onEmail={() => setEmailSections(["COMPLIANCE"])}
+        emailed={emailed.COMPLIANCE}
+      />
       {section("WARRANTY")}
       {section("MANUAL")}
       {section("AS_BUILT")}
+      <EmailSectionDocumentsDialog
+        projectId={projectId}
+        open={emailSections !== undefined}
+        onOpenChange={(v) => { if (!v) setEmailSections(undefined); }}
+        initialSections={emailSections}
+      />
     </div>
   );
 }
 
+/** Envelope on a Documents-tab section header: email just that section. */
+function EmailSectionButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button variant="outline" size="sm" onClick={onClick} title="Email this section to the customer" aria-label="Email this section">
+      <Mail className="h-4 w-4" />
+    </Button>
+  );
+}
+
+/** "Emailed 27 Oct to …" under a section title (amber when an email failed). */
+function EmailedNote({ emailed }: { emailed: { label: string; failed: boolean } }) {
+  return (
+    <p className={`mt-1 flex items-center gap-1 text-xs ${emailed.failed ? "text-amber-700" : "text-muted-foreground"}`}>
+      {emailed.failed ? <AlertCircle className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
+      {emailed.label}{emailed.failed ? " (open Email documents to retry)" : ""}
+    </p>
+  );
+}
+
 /** One non-compliance Documents section: its rows plus folder upload and add-document. */
-function DocumentsSection({ projectId, sectionKey, title, blurb, rows }: {
+function DocumentsSection({ projectId, sectionKey, title, blurb, rows, onEmail, emailed }: {
   projectId: string;
   sectionKey: string;
   title: string;
   blurb: string;
   rows: CommercialComplianceDocument[];
+  onEmail: () => void;
+  emailed?: { label: string; failed: boolean };
 }) {
   const { toast } = useToast();
   const [uploadFolder, { isLoading: uploading }] = useUploadChecklistFolderMutation();
@@ -1054,8 +1120,10 @@ function DocumentsSection({ projectId, sectionKey, title, blurb, rows }: {
         <div>
           <CardTitle className="text-base">{title}</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">{blurb}</p>
+          {emailed && <EmailedNote emailed={emailed} />}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <EmailSectionButton onClick={onEmail} />
           <FolderButton label={uploading ? "Uploading…" : "Upload folder"} extensions={DOC_EXTENSIONS} onPick={onFolder} disabled={uploading} />
           <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
             <Plus className="h-4 w-4 mr-1" /> Add document

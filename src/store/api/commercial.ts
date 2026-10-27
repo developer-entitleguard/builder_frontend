@@ -72,6 +72,63 @@ export interface CommercialComplianceDocument {
   assigneeLabel?: string | null;
 }
 
+// --- Email documents per section (customers whose firewall blocks downloads) ---
+export interface DocumentEmailFileLine {
+  documentName: string;
+  fileName: string;
+  /** -1 when unknown (file missing from storage). */
+  bytes: number;
+}
+
+export interface DocumentEmailSectionPreview {
+  section: string;
+  title: string;
+  fileCount: number;
+  totalBytes: number;
+  emailCount: number;
+  oversized: DocumentEmailFileLine[];
+  unavailable: DocumentEmailFileLine[];
+}
+
+export interface DocumentEmailPreview {
+  maxBytesPerEmail: number;
+  maxRecipients: number;
+  maxEmailsPerBatch: number;
+  defaultRecipients: string[];
+  sections: DocumentEmailSectionPreview[];
+}
+
+export interface DocumentEmailRequest {
+  sections: string[];
+  recipients: string[];
+  ccMe: boolean;
+  message?: string;
+}
+
+export type DocumentEmailStatus = 'QUEUED' | 'SENDING' | 'SENT' | 'FAILED';
+
+export interface DocumentEmailPart {
+  id: string;
+  section: string;
+  sectionTitle: string;
+  partNo: number;
+  partCount: number;
+  fileCount: number;
+  totalBytes: number;
+  status: DocumentEmailStatus;
+  error?: string | null;
+  sentAt?: string | null;
+}
+
+export interface DocumentEmailBatch {
+  id: string;
+  createdAt: string;
+  sentByName?: string | null;
+  recipients: string[];
+  cc: string[];
+  parts: DocumentEmailPart[];
+}
+
 export interface BusinessContact {
   id?: string;
   role: string;
@@ -221,6 +278,7 @@ interface ListEnvelope<T> {
 }
 
 const projectTag = (projectId: string) => ({ type: 'Commercial' as const, id: `project:${projectId}` });
+const docEmailTag = (projectId: string) => ({ type: 'Commercial' as const, id: `docemail:${projectId}` });
 const regTag = (id: string) => ({ type: 'Commercial' as const, id: `reg:${id}` });
 // Org-wide registrations directory (the Registrations page's Commercial tab).
 const orgRegsTag = { type: 'Commercial' as const, id: 'org-registrations' };
@@ -471,6 +529,23 @@ export const commercialApi = api.injectEndpoints({
       query: ({ documentId, body }) => ({ url: `/api/builder/commercial/checklist-documents/${documentId}/assign`, method: 'POST', body }),
       invalidatesTags: (_r, _e, { documentId, projectId }) => [docTag(documentId), projectTag(projectId)],
     }),
+    // --- Email documents per section ---
+    previewDocumentEmail: build.query<DocumentEmailPreview, { projectId: string; sections?: string[] }>({
+      query: ({ projectId, sections }) => ({ url: `/api/builder/commercial/projects/${projectId}/documents/email/preview`, method: 'POST', body: { sections: sections ?? [] } }),
+      providesTags: (_r, _e, { projectId }) => [projectTag(projectId)],
+    }),
+    sendDocumentEmail: build.mutation<DocumentEmailBatch, { projectId: string; body: DocumentEmailRequest }>({
+      query: ({ projectId, body }) => ({ url: `/api/builder/commercial/projects/${projectId}/documents/email`, method: 'POST', body }),
+      invalidatesTags: (_r, _e, { projectId }) => [docEmailTag(projectId)],
+    }),
+    listDocumentEmailBatches: build.query<DocumentEmailBatch[], string>({
+      query: (projectId) => ({ url: `/api/builder/commercial/projects/${projectId}/documents/email/batches`, method: 'GET' }),
+      providesTags: (_r, _e, projectId) => [docEmailTag(projectId)],
+    }),
+    retryDocumentEmail: build.mutation<DocumentEmailPart, { projectId: string; partId: string }>({
+      query: ({ projectId, partId }) => ({ url: `/api/builder/commercial/projects/${projectId}/documents/email/parts/${partId}/retry`, method: 'POST' }),
+      invalidatesTags: (_r, _e, { projectId }) => [docEmailTag(projectId)],
+    }),
   }),
 });
 
@@ -516,4 +591,8 @@ export const {
   useUploadCommercialAttachmentMutation,
   useDeleteCommercialAttachmentMutation,
   useAssignCommercialDocumentMutation,
+  usePreviewDocumentEmailQuery,
+  useSendDocumentEmailMutation,
+  useListDocumentEmailBatchesQuery,
+  useRetryDocumentEmailMutation,
 } = commercialApi;

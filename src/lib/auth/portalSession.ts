@@ -39,6 +39,21 @@ export interface SessionPayload {
   /** The org entity behind `seat` (shape depends on org type). */
   org?: Record<string, unknown> | null;
   seats?: Seat[];
+  /** Present only when a platform admin is impersonating (no refresh token then). */
+  impersonation?: ImpersonationInfo | null;
+}
+
+/** Who is impersonating, as whom, and until when (ImpersonationService.bannerInfo). */
+export interface ImpersonationInfo {
+  sessionId: string;
+  adminName: string | null;
+  adminEmail: string;
+  orgName: string | null;
+  /** Portal label: Build, Retail, Trade, Audit, Business. */
+  portal: string | null;
+  actingAsEmail: string | null;
+  /** ISO instant. */
+  expiresAt: string;
 }
 
 export interface SessionEnvelope {

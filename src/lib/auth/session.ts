@@ -1,3 +1,4 @@
+import { IMPERSONATION_STORAGE_KEY } from "@/lib/auth/impersonation";
 import { getApiBaseUrl } from '@/lib/config';
 
 /**
@@ -65,6 +66,7 @@ function storeAccessToken(jwt: string): void {
 export function clearSession(): void {
   localStorage.removeItem(USER_DATA_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(IMPERSONATION_STORAGE_KEY);
   stopProactiveRefresh();
 }
 

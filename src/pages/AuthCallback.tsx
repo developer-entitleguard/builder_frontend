@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { redeemHandoff, type PortalSessionAdapter } from "@/lib/auth/portalSession";
+import { rememberImpersonation } from "@/lib/auth/impersonation";
 
 /**
  * Unified sign-in — `/auth/callback?code=…&returnTo=…`. The landing route for a
  * portal-switcher handoff: redeems the single-use code for a session on this
  * origin, stores it exactly as the login page would, and continues to
- * `returnTo` (in-portal path only) or the portal's home.
+ * `returnTo` (in-portal path only) or the portal's home. Platform-admin
+ * impersonation links land here too.
  */
 export interface AuthCallbackProps {
   adapter: PortalSessionAdapter;
@@ -36,6 +38,8 @@ export function AuthCallback({ adapter, home, loginPath }: AuthCallbackProps) {
         setFailed(true);
         return;
       }
+      // An impersonation link stores the banner details; any other handoff clears stale ones.
+      rememberImpersonation(session.impersonation);
       adapter.storeSession(session);
       const target = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : home;
       navigate(target, { replace: true });

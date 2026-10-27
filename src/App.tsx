@@ -12,6 +12,7 @@ import { BUILDER_ROLES } from "@/lib/roles";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
+import { ImpersonationBanner } from "@/lib/auth/impersonation";
 import { builderSessionAdapter } from "@/lib/auth/portalAdapter";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/RoleDashboard";
@@ -169,6 +170,8 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            {/* No shared layout in this portal, so the banner sits above every route. */}
+            <ImpersonationBanner adapter={builderSessionAdapter} />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />

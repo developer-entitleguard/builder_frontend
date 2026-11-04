@@ -41,3 +41,16 @@ export const getApiBaseUrlWithPrefix = (): string => {
   if (envUrl) return envUrl;
   return 'https://builders.entitleguard.com';
 };
+
+/**
+ * The owner-facing consumer web app, where public Proof Pages live
+ * ({consumerWebUrl}/p/{slug}). Mirrors the backend's app.consumer.web-url.
+ * VITE_CONSUMER_WEB_URL overrides; otherwise staging hosts use the staging
+ * consumer site and everything else production.
+ */
+export const getConsumerWebUrl = (): string => {
+  const envUrl = (import.meta.env.VITE_CONSUMER_WEB_URL as string | undefined)?.trim();
+  if (envUrl) return envUrl.replace(/\/+$/, '');
+  const isStagingHost = typeof window !== 'undefined' && window.location?.hostname?.includes('staging');
+  return isStagingHost ? 'https://consumers-staging.entitleguard.com' : 'https://consumers.entitleguard.com';
+};

@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { ToastAction } from "@/components/ui/toast";
+import { completionTabPath, isHandoverStopped } from "@/components/completion/completionCopy";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -246,10 +248,17 @@ export const ProjectRegistrations = ({ projectId, propertyType }: ProjectRegistr
             ? `: ${failures.slice(0, 3).map((f) => f.message).join("; ")}`
             : "")
         : `${ok} succeeded`;
+    // Completion Gate: a "Handover stopped: ..." row links to this project's Completion tab.
+    const stopped = failures.some((f) => isHandoverStopped(f.message));
     toast({
       title,
       description: detail,
       variant: failed > 0 && ok === 0 ? "destructive" : "default",
+      action: stopped ? (
+        <ToastAction altText="Open the Completion tab" onClick={() => navigate(completionTabPath(projectId))}>
+          Open Completion
+        </ToastAction>
+      ) : undefined,
     });
   };
 

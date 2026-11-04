@@ -40,6 +40,7 @@ import JobsPanel from "@/components/queries/JobsPanel";
 import { CoverageReviewPanel } from "@/components/CoverageReviewPanel";
 import { formatDateTime } from "@/lib/datetime";
 import { canManageJobs } from "@/lib/roles";
+import StartRecoveryCaseButton from "@/components/recovery/StartRecoveryCaseButton";
 import {
   ATTACHMENT_ACCEPT,
   ATTACHMENT_HELP_TEXT,
@@ -431,6 +432,8 @@ const QueryDetail = () => {
             </p>
           </div>
           <div className="flex gap-3">
+            {/* Defect Recovery (Track G, DR1): DEFECT_RECOVERY module; Administrator, Customer Support. */}
+            {id && <StartRecoveryCaseButton queryId={id} />}
             <Button variant="outline" onClick={() => navigate("/queries")}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Queries

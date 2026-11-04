@@ -120,6 +120,18 @@ export const api = createApi({
     // Templates/SWMS PRD SW10/SW13 — builder SWMS register + received SWMS.
     'SwmsRegister',
     'Swms',
+    // Revenue Capabilities Track B — Past Homes batches (PAST_HOMES module).
+    'PastHomes',
+    // Revenue Capabilities Track D — Verified Referrals (REFERRALS module).
+    'Referrals',
+    // Revenue Capabilities Track E — Service Due nominated trades (SERVICE_DUE module).
+    'NominatedTrades',
+    // Revenue Capabilities Track F — Covered or Quoted decision queue (COVERED_OR_QUOTED module).
+    'CoverDecisions',
+    // Revenue Capabilities Track G — Defect Recovery cases, terms, scope, notices (DEFECT_RECOVERY module).
+    'Recovery',
+    // Revenue Capabilities Track H — Value report (F5), Administrator.
+    'ValueReport',
   ],
   endpoints: () => ({}),
 });

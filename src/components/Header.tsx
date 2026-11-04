@@ -39,6 +39,9 @@ import {
 import { useUnreadNotificationCountQuery } from "@/lib/api/services/notifications";
 import { Menu, ChevronDown, Bell, HelpCircle, UserCircle, LogOut } from "lucide-react";
 import { AnnouncementCenter } from "@/components/announcements/AnnouncementCenter";
+import { coverErrorStatus, useGetCoverQueueQuery } from "@/store/api/coverDecisions";
+import { recoveryErrorStatus, useGetIncomingNoticesQuery, useGetRecoveryCasesQuery } from "@/store/api/recovery";
+import { useGetValueReportQuery, valueReportErrorStatus } from "@/store/api/valueReport";
 
 const hasBuilderAuth = (): boolean => {
   try {
@@ -65,7 +68,7 @@ const Header = () => {
     currentOrganization,
     hasMultipleOrgs,
   } = useOrganization();
-  const { hasModule } = useEntitlements();
+  const { hasModule, ready } = useEntitlements();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -98,6 +101,62 @@ const Header = () => {
   // Bulk upload of past projects (CSV import / bulk onboarding) — its own bolt-on,
   // so it can be hidden independently of the project list.
   const showBulkImportTab = (canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === null) && hasModule("PROJECT_IMPORT");
+  // Past Homes (Revenue Capabilities Track B): PAST_HOMES bolt-on, Administrator
+  // only (the backend's PAST_HOMES_IMPORT permission; Project Managers get no
+  // access). Fail-closed while entitlements load so an org without the module
+  // never sees it flash in.
+  const showPastHomesTab = isAdministrator(effectiveBuilderRole) && ready && hasModule("PAST_HOMES");
+  // Completion Gate (Revenue Capabilities Track C): COMPLETION_GATE bolt-on;
+  // Administrator, Project Manager and Customer Support (COMPLETION_VIEW).
+  // Fail-closed while entitlements load, like Past Homes.
+  const showCompletionTab =
+    ready &&
+    hasModule("COMPLETION_GATE") &&
+    (canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === "CUSTOMER_SUPPORT");
+  // Verified Referrals (Revenue Capabilities Track D): REFERRALS bolt-on;
+  // Administrator (Proof Page, terms, queue) and Customer Support (queue).
+  // Fail-closed while entitlements load, like Past Homes.
+  const showReferralsTab =
+    ready &&
+    hasModule("REFERRALS") &&
+    (isAdministrator(effectiveBuilderRole) || isCustomerSupport(effectiveBuilderRole));
+  // Service Due nominated trades (Revenue Capabilities Track E, SD13):
+  // SERVICE_DUE bolt-on, Administrator only (ORG_MANAGE). Fail-closed while
+  // entitlements load, like Past Homes.
+  const showNominatedTradesTab = ready && hasModule("SERVICE_DUE") && isAdministrator(effectiveBuilderRole);
+  // Cover decisions (Revenue Capabilities Track F, CQ9/CQ10): COVERED_OR_QUOTED
+  // bolt-on; Administrator and Customer Support (COVER_DECLINE_CONFIRM).
+  // Fail-closed while entitlements load, like Past Homes; a 403 from the queue
+  // hides the entry (the backend permission is the source of truth).
+  const coverDecisionsGate =
+    ready &&
+    hasModule("COVERED_OR_QUOTED") &&
+    (isAdministrator(effectiveBuilderRole) || isCustomerSupport(effectiveBuilderRole));
+  const { error: coverQueueError } = useGetCoverQueueQuery(undefined, { skip: !coverDecisionsGate });
+  const showCoverDecisionsTab = coverDecisionsGate && coverErrorStatus(coverQueueError) !== 403;
+  // Defect Recovery (Revenue Capabilities Track G): DEFECT_RECOVERY bolt-on;
+  // Administrator and Customer Support (RECOVERY_RAISE) see Recovery cases;
+  // Defects terms and Trade scope are Administrator only (ORG_MANAGE).
+  // Fail-closed while entitlements load; a 403 from the list hides the entries.
+  const recoveryGate =
+    ready &&
+    hasModule("DEFECT_RECOVERY") &&
+    (isAdministrator(effectiveBuilderRole) || isCustomerSupport(effectiveBuilderRole));
+  const { error: recoveryCasesError } = useGetRecoveryCasesQuery(undefined, { skip: !recoveryGate });
+  const showRecoveryCases = recoveryGate && recoveryErrorStatus(recoveryCasesError) !== 403;
+  const showRecoverySettings = showRecoveryCases && isAdministrator(effectiveBuilderRole);
+  // Notices received (DR3, DR9): Administrator (RECOVERY_RESPOND), shown only
+  // when another business has sent this builder a notice. No module gate.
+  const { data: incomingNotices } = useGetIncomingNoticesQuery(undefined, {
+    skip: !isAdministrator(effectiveBuilderRole),
+  });
+  const showRecoveryNotices = isAdministrator(effectiveBuilderRole) && (incomingNotices?.length ?? 0) > 0;
+  const showRecoveryTab = showRecoveryCases || showRecoveryNotices;
+  // Value report (Revenue Capabilities F5): Administrator (ORG_MANAGE), no
+  // module gate. A 403 hides the entry. Shares the page's default 12-month query.
+  const valueReportGate = isAdministrator(effectiveBuilderRole);
+  const { error: valueReportError } = useGetValueReportQuery(12, { skip: !valueReportGate });
+  const showValueReport = valueReportGate && valueReportErrorStatus(valueReportError) !== 403;
   const showQueriesTab = !isExternalVendor(effectiveBuilderRole) && hasModule("SUPPORT");
   // Sales section (SALES bolt-on) — customers, quotes, invoices, payments.
   const showSalesTab = (canManageProjects(effectiveBuilderRole) || effectiveBuilderRole === null) && hasModule("SALES");
@@ -190,6 +249,12 @@ const Header = () => {
         activePrefix: "/onboarding/bulk",
       });
     }
+    if (showPastHomesTab) {
+      mobileNavItems.push({ label: "Past Homes", to: "/past-homes", activePrefix: "/past-homes" });
+    }
+    if (showCompletionTab) {
+      mobileNavItems.push({ label: "Completion", to: "/completion", activePrefix: "/completion" });
+    }
     if (showItemsTab) {
       // Catalog group (PRD_Org_Terms_And_Conditions Phase 4 nav restructure):
       // mobile is a flat list, so the items appear as siblings rather than
@@ -199,6 +264,25 @@ const Header = () => {
     }
     if (showQueriesTab || showTicketsTab) {
       mobileNavItems.push({ label: "Support", to: "/support", activePrefix: "/support" });
+    }
+    if (showCoverDecisionsTab) {
+      mobileNavItems.push({ label: "Cover decisions", to: "/cover-decisions", activePrefix: "/cover-decisions" });
+    }
+    if (showReferralsTab) {
+      mobileNavItems.push({ label: "Referrals", to: "/referrals", activePrefix: "/referrals" });
+    }
+    if (showNominatedTradesTab) {
+      mobileNavItems.push({ label: "Nominated trades", to: "/nominated-trades", activePrefix: "/nominated-trades" });
+    }
+    if (showRecoveryCases) {
+      mobileNavItems.push({ label: "Recovery cases", to: "/recovery", activePrefix: "/recovery/cases" });
+    }
+    if (showRecoveryNotices) {
+      mobileNavItems.push({ label: "Notices received", to: "/recovery/notices", activePrefix: "/recovery/notices" });
+    }
+    if (showRecoverySettings) {
+      mobileNavItems.push({ label: "Defects terms", to: "/recovery/terms", activePrefix: "/recovery/terms" });
+      mobileNavItems.push({ label: "Trade scope", to: "/recovery/scope", activePrefix: "/recovery/scope" });
     }
     if (showSalesTab) {
       mobileNavItems.push({ label: "Customers", to: "/customers", activePrefix: "/customers" });
@@ -212,6 +296,9 @@ const Header = () => {
   }
   if (showMyAssignmentsTab) {
     mobileNavItems.push({ label: "My Assignments", to: "/my-assignments" });
+  }
+  if (showValueReport) {
+    mobileNavItems.push({ label: "Value report", to: "/value-report", activePrefix: "/value-report" });
   }
   if (canShowAdminTab && showOrgNavItems) {
     mobileNavItems.push({ label: "Admin", to: "/admin" });
@@ -268,14 +355,16 @@ const Header = () => {
                 <nav className="flex space-x-2">
                   {showOrgNavItems && (
                     <>
-                      {(showProjectsTab || showRegistrationsTab || showBulkImportTab) && (
+                      {(showProjectsTab || showRegistrationsTab || showBulkImportTab || showPastHomesTab || showCompletionTab) && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant={
                                 location.pathname.startsWith("/projects") ||
                                 location.pathname.startsWith("/registrations") ||
-                                location.pathname.startsWith("/onboarding/bulk")
+                                location.pathname.startsWith("/onboarding/bulk") ||
+                                location.pathname.startsWith("/past-homes") ||
+                                location.pathname.startsWith("/completion")
                                   ? "default"
                                   : "ghost"
                               }
@@ -304,6 +393,20 @@ const Header = () => {
                               <DropdownMenuItem asChild>
                                 <Link to="/onboarding/bulk" className="cursor-pointer">
                                   Bulk Onboarding
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            {showPastHomesTab && (
+                              <DropdownMenuItem asChild>
+                                <Link to="/past-homes" className="cursor-pointer">
+                                  Past Homes
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            {showCompletionTab && (
+                              <DropdownMenuItem asChild>
+                                <Link to="/completion" className="cursor-pointer">
+                                  Completion
                                 </Link>
                               </DropdownMenuItem>
                             )}
@@ -340,7 +443,42 @@ const Header = () => {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
-                      {(showQueriesTab || showTicketsTab) && (
+                      {showCoverDecisionsTab && (
+                        // Support area with Cover decisions under it (Track F).
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant={
+                                location.pathname.startsWith("/support") ||
+                                location.pathname.startsWith("/queries") ||
+                                location.pathname.startsWith("/tickets") ||
+                                location.pathname.startsWith("/cover-decisions")
+                                  ? "default"
+                                  : "ghost"
+                              }
+                              size="sm"
+                            >
+                              Support
+                              <ChevronDown className="h-3 w-3 ml-1 opacity-70" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            {(showQueriesTab || showTicketsTab) && (
+                              <DropdownMenuItem asChild>
+                                <Link to="/support" className="cursor-pointer">
+                                  Support board
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem asChild>
+                              <Link to="/cover-decisions" className="cursor-pointer">
+                                Cover decisions
+                              </Link>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                      {!showCoverDecisionsTab && (showQueriesTab || showTicketsTab) && (
                         <Button
                           asChild
                           variant={
@@ -354,6 +492,68 @@ const Header = () => {
                         >
                           <Link to="/support">Support</Link>
                         </Button>
+                      )}
+                      {showReferralsTab && (
+                        <Button
+                          asChild
+                          variant={location.pathname.startsWith("/referrals") ? "default" : "ghost"}
+                          size="sm"
+                        >
+                          <Link to="/referrals">Referrals</Link>
+                        </Button>
+                      )}
+                      {showNominatedTradesTab && (
+                        <Button
+                          asChild
+                          variant={location.pathname.startsWith("/nominated-trades") ? "default" : "ghost"}
+                          size="sm"
+                        >
+                          <Link to="/nominated-trades">Nominated trades</Link>
+                        </Button>
+                      )}
+                      {showRecoveryTab && (
+                        // Defect Recovery (Track G): cases, notices received, terms, scope.
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant={location.pathname.startsWith("/recovery") ? "default" : "ghost"}
+                              size="sm"
+                            >
+                              Recovery
+                              <ChevronDown className="h-3 w-3 ml-1 opacity-70" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            {showRecoveryCases && (
+                              <DropdownMenuItem asChild>
+                                <Link to="/recovery" className="cursor-pointer">
+                                  Recovery cases
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            {showRecoveryNotices && (
+                              <DropdownMenuItem asChild>
+                                <Link to="/recovery/notices" className="cursor-pointer">
+                                  Notices received
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            {showRecoverySettings && (
+                              <>
+                                <DropdownMenuItem asChild>
+                                  <Link to="/recovery/terms" className="cursor-pointer">
+                                    Defects terms
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <Link to="/recovery/scope" className="cursor-pointer">
+                                    Trade scope
+                                  </Link>
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                       {showSalesTab && (
                         <DropdownMenu>
@@ -417,13 +617,48 @@ const Header = () => {
                       <Link to="/my-assignments">My Assignments</Link>
                     </Button>
                   )}
-                  {canShowAdminTab && showOrgNavItems && (
+                  {canShowAdminTab && showOrgNavItems && showValueReport && (
+                    // Admin area with the Value report under it (Track H, F5).
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant={location.pathname === "/admin" || location.pathname === "/value-report" ? "default" : "ghost"}
+                          size="sm"
+                        >
+                          Admin
+                          <ChevronDown className="h-3 w-3 ml-1 opacity-70" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem asChild>
+                          <Link to="/admin" className="cursor-pointer">
+                            Settings
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link to="/value-report" className="cursor-pointer">
+                            Value report
+                          </Link>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  {canShowAdminTab && showOrgNavItems && !showValueReport && (
                     <Button
                       variant={location.pathname === '/admin' ? "default" : "ghost"}
                       size="sm"
                       asChild
                     >
                       <Link to="/admin">Admin</Link>
+                    </Button>
+                  )}
+                  {!(canShowAdminTab && showOrgNavItems) && showValueReport && (
+                    <Button
+                      variant={location.pathname === "/value-report" ? "default" : "ghost"}
+                      size="sm"
+                      asChild
+                    >
+                      <Link to="/value-report">Value report</Link>
                     </Button>
                   )}
                   <DropdownMenu>

@@ -32,6 +32,8 @@ import { ProjectPricing } from "@/components/projects/ProjectPricing";
 import { ProjectComplianceSection } from "@/components/compliance/ProjectComplianceSection";
 import { ProjectDocumentsSection } from "@/components/documents/ProjectDocumentsSection";
 import { ProjectSafetySection } from "@/components/swms/ProjectSafetySection";
+import { CompletionTab } from "@/components/completion/CompletionTab";
+import { useCompletionAccess } from "@/components/completion/completionCopy";
 import { ProjectSharesCard } from "@/components/projects/ProjectSharesCard";
 import { EditProjectDialog } from "@/components/projects/EditProjectDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -52,7 +54,8 @@ import {
   DollarSign,
   FileBarChart,
   MoreHorizontal,
-  ShieldCheck
+  ShieldCheck,
+  ClipboardCheck
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -196,6 +199,9 @@ const ProjectDetail = () => {
   // Templates/SWMS PRD SW13: every builder gets the register (D6, no module);
   // it is gated on the role permission the API checks.
   const showSafetyTab = hasPermission("SWMS_VIEW");
+  // Completion Gate: COMPLETION_GATE module; Administrator, Project Manager,
+  // Customer Support. Fail-closed while entitlements load.
+  const { canView: showCompletionTab } = useCompletionAccess();
   const defaultProjectTab = showActivitiesTab
     ? "activities"
     : showRegistrationsTab
@@ -222,6 +228,7 @@ const ProjectDetail = () => {
     documents: showDocumentsTab,
     pricing: showPricingTab,
     safety: showSafetyTab,
+    completion: showCompletionTab,
   };
   const activeTab = tabFromUrl && visibleTabs[tabFromUrl] ? tabFromUrl : defaultProjectTab;
   const onTabChange = (value: string) => {
@@ -533,6 +540,12 @@ const ProjectDetail = () => {
                 Safety
               </TabsTrigger>
             )}
+            {showCompletionTab && (
+              <TabsTrigger value="completion" className="flex items-center gap-1">
+                <ClipboardCheck className="h-4 w-4" />
+                Completion
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {showActivitiesTab && (
@@ -629,6 +642,12 @@ const ProjectDetail = () => {
           {showSafetyTab && (
             <TabsContent value="safety">
               <ProjectSafetySection projectId={id!} />
+            </TabsContent>
+          )}
+
+          {showCompletionTab && (
+            <TabsContent value="completion">
+              <CompletionTab projectId={id!} isStrata={project.is_strata === true} />
             </TabsContent>
           )}
         </Tabs>

@@ -39,6 +39,20 @@ import InvoiceDetail from "./pages/InvoiceDetail";
 import Payments from "./pages/Payments";
 import PublicQuote from "./pages/PublicQuote";
 import BuilderOnboarding from "./pages/BuilderOnboarding";
+import PastHomes from "./pages/PastHomes";
+import PastHomeBatchPage from "./pages/PastHomeBatchPage";
+import PastHomeConfirm from "./pages/PastHomeConfirm";
+import CompletionOverview from "./pages/CompletionOverview";
+import Referrals from "./pages/Referrals";
+import NominatedTrades from "./pages/NominatedTrades";
+import CoverDecisions from "./pages/CoverDecisions";
+import RecoveryCases from "./pages/RecoveryCases";
+import RecoveryCaseDetail from "./pages/RecoveryCaseDetail";
+import RecoveryNotices from "./pages/RecoveryNotices";
+import DefectsTerms from "./pages/DefectsTerms";
+import TradeScope from "./pages/TradeScope";
+import PublicRecoveryRespond from "./pages/PublicRecoveryRespond";
+import ValueReport from "./pages/ValueReport";
 import ProjectDetail from "./pages/ProjectDetail";
 import SwmsDetail from "./pages/SwmsDetail";
 import CommercialProjectWorkspace from "./pages/CommercialProjectWorkspace";
@@ -356,6 +370,126 @@ const App = () => (
                   </RoleGate>
                 </ProtectedRoute>
               } />
+              {/* Past Homes (Revenue Capabilities Track B) — PAST_HOMES module, Administrator only. */}
+              <Route path="/past-homes" element={
+                <ProtectedRoute>
+                  <ModuleGate module="PAST_HOMES" featureName="Past Homes">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                      <PastHomes />
+                    </RoleGate>
+                  </ModuleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/past-homes/:batchId" element={
+                <ProtectedRoute>
+                  <ModuleGate module="PAST_HOMES" featureName="Past Homes">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                      <PastHomeBatchPage />
+                    </RoleGate>
+                  </ModuleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/past-homes/:batchId/rows/:rowId" element={
+                <ProtectedRoute>
+                  <ModuleGate module="PAST_HOMES" featureName="Past Homes">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                      <PastHomeConfirm />
+                    </RoleGate>
+                  </ModuleGate>
+                </ProtectedRoute>
+              } />
+              {/* Completion Gate (Revenue Capabilities Track C) — COMPLETION_GATE module; Administrator, Project Manager, Customer Support. */}
+              <Route path="/completion" element={
+                <ProtectedRoute>
+                  <ModuleGate module="COMPLETION_GATE" featureName="Completion Gate">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.PROJECT_MANAGER, BUILDER_ROLES.CUSTOMER_SUPPORT]}>
+                      <CompletionOverview />
+                    </RoleGate>
+                  </ModuleGate>
+                </ProtectedRoute>
+              } />
+              {/* Verified Referrals (Revenue Capabilities Track D) — REFERRALS module; Administrator, Customer Support (queue only). */}
+              <Route path="/referrals" element={
+                <ProtectedRoute>
+                  <ModuleGate module="REFERRALS" featureName="Verified Referrals">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.CUSTOMER_SUPPORT]}>
+                      <Referrals />
+                    </RoleGate>
+                  </ModuleGate>
+                </ProtectedRoute>
+              } />
+              {/* Service Due nominated trades (Revenue Capabilities Track E, SD13) — SERVICE_DUE module, Administrator only. */}
+              <Route path="/nominated-trades" element={
+                <ProtectedRoute>
+                  <ModuleGate module="SERVICE_DUE" featureName="Service Due">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                      <NominatedTrades />
+                    </RoleGate>
+                  </ModuleGate>
+                </ProtectedRoute>
+              } />
+              {/* Covered or Quoted decision queue (Revenue Capabilities Track F, CQ9/CQ10) — COVERED_OR_QUOTED module; Administrator, Customer Support (COVER_DECLINE_CONFIRM). */}
+              <Route path="/cover-decisions" element={
+                <ProtectedRoute>
+                  <ModuleGate module="COVERED_OR_QUOTED" featureName="Covered or Quoted">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.CUSTOMER_SUPPORT]}>
+                      <CoverDecisions />
+                    </RoleGate>
+                  </ModuleGate>
+                </ProtectedRoute>
+              } />
+              {/* Defect Recovery (Revenue Capabilities Track G) — DEFECT_RECOVERY module. Cases: Administrator, Customer Support (RECOVERY_RAISE); send, cost, money, close are Administrator only inside the page. Terms and scope: Administrator (ORG_MANAGE). */}
+              <Route path="/recovery" element={
+                <ProtectedRoute>
+                  <ModuleGate module="DEFECT_RECOVERY" featureName="Defect Recovery">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.CUSTOMER_SUPPORT]}>
+                      <RecoveryCases />
+                    </RoleGate>
+                  </ModuleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/recovery/cases/:id" element={
+                <ProtectedRoute>
+                  <ModuleGate module="DEFECT_RECOVERY" featureName="Defect Recovery">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR, BUILDER_ROLES.CUSTOMER_SUPPORT]}>
+                      <RecoveryCaseDetail />
+                    </RoleGate>
+                  </ModuleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/recovery/terms" element={
+                <ProtectedRoute>
+                  <ModuleGate module="DEFECT_RECOVERY" featureName="Defect Recovery">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                      <DefectsTerms />
+                    </RoleGate>
+                  </ModuleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/recovery/scope" element={
+                <ProtectedRoute>
+                  <ModuleGate module="DEFECT_RECOVERY" featureName="Defect Recovery">
+                    <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                      <TradeScope />
+                    </RoleGate>
+                  </ModuleGate>
+                </ProtectedRoute>
+              } />
+              {/* Notices received (DR3, DR9): a case another business raised naming this builder. Administrator (RECOVERY_RESPOND). No module gate: the backend serves a recipient whether or not it holds DEFECT_RECOVERY. */}
+              <Route path="/recovery/notices" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                    <RecoveryNotices />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              <Route path="/recovery/notices/:id" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                    <RecoveryNotices />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
               <Route path="/projects/:projectId/approvals/:approvalId" element={
                 <ProtectedRoute>
                   <ApprovalDetail />
@@ -384,6 +518,14 @@ const App = () => (
                 <ProtectedRoute>
                   <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
                     <ProjectReport />
+                  </RoleGate>
+                </ProtectedRoute>
+              } />
+              {/* Value report (Revenue Capabilities F5) — Administrator (ORG_MANAGE); measured results only, no fee or price. */}
+              <Route path="/value-report" element={
+                <ProtectedRoute>
+                  <RoleGate roles={[BUILDER_ROLES.ADMINISTRATOR]}>
+                    <ValueReport />
                   </RoleGate>
                 </ProtectedRoute>
               } />
@@ -476,6 +618,8 @@ const App = () => (
               } />
               {/* Public customer-facing quote view — token is the credential, no auth. */}
               <Route path="/q/:token" element={<PublicQuote />} />
+              {/* Public Defect Recovery response page (DR9) — the token is the only credential; no login, no app shell. */}
+              <Route path="/recovery/respond/:token" element={<PublicRecoveryRespond />} />
               <Route path="/vendor/query" element={<VendorQuery />} />
               {/* Public off-platform compliance-document upload — 30-day magic-link token, no auth. */}
               <Route path="/compliance-upload" element={<ComplianceUpload />} />

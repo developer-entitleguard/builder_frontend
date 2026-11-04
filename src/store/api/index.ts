@@ -19,6 +19,20 @@ import './vendorSchedule';
 import './roleDashboards';
 import './projectImport';
 import './builderOnboarding';
+// Past Homes (PAST_HOMES module, Builder Admin).
+import './pastHomes';
+// Completion Gate (COMPLETION_GATE module).
+import './completion';
+// Verified Referrals (REFERRALS module).
+import './referrals';
+// Service Due nominated trades (SERVICE_DUE module, Builder Admin).
+import './nominatedTrades';
+// Covered or Quoted decision queue (COVERED_OR_QUOTED module; Admin, Customer Support).
+import './coverDecisions';
+// Defect Recovery (DEFECT_RECOVERY module; Admin, Customer Support).
+import './recovery';
+// Value report (F5; Administrator).
+import './valueReport';
 import './tickets';
 import './bomUpload';
 import './query';

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { handoverStoppedToast } from "@/components/completion/handoverStopped";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
@@ -468,6 +469,16 @@ const Onboarding = () => {
       const res = await createCustomerEntitlement({ builderCustomerId: registrationId, handoverDate }).unwrap();
       // Backend returns success=false with a reason when compliance blocks handover.
       if (res && (res as { success?: boolean }).success === false) {
+        // Completion Gate: "Handover stopped: ..." links to the project's Completion tab.
+        const stopped = handoverStoppedToast(
+          (res as { message?: string }).message,
+          (formData.customer as Partial<CustomerFormData> | undefined)?.projectId,
+          navigate,
+        );
+        if (stopped) {
+          toast(stopped);
+          return;
+        }
         toast({
           title: "Handover blocked",
           description: (res as { message?: string }).message || "Outstanding compliance documents must be resolved first.",

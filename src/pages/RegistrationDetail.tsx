@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { handoverStoppedToast } from '@/components/completion/handoverStopped';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useEntitlements } from '@/hooks/useEntitlements';
@@ -437,6 +438,16 @@ const RegistrationDetail = () => {
         // The backend gates handover on outstanding compliance documents and
         // returns success=false with a human-readable reason when blocked.
         if (res && res.success === false) {
+          // Completion Gate: "Handover stopped: ..." links to the project's Completion tab.
+          const stopped = handoverStoppedToast(
+            res.message,
+            (customerDetailsResponse?.data?.customer as unknown as { project?: { id?: string } } | undefined)?.project?.id,
+            navigate,
+          );
+          if (stopped) {
+            toast(stopped);
+            return;
+          }
           toast({
             title: "Handover blocked",
             description: res.message || "Outstanding compliance documents must be resolved first.",

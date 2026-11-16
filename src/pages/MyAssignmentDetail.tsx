@@ -36,6 +36,7 @@ import {
   useUpdateMyJobStatusMutation,
   type JobStatus,
 } from "@/lib/api/services/jobs";
+import { formatDateTime } from "@/lib/datetime";
 function jobStatusColor(status: string) {
   switch (status) {
     case "ASSIGNED":
@@ -613,7 +614,7 @@ const MyAssignmentDetail = () => {
                           <div className="flex justify-between items-center mb-1">
                             <span className="text-sm font-medium">{c.commentedByName || c.commentedBy}</span>
                             <span className="text-xs text-muted-foreground">
-                              {new Date(c.createdAt).toLocaleString()}
+                              {formatDateTime(c.createdAt)}
                             </span>
                           </div>
                           <p className="text-sm whitespace-pre-wrap">{c.comment}</p>

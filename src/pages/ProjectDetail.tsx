@@ -344,6 +344,10 @@ const ProjectDetail = () => {
       state: project.state,
       postcode: project.postcode,
       property_type: project.property_type,
+      // The update endpoint requires the NCC class on residential projects; without
+      // it every partial save from here (e.g. the homeowner-visibility toggle)
+      // failed with "Building class is required".
+      building_class: project.building_class,
       start_date: project.start_date,
       target_end_date: project.target_end_date,
       status: project.status,

@@ -745,6 +745,9 @@ export const complianceDocumentsApi = api.injectEndpoints({
           ? [
               { type: "ComplianceAttachments", id: documentId },
               { type: "ComplianceDocuments" as const, id: `project-${ownerId}` },
+              // Approving/rejecting flips the line's status, so the completeness
+              // counter ("n/m required received") must refetch too.
+              { type: "ComplianceDocuments" as const, id: `project-completeness-${ownerId}` },
             ]
           : [
               { type: "ComplianceAttachments", id: documentId },
@@ -777,6 +780,9 @@ export const complianceDocumentsApi = api.injectEndpoints({
           ? [
               { type: "ComplianceAttachments", id: documentId },
               { type: "ComplianceDocuments" as const, id: `project-${ownerId}` },
+              // Approving/rejecting flips the line's status, so the completeness
+              // counter ("n/m required received") must refetch too.
+              { type: "ComplianceDocuments" as const, id: `project-completeness-${ownerId}` },
             ]
           : [
               { type: "ComplianceAttachments", id: documentId },

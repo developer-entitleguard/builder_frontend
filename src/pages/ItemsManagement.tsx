@@ -248,12 +248,18 @@ const ItemsManagement = () => {
   const handleBomUploaded = useCallback(
     (newBomId?: string) => {
       refetchBOMs();
-      refetchBillMaterials();
+      // The items query is skipped until a set is selected (e.g. the very first
+      // upload); refetching a skipped query throws, which surfaced as a false
+      // "Error uploading Bill of Materials" toast after a successful upload.
+      // Selecting the new set starts its query, so only refetch when one is running.
+      if (selectedBomId && selectedBomId === newBomId) {
+        refetchBillMaterials();
+      }
       if (newBomId) {
         setSelectedBomId(newBomId);
       }
     },
-    [refetchBOMs, refetchBillMaterials],
+    [refetchBOMs, refetchBillMaterials, selectedBomId],
   );
 
   const resetForm = () => {

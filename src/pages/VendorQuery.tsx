@@ -26,6 +26,7 @@ import {
   classifyAttachment,
   validateAttachmentBatch,
 } from "@/lib/queryAttachments";
+import { formatDateTime } from "@/lib/datetime";
 
 interface VendorQueryData {
   id: string;
@@ -45,6 +46,8 @@ interface VendorQueryData {
   queryComments?: Array<{
     id: string;
     commentedBy: string;
+    /** Author display name resolved by the backend; falls back to commentedBy. */
+    commentedByName?: string | null;
     comment: string;
     createdAt: string;
   }>;
@@ -909,10 +912,10 @@ const VendorQuery = () => {
                         >
                           <div className="flex justify-between items-center mb-1">
                             <span className="text-sm font-medium">
-                              {c.commentedBy}
+                              {c.commentedByName || c.commentedBy}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {new Date(c.createdAt).toLocaleString()}
+                              {formatDateTime(c.createdAt)}
                             </span>
                           </div>
                           <p className="text-sm">{c.comment}</p>

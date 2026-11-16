@@ -989,7 +989,24 @@ function ChecklistTab({ projectId, title = "Document checklist", isMixed = false
           .map((tier) => (
           <div key={tier}>
             <h3 className="text-sm font-semibold mb-2">{tier === "BUILDING" ? "Whole building" : "Per tenancy"}</h3>
-            {(grouped[tier] ?? []).map((d) => <DocRow key={d.id} doc={d} projectId={projectId} />)}
+            {tier === "BUILDING"
+              ? (grouped[tier] ?? []).map((d) => <DocRow key={d.id} doc={d} projectId={projectId} />)
+              : // Group tenancy rows under their tenancy, otherwise identical rows
+                // (one CCEW per shop) are indistinguishable.
+                Object.entries(
+                  (grouped[tier] ?? []).reduce<Record<string, typeof docs>>((acc, d) => {
+                    const k = d.commercialRegistrationId ?? "";
+                    (acc[k] = acc[k] || []).push(d);
+                    return acc;
+                  }, {}),
+                ).map(([regId, rows]) => (
+                  <div key={regId || "unassigned"} className="mb-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                      {(regs ?? []).find((r) => r.id === regId)?.tenancyIdentifier || "Tenancy"}
+                    </p>
+                    {(rows ?? []).map((d) => <DocRow key={d.id} doc={d} projectId={projectId} />)}
+                  </div>
+                ))}
           </div>
         ))}
       </CardContent>

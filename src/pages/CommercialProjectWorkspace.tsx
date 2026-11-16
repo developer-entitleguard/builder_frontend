@@ -1004,7 +1004,10 @@ function ChecklistTab({ projectId, title = "Document checklist", isMixed = false
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
                       {(regs ?? []).find((r) => r.id === regId)?.tenancyIdentifier || "Tenancy"}
                     </p>
-                    {(rows ?? []).map((d) => <DocRow key={d.id} doc={d} projectId={projectId} />)}
+                    {/* Same order in every shop so the groups line up. */}
+                    {[...(rows ?? [])]
+                      .sort((a, b) => (a.documentName ?? "").localeCompare(b.documentName ?? ""))
+                      .map((d) => <DocRow key={d.id} doc={d} projectId={projectId} />)}
                   </div>
                 ))}
           </div>
